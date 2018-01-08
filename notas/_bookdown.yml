@@ -1,0 +1,5 @@
+book_filename: "notas-metodos-analiticos-2018"
+language:
+  ui:
+    chapter_name: "Clase "
+delete_merged_file: true

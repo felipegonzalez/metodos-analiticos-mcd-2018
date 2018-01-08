@@ -1,0 +1,265 @@
+# Análisis de conjuntos frecuentes {#frecuentes}
+
+Una de las tareas más antiguas de la minería de datos
+es la búsqueda de **conjuntos frecuentes en canastas**, o un 
+análisis derivado que se llama **análisis de reglas de asociación**.
+
+Originalmente, pensamos que tenemos una colección grande de tickets
+de un supermercado. Nos interesa encontrar subconjuntos
+de artículos (por ejemplo, pan y leche) que ocurren 
+frecuentemente en esos tickets. La idea es que si tenemos estos
+subconjuntos frecuentes, entonces podemos diseñar mejor promociones
+cruzadas, reordenar los estantes del supermercado, etc. En general, los conjuntos frecuentes indican asociaciones (y cuantificaciones de la asociación) entre artículos que hay que tomar en cuenta al momento
+de tomar decisiones. Esto normalmente se llama análisis de **market basket**.
+
+El análisis de subconjuntos frecuentes puede ser utilizado para 
+otros propósitos, como veremos más adelante.
+
+## Datos de canastas
+
+Consideremos el siguiente ejemplo chico del paquete *arules*.
+Contiene unas 10 mil canastas observadas en de un supermercado durante un mes,
+agregadas a 169 categorías.
+
+
+```{r, warning=FALSE, message=FALSE}
+library(arules)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(hrbrthemes)
+data(Groceries) # del paquete arules
+lista_mb <- as(Groceries, 'list')
+```
+
+Estos tres **canastas** (tickets) de ejemplo:
+
+```{r}
+lista_mb[[2]]
+lista_mb[[52]]
+lista_mb[[3943]]
+```
+
+Podemos calcular la distribución del 
+número de artículos por canasta:
+
+```{r, fig.width=4, fig.asp=0.7}
+sprintf("Número de canastas: %s", length(lista_mb))
+num_items <- sapply(lista_mb, length)
+sprintf("Promedio de artículos por canasta: %.3f", mean(num_items))
+qplot(num_items, binwidth=1) + 
+  theme_ipsum_rc()
+```
+
+Podemos hacer una tabla con las canastas y
+examinar los artículos más frecuentes:
+
+```{r}
+canastas_nest <- data_frame(canasta_id = 1:length(lista_mb),
+                      articulos = lista_mb) 
+canastas <- canastas_nest %>% unnest
+canastas
+```
+
+```{r}
+num_canastas <- nrow(canastas_nest)
+articulos_frec <- canastas %>% group_by(articulos) %>%
+                  summarise(n  = n()) %>%
+                  mutate(prop = n / num_canastas) %>%
+                  arrange(desc(n))
+DT::datatable(articulos_frec)
+```
+
+
+
+Finalmente, un primer análisis que podríamos considerar es 
+el de canastas frecuentes. ¿Existen ciertas combinaciones exactas
+de artículos que aparecen con frecuencia muy alta?
+
+```{r colapsar}
+colapsar_canasta <- function(x, sep = '-'){
+  # convierte cada canasta a una cadena
+  x %>% as.character %>% sort %>% paste(collapse = '-')
+}
+
+canastas_conteo <- canastas_nest %>%
+                rowwise() %>%
+                mutate(canasta_str = colapsar_canasta(articulos)) %>%
+                group_by(canasta_str) %>%
+                summarise(n = n()) %>%
+                mutate(prop = round(n /num_canastas, 5)) %>%
+                arrange(desc(n))
+nrow(canastas_conteo)
+```
+
+Y aquí vemos las canastas más frecuentes:
+
+```{r}
+DT::datatable(canastas_conteo %>% head(n = 100))
+```
+
+Hay algunas canastas que aparecen con frecuencia considerable (alrededor de 1\% o 2\%), pero las canastas están bastante dispersas en el espacio de posibles 
+canastas (que es gigantesco: ¿puedes calcularlo?).
+
+```{block2, type='resumen'}
+**Datos de canastas**
+
+1. El tamaño de las canastas normalmente es muy chico 
+  (por ejemplo 1 a 30 artículos distintos).
+2. El número de artículos típicamente no es muy grande (de cientos a cientos de miles, por ejemplo).
+3. El número de canastas puede ser mucho mayor (en algunos casos miles de millones) -quizá no pueden leerse en memoria, como hicimos arriba.
+4.  El número de canastas distintas es alto, y hay pocas canastas exactas frecuentes. 
+```
+
+El último inciso señala que encontrar canastas frecuentes no será muy informativo. En lugar de eso buscamos conjuntos de artículos (que podríamos llamar subcanastas) que forman parte de muchas canastas. 
+
+
+## Conjuntos frecuentes y reglas de asociación
+
+Un enfoque simple y escalable para analizar estas canastas es el
+de los conjuntos frecuentes (frequent itemsets). 
+
+```{block2, type='resumen'}
+**Conjuntos frecuentes**
+
+Consideramos un conjunto de artículos
+$I = \{s_1,s_2,\ldots, s_k\}$. El **soporte** de $I$ lo definimos
+como la proporción de canastas que contienen (al menos) estos artículos:
+$$P(I) = \frac{n(I)}{n},$$
+donde $n(I)$ es el número de canastas que
+contienen todos los artículos de $I$, y $n$ es el número total de canastas.
+
+Sea $s\in (0,1)$. Para este valor fijo $s$, decimos que un conjunto de artículos $I$ es un **conjunto frecuente** cuando $P(I)\geq s$.
+```
+
+#### Ejercicio {-}
+Considera las canastas {1,2,3}, {1,8}, {2,4}, {2,3,6,7,8}, {2,3,8}, {1,3,8},
+{1,2,3,5}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.25?
+
+
+#### Ejemplo {-}
+Explicamos más adelante la función *apriori* de *arules*,
+pero por lo pronto podemos examinar algunos 
+conjuntos frecuentes de soporte mínimo 0.01:
+```{r, message = FALSE, results=FALSE}
+ap <- apriori(lista_mb, 
+              parameter = list(supp = 0.01, 
+                               target='frequent itemsets'))
+```
+
+Veamos algunos conjuntos frecuentes de tamaño 1:
+
+```{r, message = FALSE}
+ap_1 <- subset(ap, size(ap) == 1) 
+inspect(sort(ap_1, by='support')[1:5]) 
+```
+
+Algunas de tamaño 2 y 3:
+
+```{r, message = FALSE}
+ap_2 <- subset(ap, size(ap) == 2)
+inspect(sort(ap_2, by='support')[1:5])
+```
+
+```{r}
+ap_3 <- subset(ap, size(ap) == 3)
+inspect(sort(ap_3, by='support')[1:5])
+```
+
+---
+
+Muchas veces, esta información se organiza en términos de reglas de asociación,
+por ejemplo:
+
+*Entre las personas que compran leche y pan, un 40\% compra también yogurt*
+
+```{block2, type='resumen'}
+Una **regla de asociación** es una relación de la forma $I\to j$, donde
+$I$ es un conjunto de artículos (el antecedente) y $j$ es un artículo (el consecuente).
+Definimos la **confianza** de esta regla como
+$$P(I\to j) = P(j|I) = \frac{n(I\cup {j})}{n(I)} = P(I\cup j)/P(I) \leq 1, $$
+  es decir, la proporción de canastas que incluyen al itemset $I\cup {j}$  entre
+las canastas que incluyen al itemset $I$.
+
+```
+
+
+### Ejemplo
+
+En nuestro ejemplo anterior, el soporte de  {whole milk,yogurt} es 
+de 0.0560, el soporte de {whole milk} es 0.2555, así que la confianza
+de la regla $whole milk \to yogurt$ es $\frac{0.0560}{0.2555}=$ `r round(0.0560/0.255,2)`
+
+Por ejemplo, podríamos
+
+```{r, message = FALSE, results=FALSE}
+a_reglas <- apriori(lista_mb, parameter =list(supp = 0.01,
+                                              confidence = 0.0,
+                   target='rules', ext = TRUE))
+```
+
+```{r, message=FALSE, results=FALSE}
+df_1 <- inspect(sort(subset(a_reglas, size(a_reglas) == 2), by = 'support')[5:15]) %>%
+        data.frame()
+```
+
+En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
+
+```{r}
+df_1 %>% select(lhs, rhs, lhs.support, confidence, support)
+```
+
+
+
+---
+
+Es natural que artículos frecuentes ocurran en muchas canastas juntas, es decir,
+que reglas formadas con ellas tengan confianza relativamente alta. Por ejemplo,
+la regla *pan -> verduras* podría tener confianza y soporte alto, pero esto no
+indica ninguna asociación especial entre estos artículos.
+
+Podemos refinar las reglas de asociación considerando 
+qué tan diferente es $P(j|I)$ de $P(j)$. La primera cantidad es la probabilidad
+de observar el item $j$ bajo la información de que la canasta contiene a $I$. Si esta
+cantidad no es muy diferente a $P(j)$, entonces consideramos que esta regla
+no tiene mucho *interés*. 
+
+```{block2, type ='resumen'}
+El **lift** o **intéres** de una $I\to j$ se define como
+$$L(I\to j) = \frac{P({j}|I)}{P({j})},$$
+  es decir, la confianza de la regla $I\to j$ dividida entre la proporción
+de canastas que contienen $j$.
+```
+
+En nuestro ejemplo, veamos dos reglas con interés muy distinto:
+```{r}
+df_1[c(5, 10),] %>% select(lhs, rhs, lhs.support, confidence, lift)
+```
+La primera regla tiene un interés mucho más alto que la segunda, lo que indica una asociación
+más importante entre los dos artículos. 
+
+
+- Cuando decimos que un grupo de artículos están asociados, generalmente
+estamos indicando que forma alguna regla de asociación con **lift** alto.
+
+```{block2, type='resumen'}
+Las reglas $I\to j$ que buscamos generalmente deben cumplir:
+  
+- El soporte del antecedente $I$ es alto (para que la regla sea relevante), por ejemplo al menos 1% de las canastas.
+- La confianza es relativamente alta: reglas con consecuente, por ejemplo, arriba de 10\% (aunque podemos usar valores más grandes, como 50\% o más). En otro caso, la canasta $I\cup j$
+  es poco frecuente y por lo tanto poco relevante.
+- El lift puede ser alto o bajo dependiendo de nuestros propósitos: si simplemente
+estamos considerando efectos cruzados de acciones sobre productos, no requerimos necesariamente
+un lift alto. Pero si queremos descubrir asociaciones que van más allá de la
+popularidad de los artículos, entonces requerimos concentrarnos en valores de lift 
+más alto.
+
+```
+
+## Modelos para canastas
+
+En esta parte, veremos 
+
+
+
+
