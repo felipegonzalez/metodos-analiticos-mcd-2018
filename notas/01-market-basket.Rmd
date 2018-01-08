@@ -27,7 +27,6 @@ library(arules)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(hrbrthemes)
 data(Groceries) # del paquete arules
 lista_mb <- as(Groceries, 'list')
 ```
@@ -47,8 +46,7 @@ número de artículos por canasta:
 sprintf("Número de canastas: %s", length(lista_mb))
 num_items <- sapply(lista_mb, length)
 sprintf("Promedio de artículos por canasta: %.3f", mean(num_items))
-qplot(num_items, binwidth=1) + 
-  theme_ipsum_rc()
+qplot(num_items, binwidth=1)  
 ```
 
 Podemos hacer una tabla con las canastas y
