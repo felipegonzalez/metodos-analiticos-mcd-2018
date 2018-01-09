@@ -1,2 +1,2 @@
 #!/bin/sh
-(cd _book && netlify deploy http://clever-mestorf-ee3f54.netlify.com)
+(cd _book && netlify deploy -s http://clever-mestorf-ee3f54.netlify.com)

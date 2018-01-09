@@ -23,6 +23,7 @@ agregadas a 169 categorías.
 
 
 ```{r, warning=FALSE, message=FALSE}
+library(methods)
 library(arules)
 library(dplyr)
 library(tidyr)
@@ -65,7 +66,8 @@ articulos_frec <- canastas %>% group_by(articulos) %>%
                   summarise(n  = n()) %>%
                   mutate(prop = n / num_canastas) %>%
                   arrange(desc(n))
-DT::datatable(articulos_frec)
+DT::datatable(articulos_frec %>%
+  mutate_if(is.numeric, funs(round(., 3))))
 ```
 
 
@@ -93,10 +95,12 @@ nrow(canastas_conteo)
 Y aquí vemos las canastas más frecuentes:
 
 ```{r}
-DT::datatable(canastas_conteo %>% head(n = 100))
+DT::datatable(canastas_conteo %>% head(n = 100) %>%
+    mutate_if(is.numeric, funs(round(., 4))))
 ```
 
-Hay algunas canastas que aparecen con frecuencia considerable (alrededor de 1\% o 2\%), pero las canastas están bastante dispersas en el espacio de posibles 
+Hay algunas canastas (principalmente canastas que contienen un solo
+artículo) que aparecen con frecuencia considerable (alrededor de 1\% o 2\%), pero las canastas están bastante dispersas en el espacio de posibles 
 canastas (que es gigantesco: ¿puedes calcularlo?).
 
 ```{block2, type='resumen'}
@@ -105,14 +109,14 @@ canastas (que es gigantesco: ¿puedes calcularlo?).
 1. El tamaño de las canastas normalmente es muy chico 
   (por ejemplo 1 a 30 artículos distintos).
 2. El número de artículos típicamente no es muy grande (de cientos a cientos de miles, por ejemplo).
-3. El número de canastas puede ser mucho mayor (en algunos casos miles de millones) -quizá no pueden leerse en memoria, como hicimos arriba.
-4.  El número de canastas distintas es alto, y hay pocas canastas exactas frecuentes. 
+3. El número de canastas puede ser mucho mayor (en algunos casos miles de millones) -quizá no pueden leerse en memoria.
+4.  El número de canastas distintas es alto, y hay pocas canastas frecuentes. 
 ```
 
 El último inciso señala que encontrar canastas frecuentes no será muy informativo. En lugar de eso buscamos conjuntos de artículos (que podríamos llamar subcanastas) que forman parte de muchas canastas. 
 
 
-## Conjuntos frecuentes y reglas de asociación
+## Conjuntos frecuentes
 
 Un enfoque simple y escalable para analizar estas canastas es el
 de los conjuntos frecuentes (frequent itemsets). 
@@ -130,33 +134,30 @@ contienen todos los artículos de $I$, y $n$ es el número total de canastas.
 Sea $s\in (0,1)$. Para este valor fijo $s$, decimos que un conjunto de artículos $I$ es un **conjunto frecuente** cuando $P(I)\geq s$.
 ```
 
-#### Ejercicio {-}
-Considera las canastas {1,2,3}, {1,8}, {2,4}, {2,3,6,7,8}, {2,3,8}, {1,3,8},
-{1,2,3,5}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.25?
 
 
 #### Ejemplo {-}
 Explicamos más adelante la función *apriori* de *arules*,
 pero por lo pronto podemos examinar algunos 
-conjuntos frecuentes de soporte mínimo 0.01:
+conjuntos frecuentes de soporte mínimo 0.005:
+
 ```{r, message = FALSE, results=FALSE}
-ap <- apriori(lista_mb, 
-              parameter = list(supp = 0.01, 
-                               target='frequent itemsets'))
+pars <- list(supp = 0.005, target='frequent itemsets')
+ap <- apriori(lista_mb, parameter = pars)
 ```
 
 Veamos algunos conjuntos frecuentes de tamaño 1:
 
 ```{r, message = FALSE}
 ap_1 <- subset(ap, size(ap) == 1) 
-inspect(sort(ap_1, by='support')[1:5]) 
+inspect(sort(ap_1, by='support')[1:10]) 
 ```
 
 Algunas de tamaño 2 y 3:
 
 ```{r, message = FALSE}
 ap_2 <- subset(ap, size(ap) == 2)
-inspect(sort(ap_2, by='support')[1:5])
+inspect(sort(ap_2, by='support')[1:10])
 ```
 
 ```{r}
@@ -164,10 +165,281 @@ ap_3 <- subset(ap, size(ap) == 3)
 inspect(sort(ap_3, by='support')[1:5])
 ```
 
+También podemos ver qué itemsets incluyen algún producto particular,
+por ejemplo
+
+```{r}
+ap_berries <- subset(ap, items %pin% 'berries')
+inspect(sort(ap_berries, by ='support')[1:5])
+```
+
+```{r}
+ap_soda <- subset(ap, items %pin% 'soda')
+inspect(sort(ap_soda, by ='support')[1:5])
+```
+
+#### Ejercicio {-}
+Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.4?
+
+## Monotonicidad de conjuntos frecuentes
+
+Ahora consideramos el problema de encontrar los conjuntos frecuentes.
+
+Como discutimos arriba en las características de los datos de canastas,
+el número de transacciones puede ser muy grande (hasta miles de millones), las canastas típicamente
+son chicas, y el número de artículos distintos puede ir de las decenas
+hasta cientos de miles o algunos millones. Los algoritmos que se utilizan
+están diseñado para tratar con estas características. En particular,
+suponemos que 
+
+- La lista de transacciones es muy grande, y
+no puede leerse completa en memoria,
+- Sin embargo, para una sola canasta, es posible calcular de manera
+relativamente rápida todos los subconjuntos de tamaño $k$ (para $k=1,2,3,4$, por ejemplo). Por ejemplo, si una canasta tiene 10 artículos, hay $\choose{10}{3} = 120$ canastas
+de tamaño 3, $\choose{10}{4} = 210$. Calcular estos subconjuntos es relativamente rápido comparado con leer de disco una transacción.
+- Finalmente, suponemos que el número de itemsets frecuentes es relativamente chico (lo cual depende de que escojamos un soporte suficientemente alto).
+
+El principio básico que hace posible hacer los conteos de itemsets frecuentes es el siguiente:
+
+
+```{block2, type='resumen'}
+**Monotonicidad de itemsets**
+Sea $s$ un nivel de soporte mínimo fijo.  
+  
+- Si un itemset $I$ es frecuente, entonces todos sus subconjuntos son
+itemsets frecuentes.
+- Equivalentemente, si algún subconjunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente.
+```
+
+La demostración es como sigue: Sea $n(I)$  el número de canastas
+que contiene $I$, y supongamos que $n(I)>s$ ($I$ es un conjunto frecuente).
+Sea ahora $J\subset I$. Entonces cualquier canasta que contiene los
+artículos de $I$ contiene también los artículos de $J$ (que son menos),
+de forma que $n(J)\geq n(I)$. Como $n(I)>s$, entonces $J$ es un conjunto
+frecuente.
+
+
+**Observación**
+- Este hecho a veces es un poco confuso, como demuestra este [ejemplo de
+Kahneman](https://en.wikipedia.org/wiki/Conjunction_fallacy): Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations. Which is more probable?
+    1. Linda is a bank teller.
+    2. Linda is a bank teller and is active in the feminist movement. 
+
+
+## Algoritmo a-priori (pares)
+
+Para entender cómo aplicamos monotonicidad, consideremos cómo calcularíamos los pares frecuentes.
+
+1. Primero calculamos los artículos frecuentes (itemsets de tamaño 1), que
+son los artículos que aparecen en al menos una proporción $s$ de las canastas. 
+  - Esto requiere recorrer el archivo de transacciones y contar **todos** los artículos. 
+  - Seleccionamos aquellos artículos que son frecuentes.
+
+2. Por el principio de monotonicidad, ningún par frecuente puede contener
+un artículo no frecuente. Así que para calcular pares:
+  - Recorremos el archivo de transacciones. En cada transacción, eliminamos todos los artículos no frecuentes, y solo contamos los pares posibles resultantes.
+  - Seleccionamos aquellos pares que son frecuentes.
+
+Nótese que este algoritmo requiere dos pasadas sobre el conjunto de transacciones. 
+
+#### Ejercicio {-}
+Aplica este algoritmo para las canastas {1,2,3}, {1,8}, {2,4}, {2,3,6,7,8}, {2,3,8}, {1,3,8},
+{1,2,3,5}, {2,3}. (soporte > 0.25)
+
+**Observaciones**
+
+1. En la primera pasada del algoritmo (artículos frecuentes), típicamente no es un problema mantener el conteo de los artículos en memoria.
+2. Si en la segunda pasada no usáramos monotonicidad, tendríamos que mantener conteos de todos los posibles pares (que son del orden $n^2$, donde $n$ es el número de artículos). Mantener este conteo en memoria podría ser difícil. Sin embargo, el número de artículos frecuentes generalmente es considerablemente menor.
+
+Para itemsets de tamaño más grande, el algoritmo a priori  [@Agrawal] es:
+
+```{block2, type='resumen'}
+**Algoritmo a-priori**
+  
+Sea $L_1$ el número de itemsets frecuentes de tamaño $k$.
+
+Para obtener $L_k$, el número de itemsets frecuentes de tamaño $k$:
+  
+1. Sea $C_k$ el conjunto de candidatos, construido a partir de $L_{k-1}$
+2. Para cada transacción $t$,
+    - Calculamos $C_t$, que son los candidatos en $C_k$ que están en $t$.
+    - Agregamos 1 a cada conteo de los candidatos en $C_t$.
+3. Filtramos los elementos de $C_k$ que tengan conteo mayor que el soporte definido para obtener $L_k$
+4. Seguimos hasta que encontramos que algún $L_k$ es vacío (no hay itemset frecuente)
+  
+```
+  
+**Observaciones**: 
+
+- Hay distintas maneras de general el conjunto $C_{k}$ de candidatos. El paper original sugiere (suponiendo que los artículos siempre están ordenados en los itemsets) hacer un join de $L_{k-1}$ consigo misma. Por ejemplo,
+para generar los tríos $C_3$ a partir de $L_2$ hacemos
+
+```{sql, eval=FALSE}
+SELECT a.item1, a.item2, b.item2
+FROM L2 AS a, L2 AS b
+WHERE a.item1 = a.item1, a.item2 < b.item2
+```
+
+donde es crucial que los itemsets estén ordenados (por índice o
+lexicográficamente)
+
+- Hay también distintas maneras de calcular $C_t$ para cada transacción. El 
+paper original sugiere una estructura de árbol para encontrar los
+subconjuntos de $t$ que están en $C_k$
+
+  
+## Modelos simples para análisis de canastas
+
+Podemos entender mejor el comportamiento de este análisis con
+algunos modelos simples para datos de canastas.
+
+En primer lugar, consideramos que los datos están en forma
+de codificación dummy. Entonces una canasta es un renglón
+de ceros y unos, dependendiendo qué artículos están o no en la canasta
+
+$$X= (X_1,X_2,\ldots, X_m)$$
+donde $X_i = 1$ si el artículo $i$ está en la canasta. En otro
+caso, $X_i=0$. 
+
+Podríamos pensar entonces en construir modelos para la conjunta
+de las canastas
+
+$$P(X_1=x_1,X_2=x_2,\ldots, X_m=x_m)$$
+
+### Ejemplo {-}
+Por ejemplo, si los items son 1-camisa, 2-pantalones, 3-chamarra, podríamos tener las dos transacciones
+
+- $X = (1,0,0)$, para alguien que solo compró una camisa
+- $X = (1,0,1)$, para alguien que solo compró camisa y chamarra
+
+Y podemos inventar una conjunta para todas las canastas, por ejemplo
+
+```{r, echo=FALSE}
+combs <- expand.grid(p = c(0,1), c = c(0,1), ch = c(0,1))
+set.seed(280)
+probs <- combs
+x <-  c(0, rpois(7, 4)^2)
+probs$prob <- round(x/sum(x),3)
+probs
+```
+
+A partir de esta conjunta podemos calcular cualquier cantidad
+que nos interese. 
+
 ---
 
-Muchas veces, esta información se organiza en términos de reglas de asociación,
-por ejemplo:
+Como discutimos arriba, construir esta conjunta usando simples
+conteos de canastas no funciona, pues hay $2^n$ posibles canastas,
+e incluso cuando $n$ no es tan grande (por ejemplo 200) es un número
+gigantesco. Asignaríamos incorrectamente 0 a la gran mayoría de canastas.
+
+La idea de análisis de canastas es concentrarnos en **marginales** de 
+esta distribución, que tienen una forma como
+$$P(X_{i}=1,X_{j}=1),$$
+que es la probabilidad de que el conjunto ${i,j}$ aparezca en una canasta dada, o en los términos de market basket, el soporte del itemset ${i,j}$.
+
+La búsqueda de itemsets frecuentes se traduce entonces en buscar
+marginales de este tipo que no involucren muchas variables
+y que tengan valores altos - buscamos *modas* en las marginales de
+la distribución de las canastas. 
+
+El comportamiento general de las canastas probablemente no se puede
+describir con una versión simple de estos modelos, sin embargo, es útil
+experimentar con modelos simples para entender qué tipo de cosas
+podemos obervar.
+
+### Modelo de artículos iid.
+
+En primer lugar, podemos considerar el modelo que establece que la aparición o no de cada artículo es independiente del resto:
+
+$$P(X_1=x_1,\ldots, X_m=x_m) =\prod_m P(X_j=x_j)$$
+
+Y adicionalmente, suponemos que la probabilidad de cada artículo es
+la misma 
+$$P(X_j=1)=p$$.
+Entonces es fácil ver que el soporte (bajo el modelo teórico) de 
+un conjunto de $k$ artículos es
+$$P(X_{s_1}=1,X_{s_2}=1,\ldots, X_{s_k}=1)=p^k$$
+
+Las canastas frecuentes entonces, son todas las canastas tales
+que $p^k > s$, o las canastas que tienen tamaño $k < \frac{\log(s)/\log(p)}$. Es decir,
+todas las canastas suficientemente chicas son frecuentes (dependiendo de $s$ y $p$),
+y todas las canastas grandes no son frecuentes.
+
+Podemos ver qué pasa si simulamos transacciones, suponiendo
+que los items aparecen independientemente unos de otros con
+probabilidad fija. En este caso, bajo el modelo
+las canastas de tamaño 1 y 2 son frecuentes y las de tamaño 3 o más grandes no lo son:
+
+```{r, results=FALSE, messages=FALSE}
+simular_transacciones <- function(nItems, nTrans, iprob = 0.1){
+  trans <- lapply(1:nTrans, function(i){
+      which(rbinom(nItems, 1, prob = iprob) == 1)
+  })
+  trans
+}
+trans <- simular_transacciones(nItems = 169, 
+                               nTrans = 10000, 
+                               iprob = rep(0.2, 169))
+ap_random <- apriori(trans, parameter = 
+                       list(support=0.01, target='frequent itemsets'))
+```
+
+```{r}
+c(0.2,0.2^2,0.2^3, 0.2^4) 
+tamaños <- table(size(ap_random)); tamaños
+```
+```{r}
+choose(169,2)
+choose(169,3)
+```
+
+Nótese que capturamos algunas canastas frecuentes cuando en realidad no lo son, y 
+esto se debe a error de estimación. El coeficiente de variación del estimador $\hat{p}$
+de la proporción en que ocurre un itemset es aproximadamente
+$$\frac{1}{\sqrt(\hat{p}n)},$$
+donde $n$ es el número de canastas. Vemos entonces que cuando $\hat{p}$ es chico esta variación
+es muy grande
+
+
+```{r}
+trans <- simular_transacciones(nItems = 169, 
+                               nTrans = 10000, 
+                               iprob = itemFrequency(Groceries))
+ap_random <- apriori(trans, parameter = 
+                       list(support=0.01, target='frequent itemsets'))
+```
+La razón de que aparezcan tantos conjuntos frecuentes de tamaño 3 en el análisis es
+error de estimación: aún cuando la verdadera probabilidad de un conjunto frecuente 
+de tamaño 3 es `r 0.2^3`, algunas estimaciones tienen error y aparecen como frecuentes.
+Aún cuando parecen ser muchas canastas, en realidad es una fracción baja de los itemsets
+de tamaño 3 posibles, que son 
+
+```{r}
+choose(100,3)
+```
+
+Esto explica un patrón que normalmente vemos en los datos más complicados de canastas verdaderas: generalmente hay más pares frecuentes que artículos frecuentes, y luego menos el número de itemsets
+frecuentes decrece conforme el tamaño aumenta.
+
+En nuestro ejemplo de canastas de supermercado:
+
+```{r}
+length(ap_1)
+length(ap_2)
+length(ap_3)
+ap_4 <- subset(ap, size(ap) == 4)
+length(ap_4)
+```
+
+
+
+
+## Reglas de asociación
+
+
+
+Muchas veces, esta información se organiza en términos de reglas de asociación. Un ejemplo de una regla de asociación es:
 
 *Entre las personas que compran leche y pan, un 40\% compra también yogurt*
 
@@ -182,31 +454,42 @@ las canastas que incluyen al itemset $I$.
 ```
 
 
-### Ejemplo
+**Observaciones**:
+
+- Es fácil ver que si $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces $n(J) \leq n(I)$: cualquier canasta que 
+contiene a $I$ también contiene a $J$, y puede haber algunas canastas que contienen a $I$ no contienen a $J$.
+
+### Ejemplo {-}
 
 En nuestro ejemplo anterior, el soporte de  {whole milk,yogurt} es 
 de 0.0560, el soporte de {whole milk} es 0.2555, así que la confianza
 de la regla $whole milk \to yogurt$ es $\frac{0.0560}{0.2555}=$ `r round(0.0560/0.255,2)`
 
-Por ejemplo, podríamos
+### Ejemplo {-}
 
 ```{r, message = FALSE, results=FALSE}
-a_reglas <- apriori(lista_mb, parameter =list(supp = 0.01,
-                                              confidence = 0.0,
-                   target='rules', ext = TRUE))
+pars <- list(supp = 0.01, confidence = 0.0, target='rules', ext = TRUE)
+a_reglas <- apriori(lista_mb, parameter = pars)
 ```
 
 ```{r, message=FALSE, results=FALSE}
-df_1 <- inspect(sort(subset(a_reglas, size(a_reglas) == 2), by = 'support')[5:15]) %>%
-        data.frame()
+df_1 <- sort(subset(a_reglas, size(a_reglas) == 2), by = 'support') %>%
+        DATAFRAME 
 ```
 
 En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
 
 ```{r}
-df_1 %>% select(lhs, rhs, lhs.support, confidence, support)
+df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
+  head(20) %>%
+  mutate_if(is.numeric, funs(round(., 2))) 
 ```
 
+**Observaciones**:
+
+- Nota que estas tres cantidades están ligadas por 
+$lhs.support\times confidence = support$. Podemos entonces trabajar con
+el par de métricas que nos convenga más.
 
 
 ---
@@ -231,7 +514,7 @@ de canastas que contienen $j$.
 
 En nuestro ejemplo, veamos dos reglas con interés muy distinto:
 ```{r}
-df_1[c(5, 10),] %>% select(lhs, rhs, lhs.support, confidence, lift)
+df_1[c(5, 10),] %>% select(LHS, RHS, lhs.support, confidence, lift)
 ```
 La primera regla tiene un interés mucho más alto que la segunda, lo que indica una asociación
 más importante entre los dos artículos. 
@@ -240,18 +523,55 @@ más importante entre los dos artículos.
 - Cuando decimos que un grupo de artículos están asociados, generalmente
 estamos indicando que forma alguna regla de asociación con **lift** alto.
 
+
+
+## Selección de reglas
+
+Ahora discutiremos cómo seleccionar itemsets frecuentes y reglas.
+
+
 ```{block2, type='resumen'}
+Los itemsets frecuentes $I$ que buscamos generalmente deben cumplir:
+  
+- El soporte de $I$ debe ser suficientemente alto (para que el itemset
+sea relevante).
+
 Las reglas $I\to j$ que buscamos generalmente deben cumplir:
   
-- El soporte del antecedente $I$ es alto (para que la regla sea relevante), por ejemplo al menos 1% de las canastas.
-- La confianza es relativamente alta: reglas con consecuente, por ejemplo, arriba de 10\% (aunque podemos usar valores más grandes, como 50\% o más). En otro caso, la canasta $I\cup j$
+- El *soporte* del antecedente $I$ es alto (para que la regla sea relevante), por ejemplo al menos 1% de las canastas.
+- La *confianza es relativamente alta*: reglas con consecuente, por ejemplo, arriba de 10\% (aunque podemos usar valores más grandes, como 50\% o más). En otro caso, la canasta $I\cup j$
   es poco frecuente y por lo tanto poco relevante.
-- El lift puede ser alto o bajo dependiendo de nuestros propósitos: si simplemente
+- El *lift puede ser alto o bajo* dependiendo de nuestros propósitos: si simplemente
 estamos considerando efectos cruzados de acciones sobre productos, no requerimos necesariamente
 un lift alto. Pero si queremos descubrir asociaciones que van más allá de la
 popularidad de los artículos, entonces requerimos concentrarnos en valores de lift 
 más alto.
 
+La elección de estos parámetros también depende del número de reglas que
+obtenemos: generalmente queremos un número de reglas no muy grande para que
+sea posible examinarlas y actuar sobre ellas.
+
+```
+
+
+### Ejemplo {-}
+
+Consideremos 
+
+```{r, message = FALSE, results=FALSE}
+pars <- list(support = 0.01,
+             confidence = 0.4,
+             target='rules', ext = TRUE)
+a_reglas <- apriori(lista_mb, parameter = pars)
+df_reglas <- a_reglas %>% DATAFRAME
+```
+
+Esta elección de parámetros resulta en `r nrow(df_reglas)`, que
+no es demasiado grande para poder examinar:
+
+```{r}
+DT::datatable(df_reglas %>%
+  mutate_if(is.numeric, funs(round(., 2))))
 ```
 
 ## Modelos para canastas
