@@ -362,7 +362,7 @@ un conjunto de $k$ artículos es
 $$P(X_{s_1}=1,X_{s_2}=1,\ldots, X_{s_k}=1)=p^k$$
 
 Las canastas frecuentes entonces, son todas las canastas tales
-que $p^k > s$, o las canastas que tienen tamaño $k < \frac{\log(s)/\log(p)}$. Es decir,
+que $p^k > s$, o las canastas que tienen tamaño $k < \frac{\log(s)}{\log(p)}$. Es decir,
 todas las canastas suficientemente chicas son frecuentes (dependiendo de $s$ y $p$),
 y todas las canastas grandes no son frecuentes.
 
@@ -395,11 +395,7 @@ choose(169,3)
 ```
 
 Nótese que capturamos algunas canastas frecuentes cuando en realidad no lo son, y 
-esto se debe a error de estimación. El coeficiente de variación del estimador $\hat{p}$
-de la proporción en que ocurre un itemset es aproximadamente
-$$\frac{1}{\sqrt(\hat{p}n)},$$
-donde $n$ es el número de canastas. Vemos entonces que cuando $\hat{p}$ es chico esta variación
-es muy grande
+esto se debe a error de estimación. 
 
 
 ```{r}
