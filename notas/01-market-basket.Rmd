@@ -134,7 +134,12 @@ contienen todos los artículos de $I$, y $n$ es el número total de canastas.
 Sea $s\in (0,1)$. Para este valor fijo $s$, decimos que un conjunto de artículos $I$ es un **conjunto frecuente** cuando $P(I)\geq s$.
 ```
 
+**Observación**:
+Si hay $m$ artículos, entonces el número de posibles itemsets es de $2^m$. El número
+total de itemsets de tamaño $k$ es $\choose{m, k}$.
 
+#### Ejercicio {-}
+Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.4?
 
 #### Ejemplo {-}
 Explicamos más adelante la función *apriori* de *arules*,
@@ -178,8 +183,7 @@ ap_soda <- subset(ap, items %pin% 'soda')
 inspect(sort(ap_soda, by ='support')[1:5])
 ```
 
-#### Ejercicio {-}
-Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.4?
+
 
 ## Monotonicidad de conjuntos frecuentes
 
@@ -208,7 +212,8 @@ Sea $s$ un nivel de soporte mínimo fijo.
   
 - Si un itemset $I$ es frecuente, entonces todos sus subconjuntos son
 itemsets frecuentes.
-- Equivalentemente, si algún subconjunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente.
+- Equivalentemente, si algún subconjunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente. Así que *a priori*, no es necesario itemsets que contienen al menos un subconjunto 
+que no sea frecuente.
 ```
 
 La demostración es como sigue: Sea $n(I)$  el número de canastas
@@ -220,7 +225,8 @@ frecuente.
 
 
 **Observación**
-- Este hecho a veces es un poco confuso, como demuestra este [ejemplo de
+- Este hecho a veces es un poco confuso (es monotonicidad decreciente), 
+como demuestra este [ejemplo de
 Kahneman](https://en.wikipedia.org/wiki/Conjunction_fallacy): Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations. Which is more probable?
     1. Linda is a bank teller.
     2. Linda is a bank teller and is active in the feminist movement. 
@@ -237,7 +243,9 @@ son los artículos que aparecen en al menos una proporción $s$ de las canastas.
 
 2. Por el principio de monotonicidad, ningún par frecuente puede contener
 un artículo no frecuente. Así que para calcular pares:
-  - Recorremos el archivo de transacciones. En cada transacción, eliminamos todos los artículos no frecuentes, y solo contamos los pares posibles resultantes.
+  - Generamos los pares candidatos  a partir de los artículos frecuentes.
+  - Recorremos el archivo de transacciones y solo contamos los pares posibles resultantes que 
+  pertenencen al conjunto de pares candidatos.
   - Seleccionamos aquellos pares que son frecuentes.
 
 Nótese que este algoritmo requiere dos pasadas sobre el conjunto de transacciones. 
@@ -249,7 +257,7 @@ Aplica este algoritmo para las canastas {1,2,3}, {1,8}, {2,4}, {2,3,6,7,8}, {2,3
 **Observaciones**
 
 1. En la primera pasada del algoritmo (artículos frecuentes), típicamente no es un problema mantener el conteo de los artículos en memoria.
-2. Si en la segunda pasada no usáramos monotonicidad, tendríamos que mantener conteos de todos los posibles pares (que son del orden $n^2$, donde $n$ es el número de artículos). Mantener este conteo en memoria podría ser difícil. Sin embargo, el número de artículos frecuentes generalmente es considerablemente menor.
+2. Si en la segunda pasada no usáramos monotonicidad, tendríamos que mantener conteos de todos los posibles pares (que son del orden $m^2$, donde $m$ es el número de artículos). Mantener este conteo en memoria podría ser difícil. Sin embargo, el número de artículos frecuentes generalmente es considerablemente menor.
 
 Para itemsets de tamaño más grande, el algoritmo a priori  [@Agrawal] es:
 
@@ -269,8 +277,7 @@ Para obtener $L_k$, el número de itemsets frecuentes de tamaño $k$:
   
 ```
   
-**Observaciones**: 
-
+**Observaciones**: Hay distintas maneras de implementar este algoritmo:
 - Hay distintas maneras de general el conjunto $C_{k}$ de candidatos. El paper original sugiere (suponiendo que los artículos siempre están ordenados en los itemsets) hacer un join de $L_{k-1}$ consigo misma. Por ejemplo,
 para generar los tríos $C_3$ a partir de $L_2$ hacemos
 
@@ -281,12 +288,14 @@ WHERE a.item1 = a.item1, a.item2 < b.item2
 ```
 
 donde es crucial que los itemsets estén ordenados (por índice o
-lexicográficamente)
+lexicográficamente).
 
 - Hay también distintas maneras de calcular $C_t$ para cada transacción. El 
 paper original sugiere una estructura de árbol para encontrar los
-subconjuntos de $t$ que están en $C_k$
+subconjuntos de $t$ que están en $C_k$. Ver también [@borgelt].
 
+- Otros algoritmos también son explicados en [@borgelt]. A priori es efectivo,
+pero actualmente hay otros mejores.
   
 ## Modelos simples para análisis de canastas
 
