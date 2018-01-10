@@ -331,7 +331,7 @@ que nos interese.
 Como discutimos arriba, construir esta conjunta usando simples
 conteos de canastas no funciona, pues hay $2^n$ posibles canastas,
 e incluso cuando $n$ no es tan grande (por ejemplo 200) es un número
-gigantesco. Asignaríamos incorrectamente 0 a la gran mayoría de canastas.
+gigantesco.
 
 La idea de análisis de canastas es concentrarnos en **marginales** de 
 esta distribución, que tienen una forma como
@@ -435,7 +435,10 @@ length(ap_4)
 
 
 
-Muchas veces, esta información se organiza en términos de reglas de asociación. Un ejemplo de una regla de asociación es:
+Muchas veces, la información
+de conjuntos frecuentes
+se organiza en términos de reglas de asociación. 
+Un ejemplo de una regla de asociación es:
 
 *Entre las personas que compran leche y pan, un 40\% compra también yogurt*
 
@@ -484,9 +487,7 @@ df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
 **Observaciones**:
 
 - Nota que estas tres cantidades están ligadas por 
-$lhs.support\times confidence = support$. Podemos entonces trabajar con
-el par de métricas que nos convenga más.
-
+$lhs.support\times confidence = support$. 
 
 ---
 
@@ -525,29 +526,33 @@ estamos indicando que forma alguna regla de asociación con **lift** alto.
 
 Ahora discutiremos cómo seleccionar itemsets frecuentes y reglas.
 
+Filtrar con todos estos criterios (soporte, confianza, soporte del antecedente, lift)
+no es simple, y depende de los objetivos del análisis. Recordemos también que estos análisis están basados justamente en cortes “duros” de los datos, y por lo tanto pueden ser ruidosos.
 
-```{block2, type='resumen'}
-Los itemsets frecuentes $I$ que buscamos generalmente deben cumplir:
-  
-- El soporte de $I$ debe ser suficientemente alto (para que el itemset
-sea relevante).
+Resumiendo, podemos pensar en estas cuatro cantidades de la siguiente forma:
 
-Las reglas $I\to j$ que buscamos generalmente deben cumplir:
-  
-- El *soporte* del antecedente $I$ es alto (para que la regla sea relevante), por ejemplo al menos 1% de las canastas.
-- La *confianza es relativamente alta*: reglas con consecuente, por ejemplo, arriba de 10\% (aunque podemos usar valores más grandes, como 50\% o más). En otro caso, la canasta $I\cup j$
-  es poco frecuente y por lo tanto poco relevante.
-- El *lift puede ser alto o bajo* dependiendo de nuestros propósitos: si simplemente
-estamos considerando efectos cruzados de acciones sobre productos, no requerimos necesariamente
-un lift alto. Pero si queremos descubrir asociaciones que van más allá de la
-popularidad de los artículos, entonces requerimos concentrarnos en valores de lift 
-más alto.
+- El *soporte* de una regla debe ser suficientemente alto, para que el itemset
+sea relevante a las ventas de la tienda, por ejemplo.
+- La *confianza* indica cuál es el potencial de explotación de una regla. Por ejemplo,
+si promocionamos artículos del antecedente, no esperaríamos ver grandes resultados en
+el consecuente si la confianza es baja.
+- El *lift* identifica dependencias entre items, afinidades, identificación de patrones de compra asociados a tipos de comprador o tipo de visita (por ejemplo, fresas y crema).
 
 La elección de estos parámetros también depende del número de reglas que
 obtenemos: generalmente queremos un número de reglas no muy grande para que
 sea posible examinarlas y actuar sobre ellas.
 
-```
+En general, para calcular las reglas de interés, podemos filtrar como sigue:
+
+- **Soporte**: Cortamos con soporte para reducir el número de posibles itemsets o reglas. Este número generalmente se escoge (por ejemplo, 1%), que son combinaciones de interés *más práctico*.
+- **Lhs.support**: Filtramos con el soporte del antecedente (lhs.support) para controlar el error
+de estimación de confianza y lift. Si tenemos $N$ canastas totales, y $p$ es el soporte del antecedente, entonces el denominador de la confianza es $Np$ (número de canastas que contiene el antecedente). Generalmente queremos que al menos $Np > 100$, por ejemplo. Esto da mejores estimaciones de confidence y lift.
+
+Una vez que hacemos esta consideración, para analizar:
+
+- Filtramos y ordenamos por distintos valores de **lift** cuando nos interesa pensar en asociaciones por arriba de lo esperado, no simplemente asocación por frecuencia.
+- Filtramos adicionalmente por **confidence** si nos interesa también mantener la probabilidad de que ocurra el consecuente relativamente alta.
+
 
 
 ### Ejemplo {-}
@@ -556,24 +561,85 @@ Consideremos
 
 ```{r, message = FALSE, results=FALSE}
 pars <- list(support = 0.01,
-             confidence = 0.4,
+             confidence = 0.20,
              target='rules', ext = TRUE)
 a_reglas <- apriori(lista_mb, parameter = pars)
-df_reglas <- a_reglas %>% DATAFRAME
 ```
 
-Esta elección de parámetros resulta en `r nrow(df_reglas)`, que
-no es demasiado grande para poder examinar:
+Esta elección de parámetros resulta en `r length(a_reglas)`. Como tenemos
+10000 canastas, podemos filtrar lhs.support de manera que $10000p > 300$, por ejemplo,
+que da $p>0.03$:
 
 ```{r}
-DT::datatable(df_reglas %>%
-  mutate_if(is.numeric, funs(round(., 2))))
+reglas_1 <- subset(a_reglas, lhs.support > 0.01)
+reglas_1
 ```
 
-## Modelos para canastas
+Y ahora modemos filtrar por lift si nos interesa estudiar las asociaciones:
 
-En esta parte, veremos 
+```{r}
+library(arulesViz)
+reglas_2 <- subset(reglas_1, lift > 2)
+plotly_arules(reglas_2, colors=c('red','gray'))
+inspect(sort(reglas_2, by='lhs.support'))
+```
+
+**Observaciones**: conforme bajamos en esta tabla (ordenada por soporte), las estimaciones
+de confianza y lift son menos precisas.
+
+## Búsqueda de reglas especializadas
+
+Otra manera de usar este análisis es intenando buscar asociaciones más fuertes (lift más alto),
+aún cuando sacrificamos soporte. Por su naturaleza, este tipo de análisis puede resultar
+en reglas más ruidosas (malas estimaciones de confianza y lift), pero es posible filtrar valores
+más altos de estas cantidades para encontrar reglas útiles.
+
+Comenzamos con un soporte más bajo y confianza más alta
+
+```{r, message = FALSE, results=FALSE}
+pars <- list(support = 0.001,
+             confidence = 0.50,
+             target='rules', ext = TRUE)
+b_reglas <- apriori(lista_mb, parameter = pars)
+```
+```{r}
+b_reglas
+b_reglas_lift <- subset(b_reglas, lift > 8 & size(b_reglas) < 5)
+b_reglas_lift
+inspect(sort(b_reglas_lift, by ='lift'))
+```
+
+## Visualización de reglas
+
+Tener una visión amplia del market basket analysis es difícil (típicamente, funciona mejor como un resultado al que se le hacen querys, o uno donde filtramos cuidadosamente algunas reglas 
+que puedan ser útiles). Así que muchas veces ayuda visualizar los pares con asociación alta:
+
+- Construimos todas las reglas con un antecedente y un consecuente.
+- Filtramos las reglas con lift relativamente alto (por ejemplo > 1.5, pero hay que experimentar).
+- Representamos como una gráfica donde los nodos son artículos, y las aristas son relaciones de lift alto.
+- Usamos algún algoritmo para representar gráficas basado en fuerza, usando como peso el lift (software: Gephi)
 
 
 
+### Ejemplo {#ejemplo}
 
+En nuestro caso, podríamos tomar
+
+```{r, results=FALSE, message=FALSE}
+library(arulesViz)
+library(readr)
+reglas <- apriori(Groceries, 
+                parameter = list(support = 0.005, confidence=0.3, 
+                                 target='rules', ext=TRUE)) 
+reglas_f <- subset(reglas, lift > 2)
+reglas_f
+```
+
+```{r}
+write_csv(reglas_f %>% DATAFRAME %>% rename(source=LHS, target=RHS), path='reglas.csv')
+saveAsGraph(reglas_f, file='reglas.gml', format="gml", type='itemsets')
+```
+
+```{r}
+plotly_arules(reglas)
+```
