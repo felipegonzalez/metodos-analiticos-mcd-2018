@@ -25,6 +25,7 @@ agregadas a 169 categorías.
 ```{r, warning=FALSE, message=FALSE}
 library(methods)
 library(arules)
+library(arulesViz)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
@@ -136,7 +137,7 @@ Sea $s\in (0,1)$. Para este valor fijo $s$, decimos que un conjunto de artículo
 
 **Observación**:
 Si hay $m$ artículos, entonces el número de posibles itemsets es de $2^m$. El número
-total de itemsets de tamaño $k$ es $\choose{m, k}$.
+total de itemsets de tamaño $k$ es $\binom{m}{k}$.
 
 #### Ejercicio {-}
 Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.4?
@@ -199,8 +200,8 @@ suponemos que
 - La lista de transacciones es muy grande, y
 no puede leerse completa en memoria,
 - Sin embargo, para una sola canasta, es posible calcular de manera
-relativamente rápida todos los subconjuntos de tamaño $k$ (para $k=1,2,3,4$, por ejemplo). Por ejemplo, si una canasta tiene 10 artículos, hay $\choose{10}{3} = 120$ canastas
-de tamaño 3, $\choose{10}{4} = 210$. Calcular estos subconjuntos es relativamente rápido comparado con leer de disco una transacción.
+relativamente rápida todos los subconjuntos de tamaño $k$ (para $k=1,2,3,4$, por ejemplo). Por ejemplo, si una canasta tiene 10 artículos, hay $\binom{10}{3}$ canastas
+de tamaño 3, $\binom{10}{4} = 210$. Calcular estos subconjuntos es relativamente rápido comparado con leer de disco una transacción.
 - Finalmente, suponemos que el número de itemsets frecuentes es relativamente chico (lo cual depende de que escojamos un soporte suficientemente alto).
 
 El principio básico que hace posible hacer los conteos de itemsets frecuentes es el siguiente:
@@ -212,7 +213,7 @@ Sea $s$ un nivel de soporte mínimo fijo.
   
 - Si un itemset $I$ es frecuente, entonces todos sus subconjuntos son
 itemsets frecuentes.
-- Equivalentemente, si algún subconjunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente. Así que *a priori*, no es necesario itemsets que contienen al menos un subconjunto 
+- Equivalentemente, si algún subconjunto de un itemset no es frecuente, entonces el itemset no puede ser frecuente. Así que *a priori*, no es necesario examinar o contar itemsets que contienen al menos un subconjunto 
 que no sea frecuente.
 ```
 
@@ -357,96 +358,73 @@ describir con una versión simple de estos modelos, sin embargo, es útil
 experimentar con modelos simples para entender qué tipo de cosas
 podemos obervar.
 
-### Modelo de artículos iid.
+### Modelo de artículos independientes
 
 En primer lugar, podemos considerar el modelo que establece que la aparición o no de cada artículo es independiente del resto:
 
 $$P(X_1=x_1,\ldots, X_m=x_m) =\prod_m P(X_j=x_j)$$
 
-Y adicionalmente, suponemos que la probabilidad de cada artículo es
-la misma 
-$$P(X_j=1)=p$$.
+Y adicionalmente, suponemos que la probabilidad de cada artículo es fija dada
+por
+$$P(X_j=1)=p_j$$.
 Entonces es fácil ver que el soporte (bajo el modelo teórico) de 
 un conjunto de $k$ artículos es
-$$P(X_{s_1}=1,X_{s_2}=1,\ldots, X_{s_k}=1)=p^k$$
+$$P(X_{s_1}=1,X_{s_2}=1,\ldots, X_{s_k}=1)=p_{s_1}p_{s_2}\cdots p_{s_k}$$
 
-Las canastas frecuentes entonces, son todas las canastas tales
-que $p^k > s$, o las canastas que tienen tamaño $k < \frac{\log(s)}{\log(p)}$. Es decir,
-todas las canastas suficientemente chicas son frecuentes (dependiendo de $s$ y $p$),
-y todas las canastas grandes no son frecuentes.
+Podemos ver qué pasa si simulamos transacciones bajo este modelo
+simple.
 
-Podemos ver qué pasa si simulamos transacciones, suponiendo
-que los items aparecen independientemente unos de otros con
-probabilidad fija. En este caso, bajo el modelo
-las canastas de tamaño 1 y 2 son frecuentes y las de tamaño 3 o más grandes no lo son:
-
-```{r, results=FALSE, messages=FALSE}
-simular_transacciones <- function(nItems, nTrans, iprob = 0.1){
+```{r, results=FALSE, messages=FALSE, warning=FALSE}
+simular_transacciones <- function(nItems, nTrans, iprob){
+  etiquetas <- 1:nItems
+  if(!is.null(names(iprob))) {
+    etiquetas <- names(iprob)
+  }
   trans <- lapply(1:nTrans, function(i){
-      which(rbinom(nItems, 1, prob = iprob) == 1)
+      etiquetas[which(rbinom(nItems, 1, prob = iprob) == 1)]
   })
   trans
 }
-trans <- simular_transacciones(nItems = 169, 
+probs_items <- sort(itemFrequency(Groceries))
+sims <- lapply(1:10, function(i){
+  trans <- simular_transacciones(nItems = 169, 
                                nTrans = 10000, 
-                               iprob = rep(0.2, 169))
-ap_random <- apriori(trans, parameter = 
-                       list(support=0.01, target='frequent itemsets'))
+                               iprob = probs_items)
+  ap_random <- apriori(trans, parameter = 
+                       list(support=0.01, target='frequent itemsets'),
+                       control = list(verbose = FALSE))
+  df <- data.frame(table(size(ap_random)))
+  df$rep <- i
+  df
+})
+
 ```
 
-```{r}
-c(0.2,0.2^2,0.2^3, 0.2^4) 
-tamaños <- table(size(ap_random)); tamaños
-```
-```{r}
-choose(169,2)
-choose(169,3)
-```
+Ahora vamos a comparar con el análisis de las canastas reales:
 
-Nótese que capturamos algunas canastas frecuentes cuando en realidad no lo son, y 
-esto se debe a error de estimación. 
-
-
-```{r}
-trans <- simular_transacciones(nItems = 169, 
-                               nTrans = 10000, 
-                               iprob = itemFrequency(Groceries))
-ap_random <- apriori(trans, parameter = 
-                       list(support=0.01, target='frequent itemsets'))
-```
-La razón de que aparezcan tantos conjuntos frecuentes de tamaño 3 en el análisis es
-error de estimación: aún cuando la verdadera probabilidad de un conjunto frecuente 
-de tamaño 3 es `r 0.2^3`, algunas estimaciones tienen error y aparecen como frecuentes.
-Aún cuando parecen ser muchas canastas, en realidad es una fracción baja de los itemsets
-de tamaño 3 posibles, que son 
-
-```{r}
-choose(100,3)
+```{r, warning = FALSE}
+df_sims <- bind_rows(sims)
+pars <- list(supp = 0.01, target='frequent itemsets')
+ap <- apriori(lista_mb, parameter = pars, control = list(verbose = FALSE))
+df_obs <- data.frame(table(size(ap)))
+ggplot(df_sims, aes(x=Var1, y=Freq)) + geom_point() +
+  geom_point(data = df_obs, colour = 'red') + labs(x = 'Tamaño')
 ```
 
-Esto explica un patrón que normalmente vemos en los datos más complicados de canastas verdaderas: generalmente hay más pares frecuentes que artículos frecuentes, y luego menos el número de itemsets
-frecuentes decrece conforme el tamaño aumenta.
-
-En nuestro ejemplo de canastas de supermercado:
-
-```{r}
-length(ap_1)
-length(ap_2)
-length(ap_3)
-ap_4 <- subset(ap, size(ap) == 4)
-length(ap_4)
-```
-
-
-
+Y vemos claramente que el modelo simple está lejos de ajustar los datos que observamos en
+las canastas de *Groceries*, aunque también observamos que una buena proporción de canastas
+de tamaño 2 puede explicarse por la co-ocurrencia de artículos que tienen frecuencia alta.
 
 ## Reglas de asociación
 
+Aunque muchas veces lo único que nos interesa es la co-ocurrencia de artículos (por ejemplo,
+para entender qué artículos se podrían ver afectados por acciones en otros artículos que
+están en el mismo itemset frecuente), muchas veces nos interesa entender qué artículos
+están asociados a lo largo de canastas por otros factores, como tipo de cliente, tipo de
+ocasión o propósito (por ejemplo, hora del día, hacer un pastel), etc.
 
-
-Muchas veces, la información
-de conjuntos frecuentes
-se organiza en términos de reglas de asociación. 
+Con este propósito podemos organizar la información de los itemsets frecuentes
+en términos de reglas de asociación. 
 Un ejemplo de una regla de asociación es:
 
 *Entre las personas que compran leche y pan, un 40\% compra también yogurt*
@@ -455,17 +433,22 @@ Un ejemplo de una regla de asociación es:
 Una **regla de asociación** es una relación de la forma $I\to j$, donde
 $I$ es un conjunto de artículos (el antecedente) y $j$ es un artículo (el consecuente).
 Definimos la **confianza** de esta regla como
-$$P(I\to j) = P(j|I) = \frac{n(I\cup {j})}{n(I)} = P(I\cup j)/P(I) \leq 1, $$
+$$\hat{P}(I\to j) = \hat{P}(j|I) = \frac{n(I\cup {j})}{n(I)} = \hat{P}(I\cup j)/\hat{P}(I), $$
   es decir, la proporción de canastas que incluyen al itemset $I\cup {j}$  entre
-las canastas que incluyen al itemset $I$.
-
+las canastas que incluyen al itemset $I$. La confianza siempre está entre 0 y 1.
 ```
+
+
+
 
 
 **Observaciones**:
 
-- Es fácil ver que si $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces $n(J) \leq n(I)$: cualquier canasta que 
+- Por monotonicidad, si  $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces $n(J) \leq n(I)$: cualquier canasta que 
 contiene a $I$ también contiene a $J$, y puede haber algunas canastas que contienen a $I$ no contienen a $J$.
+
+- Bajo el modelo de items independientes, todas las confianzas satisfacen $P(I\to j)=P(j)$ (la confianza simplemente es la probabilidad de observar el artículo $j$, independientemente del
+antecedente).
 
 ### Ejemplo {-}
 
@@ -476,12 +459,13 @@ de la regla $whole milk \to yogurt$ es $\frac{0.0560}{0.2555}=$ `r round(0.0560/
 ### Ejemplo {-}
 
 ```{r, message = FALSE, results=FALSE}
-pars <- list(supp = 0.01, confidence = 0.0, target='rules', ext = TRUE)
+pars <- list(supp = 0.02, confidence = 0.0, target='rules', 
+             ext = TRUE, minlen = 2)
 a_reglas <- apriori(lista_mb, parameter = pars)
 ```
 
 ```{r, message=FALSE, results=FALSE}
-df_1 <- sort(subset(a_reglas, size(a_reglas) == 2), by = 'support') %>%
+df_1 <- sort(a_reglas, by = 'confidence') %>%
         DATAFRAME 
 ```
 
@@ -489,14 +473,15 @@ En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side
 
 ```{r}
 df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
-  head(20) %>%
+  head(100) %>%
   mutate_if(is.numeric, funs(round(., 2))) 
 ```
 
 **Observaciones**:
 
-- Nota que estas tres cantidades están ligadas por 
-$lhs.support\times confidence = support$. 
+- Nota que estas tres cantidades están ligadas en cada canasta por 
+$lhs.support\times confidence = support$. Usa un argumento de probabilidad condicional 
+para mostrarlo.
 
 ---
 
@@ -512,7 +497,7 @@ cantidad no es muy diferente a $P(j)$, entonces consideramos que esta regla
 no tiene mucho *interés*. 
 
 ```{block2, type ='resumen'}
-El **lift** o **intéres** de una $I\to j$ se define como
+El **lift** o **intéres** de una regla $I\to j$ se define como
 $$L(I\to j) = \frac{P({j}|I)}{P({j})},$$
   es decir, la confianza de la regla $I\to j$ dividida entre la proporción
 de canastas que contienen $j$.
@@ -529,6 +514,54 @@ más importante entre los dos artículos.
 - Cuando decimos que un grupo de artículos están asociados, generalmente
 estamos indicando que forma alguna regla de asociación con **lift** alto.
 
+
+#### Ejemplo {-}
+```{r, message=FALSE, results=FALSE}
+df_1 <- sort(a_reglas, by = 'lift') %>%
+        DATAFRAME 
+```
+
+En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
+
+```{r}
+df_1 %>% select(LHS, RHS, lhs.support, lift, confidence, support) %>%
+  head(100) %>%
+  mutate_if(is.numeric, funs(round(., 2))) 
+```
+
+
+### Valores de lift en el modelo simple
+
+Veamos cómo se comportan confianza y lift para el modelo donde no hay asociaciones:
+
+```{r}
+sims_reglas <- lapply(1:10, function(i){
+  trans <- simular_transacciones(nItems = 169, 
+                               nTrans = 10000, 
+                               iprob = probs_items)
+  ap_random <- apriori(trans, parameter = 
+                       list(support=0.005, confidence = 0.0, 
+                            target='rules', ext = TRUE, minlen = 2),
+                       control = list(verbose = FALSE))
+  ap_random
+})
+```
+
+```{r, warning=FALSE}
+df_sims <- lapply(1:length(sims_reglas), function(i){ df <- sims_reglas[[i]] %>% DATAFRAME %>% mutate(rep=i)  }) %>% bind_rows
+ggplot(df_sims, aes(x=support, y= lift)) + geom_point() + facet_wrap(~rep)
+plotly_arules(sims_reglas[[2]], measure=c('support','lift'), shading = 'confidence')
+```
+
+
+
+```{r}
+ap_reglas <- apriori(Groceries, parameter = 
+                       list(support=0.005, confidence = 0.0, 
+                            target='rules', ext = TRUE, minlen = 2),
+                       control = list(verbose = FALSE))
+  plotly_arules(ap_reglas, measure=c('lhs.support','confidence'), shading = 'confidence')
+```
 
 
 ## Selección de reglas
@@ -587,7 +620,6 @@ reglas_1
 Y ahora modemos filtrar por lift si nos interesa estudiar las asociaciones:
 
 ```{r}
-library(arulesViz)
 reglas_2 <- subset(reglas_1, lift > 2)
 plotly_arules(reglas_2, colors=c('red','gray'))
 inspect(sort(reglas_2, by='lhs.support'))
@@ -635,7 +667,6 @@ que puedan ser útiles). Así que muchas veces ayuda visualizar los pares con as
 En nuestro caso, podríamos tomar
 
 ```{r, results=FALSE, message=FALSE}
-library(arulesViz)
 library(readr)
 reglas <- apriori(Groceries, 
                 parameter = list(support = 0.005, confidence=0.3, 
