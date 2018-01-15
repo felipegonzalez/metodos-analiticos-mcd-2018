@@ -11,11 +11,34 @@ link-citations: yes
 github-repo: felipexgonzalez/metodos-analiticos-2018
 description: "Notas para métodos analíticos 2018"
 ---
+# Métodos analíticos {-}
 
-# Métodos analíticos
-
-## Temario
-
-## Evaluación
+Este curso trata sobre varias técnicas de análisis de datos diseñadas
+para escalar datos grandes. El enfoque del curso se concentra más en el entendimiento y aplicación de los algoritmos y los métodos, y menos en la tecnología para implementarlos.
 
 
+## Temario {-}
+
+1. Análisis de conjuntos frecuentes
+2. Simlitud: búsqueda de elementos similares (minhashing) 
+3. Similitud: Hashing sensible a la localidad (Locality sensitive hashing)
+4. Procesamiento de flujos de datos: filtrado, conteo.
+5. Sistemas de recomendación
+6. Análisis de redes y pagerank
+7. Minería de textos
+8. Modelos de lenguaje y aplicaciones
+9. Publicidad en línea, adwords
+
+
+
+
+## Evaluación {-}
+
+- Examen parcial (40\%)
+- Tareas semanales (20\%)
+- Proyecto final (40\%)
+
+
+## Referencias {-}
+
+Nuestro texto básico es [@mmd]. Otras referencias están en [References]
