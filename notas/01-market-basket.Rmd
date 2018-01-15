@@ -8,8 +8,11 @@ Originalmente, pensamos que tenemos una colección grande de tickets
 de un supermercado. Nos interesa encontrar subconjuntos
 de artículos (por ejemplo, pan y leche) que ocurren 
 frecuentemente en esos tickets. La idea es que si tenemos estos
-subconjuntos frecuentes, entonces podemos diseñar mejor promociones
-cruzadas, reordenar los estantes del supermercado, etc. En general, los conjuntos frecuentes indican asociaciones (y cuantificaciones de la asociación) entre artículos que hay que tomar en cuenta al momento
+subconjuntos frecuentes, entonces podemos entender mejor el tipo de compras
+que hacen los clientes, diseñar mejor promociones y entender potenciales efectos
+cruzados, reordenar los estantes del supermercado, etc. 
+
+En general, los conjuntos frecuentes indican asociaciones (y cuantificaciones de la asociación) entre artículos que hay que tomar en cuenta al momento
 de tomar decisiones. Esto normalmente se llama análisis de **market basket**.
 
 El análisis de subconjuntos frecuentes puede ser utilizado para 
@@ -22,20 +25,23 @@ Contiene unas 10 mil canastas observadas en de un supermercado durante un mes,
 agregadas a 169 categorías.
 
 
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
 library(methods)
 library(arules)
 library(arulesViz)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+```
+
+```{r}
 data(Groceries) # del paquete arules
 lista_mb <- as(Groceries, 'list')
 ```
 
 Estos tres **canastas** (tickets) de ejemplo:
 
-```{r}
+```{r, collapse = TRUE}
 lista_mb[[2]]
 lista_mb[[52]]
 lista_mb[[3943]]
@@ -73,16 +79,15 @@ DT::datatable(articulos_frec %>%
 
 
 
-Finalmente, un primer análisis que podríamos considerar es 
-el de canastas frecuentes. ¿Existen ciertas combinaciones exactas
-de artículos que aparecen con frecuencia muy alta?
+Un primer análisis que podríamos considerar es 
+el de canastas completas que ocurren frecuentemente. ¿Qué tan
+útil crees que puede ser este análisis?
 
-```{r colapsar}
+```{r colapsar, warning=FALSE}
 colapsar_canasta <- function(x, sep = '-'){
   # convierte cada canasta a una cadena
   x %>% as.character %>% sort %>% paste(collapse = '-')
 }
-
 canastas_conteo <- canastas_nest %>%
                 rowwise() %>%
                 mutate(canasta_str = colapsar_canasta(articulos)) %>%
@@ -102,7 +107,9 @@ DT::datatable(canastas_conteo %>% head(n = 100) %>%
 
 Hay algunas canastas (principalmente canastas que contienen un solo
 artículo) que aparecen con frecuencia considerable (alrededor de 1\% o 2\%), pero las canastas están bastante dispersas en el espacio de posibles 
-canastas (que es gigantesco: ¿puedes calcularlo?).
+canastas (que es gigantesco: ¿puedes calcularlo?). Debido a esta dispersión (las canastas
+se distribuyen de manera rala en el espacio de posibles canastas), este análisis es
+de utilidad limitada.
 
 ```{block2, type='resumen'}
 **Datos de canastas**
@@ -110,7 +117,7 @@ canastas (que es gigantesco: ¿puedes calcularlo?).
 1. El tamaño de las canastas normalmente es muy chico 
   (por ejemplo 1 a 30 artículos distintos).
 2. El número de artículos típicamente no es muy grande (de cientos a cientos de miles, por ejemplo).
-3. El número de canastas puede ser mucho mayor (en algunos casos miles de millones) -quizá no pueden leerse en memoria.
+3. El número de canastas puede ser mucho mayor (en algunos casos miles de millones) y quizá no pueden leerse completas en memoria.
 4.  El número de canastas distintas es alto, y hay pocas canastas frecuentes. 
 ```
 
@@ -137,7 +144,7 @@ Sea $s\in (0,1)$. Para este valor fijo $s$, decimos que un conjunto de artículo
 
 **Observación**:
 Si hay $m$ artículos, entonces el número de posibles itemsets es de $2^m$. El número
-total de itemsets de tamaño $k$ es $\binom{m}{k}$.
+total de itemsets de tamaño $k$ es $\binom{m}{k}$. Sin embargo, esperamos que los itemsets frecuentes sean raros, de forma que es factible calcularlos (siempre y cuando el soporte mínimo sea suficientemente grande).
 
 #### Ejercicio {-}
 Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets frecuentes de soporte > 0.4?
@@ -145,7 +152,9 @@ Considera las canastas {1,2,3}, {1,2}, {2,4}, {2,3}. ¿Cuáles son los itemsets 
 #### Ejemplo {-}
 Explicamos más adelante la función *apriori* de *arules*,
 pero por lo pronto podemos examinar algunos 
-conjuntos frecuentes de soporte mínimo 0.005:
+conjuntos frecuentes de soporte mínimo 0.005 (como hay alrededor de 
+10000 canastas, esto significa que canastas que aparecieron al menos 50
+veces durante el mes):
 
 ```{r, message = FALSE, results=FALSE}
 pars <- list(supp = 0.005, target='frequent itemsets')
@@ -154,36 +163,40 @@ ap <- apriori(lista_mb, parameter = pars)
 
 Veamos algunos conjuntos frecuentes de tamaño 1:
 
-```{r, message = FALSE}
+```{r, message = FALSE, collapse = TRUE}
 ap_1 <- subset(ap, size(ap) == 1) 
+length(ap_1)
 inspect(sort(ap_1, by='support')[1:10]) 
 ```
 
 Algunas de tamaño 2 y 3:
 
-```{r, message = FALSE}
+```{r, message = FALSE, collapse = TRUE}
 ap_2 <- subset(ap, size(ap) == 2)
+length(ap_2)
 inspect(sort(ap_2, by='support')[1:10])
 ```
 
-```{r}
+```{r, collapse = TRUE}
 ap_3 <- subset(ap, size(ap) == 3)
+length(ap_3)
 inspect(sort(ap_3, by='support')[1:5])
 ```
 
 También podemos ver qué itemsets incluyen algún producto particular,
 por ejemplo
 
-```{r}
+```{r, collapse = TRUE}
 ap_berries <- subset(ap, items %pin% 'berries')
+length(ap_berries)
 inspect(sort(ap_berries, by ='support')[1:5])
 ```
 
-```{r}
+```{r, collapse = TRUE}
 ap_soda <- subset(ap, items %pin% 'soda')
+length(ap_soda)
 inspect(sort(ap_soda, by ='support')[1:5])
 ```
-
 
 
 ## Monotonicidad de conjuntos frecuentes
@@ -217,6 +230,10 @@ itemsets frecuentes.
 que no sea frecuente.
 ```
 
+Este hecho, junto con la selección de un soporte mínimo para los itemsets frecuentes
+es el que hace que la búsqueda y conteo de itemsets frecuentes sea un problema
+**factible**.
+
 La demostración es como sigue: Sea $n(I)$  el número de canastas
 que contiene $I$, y supongamos que $n(I)>s$ ($I$ es un conjunto frecuente).
 Sea ahora $J\subset I$. Entonces cualquier canasta que contiene los
@@ -225,29 +242,27 @@ de forma que $n(J)\geq n(I)$. Como $n(I)>s$, entonces $J$ es un conjunto
 frecuente.
 
 
-**Observación**
-- Este hecho a veces es un poco confuso (es monotonicidad decreciente), 
+**Observación**: Este hecho a veces es un poco confuso (es monotonicidad decreciente), 
 como demuestra este [ejemplo de
 Kahneman](https://en.wikipedia.org/wiki/Conjunction_fallacy): Linda is 31 years old, single, outspoken, and very bright. She majored in philosophy. As a student, she was deeply concerned with issues of discrimination and social justice, and also participated in anti-nuclear demonstrations. Which is more probable?
     1. Linda is a bank teller.
     2. Linda is a bank teller and is active in the feminist movement. 
 
 
-## Algoritmo a-priori (pares)
+## Algoritmo a-priori
 
 Para entender cómo aplicamos monotonicidad, consideremos cómo calcularíamos los pares frecuentes.
 
 1. Primero calculamos los artículos frecuentes (itemsets de tamaño 1), que
 son los artículos que aparecen en al menos una proporción $s$ de las canastas. 
-  - Esto requiere recorrer el archivo de transacciones y contar **todos** los artículos. 
-  - Seleccionamos aquellos artículos que son frecuentes.
+  - (Contar candidatos) Esto requiere recorrer el archivo de transacciones y contar **todos** los artículos. 
+  - (Podar) Examinamos los conteos y seleccionamos aquellos artículos que son frecuentes.
 
 2. Por el principio de monotonicidad, ningún par frecuente puede contener
 un artículo no frecuente. Así que para calcular pares:
-  - Generamos los pares candidatos  a partir de los artículos frecuentes.
-  - Recorremos el archivo de transacciones y solo contamos los pares posibles resultantes que 
-  pertenencen al conjunto de pares candidatos.
-  - Seleccionamos aquellos pares que son frecuentes.
+  - (Contar candidatos) Recorremos el archivo de transacciones. Para cada transacción, solo contamos
+  pares candidatos cuyos dos artículos son artículos frecuentes (del paso anterior)
+  - (Podar) Examinamos los conteos y seleccionamos aquellos pares que son frecuentes.
 
 Nótese que este algoritmo requiere dos pasadas sobre el conjunto de transacciones. 
 
@@ -257,10 +272,11 @@ Aplica este algoritmo para las canastas {1,2,3}, {1,8}, {2,4}, {2,3,6,7,8}, {2,3
 
 **Observaciones**
 
-1. En la primera pasada del algoritmo (artículos frecuentes), típicamente no es un problema mantener el conteo de los artículos en memoria.
-2. Si en la segunda pasada no usáramos monotonicidad, tendríamos que mantener conteos de todos los posibles pares (que son del orden $m^2$, donde $m$ es el número de artículos). Mantener este conteo en memoria podría ser difícil. Sin embargo, el número de artículos frecuentes generalmente es considerablemente menor.
+1. En este algoritmo, no es necesario leer todas las transacciones a la vez, podemos procesarlas por bloques, por ejemplo.
+2. En la primera pasada del algoritmo (artículos frecuentes), no es un problema mantener el conteo de todos los artículos en memoria.
+3. Si en la segunda pasada no usáramos monotonicidad, tendríamos que mantener conteos de todos los posibles pares (que son del orden $m^2$, donde $m$ es el número de artículos). Mantener este conteo en memoria podría ser difícil si el número de artículos es grande. Sin embargo, el número de artículos frecuentes generalmente es considerablemente menor.
 
-Para itemsets de tamaño más grande, el algoritmo a priori  [@Agrawal] es:
+Para itemsets de tamaño más grande, el algoritmo original a priori  [@Agrawal] es:
 
 ```{block2, type='resumen'}
 **Algoritmo a-priori**
@@ -278,7 +294,8 @@ Para obtener $L_k$, el número de itemsets frecuentes de tamaño $k$:
   
 ```
   
-**Observaciones**: Hay distintas maneras de implementar este algoritmo:
+**Observaciones**: Este algoritmo se puede implementar de distintas maneras, por ejemplo:
+
 - Hay distintas maneras de general el conjunto $C_{k}$ de candidatos. El paper original sugiere (suponiendo que los artículos siempre están ordenados en los itemsets) hacer un join de $L_{k-1}$ consigo misma. Por ejemplo,
 para generar los tríos $C_3$ a partir de $L_2$ hacemos
 
@@ -295,21 +312,22 @@ lexicográficamente).
 paper original sugiere una estructura de árbol para encontrar los
 subconjuntos de $t$ que están en $C_k$. Ver también [@borgelt].
 
-- Otros algoritmos también son explicados en [@borgelt]. A priori es efectivo,
+- Otros algoritmos también son explicados en [@borgelt]. A priori es el algoritmo clásico,
 pero actualmente hay otros mejores.
-  
+
+
 ## Modelos simples para análisis de canastas
 
 Podemos entender mejor el comportamiento de este análisis con
 algunos modelos simples para datos de canastas.
 
-En primer lugar, consideramos que los datos están en forma
-de codificación dummy. Entonces una canasta es un renglón
-de ceros y unos, dependendiendo qué artículos están o no en la canasta
+En primer lugar, pensamos que los datos están en forma
+de codificación dummy (aunque no usemos esta representación para los datos
+reales, podemos considerarlo teóricamente). Una canasta es entonces un renglón
+de ceros y unos, dependendiendo qué artículos están o no en la canasta:
 
 $$X= (X_1,X_2,\ldots, X_m)$$
-donde $X_i = 1$ si el artículo $i$ está en la canasta. En otro
-caso, $X_i=0$. 
+donde $X_i = 1$ si el artículo $i$ está en la canasta, y $X_i=0$ si no está. 
 
 Podríamos pensar entonces en construir modelos para la conjunta
 de las canastas
@@ -333,32 +351,41 @@ probs$prob <- round(x/sum(x),3)
 probs
 ```
 
-A partir de esta conjunta podemos calcular cualquier cantidad
-que nos interese. 
+A partir de esta conjunta podemos calcular cualquier probabilidad
+que nos interese. Por ejemplo, la probabilidad de que alguien compre
+una camisa dado que compró un pantalón es:
+
+```{r}
+prob_cp <- filter(probs, p ==1 & c==1) %>% pull(prob) %>% sum
+prob_p <- filter(probs, p==1) %>% pull(prob) %>% sum
+prob_cp/prob_p
+```
 
 ---
 
-Como discutimos arriba, construir esta conjunta usando simples
+Como discutimos arriba, intentar estimar esta conjunta usando simples
 conteos de canastas no funciona, pues hay $2^n$ posibles canastas,
 e incluso cuando $n$ no es tan grande (por ejemplo 200) es un número
-gigantesco.
+gigantesco. Tenemos dos caminos (o una combinación de ellos): podemos hacer hipótesis acerca de esta conjunta (y checar si son apropiadas), 
+o concentrarnos en estimar solamente algunas de sus características.
 
-La idea de análisis de canastas es concentrarnos en **marginales** de 
+La simplificación de market basket es concentrarnos en **algunas marginales que involucren a pocos artículos** de 
 esta distribución, que tienen una forma como
 $$P(X_{i}=1,X_{j}=1),$$
 que es la probabilidad de que el conjunto ${i,j}$ aparezca en una canasta dada, o en los términos de market basket, el soporte del itemset ${i,j}$.
 
+```{block2, type='resumen'}
 La búsqueda de itemsets frecuentes se traduce entonces en buscar
 marginales de este tipo que no involucren muchas variables
 y que tengan valores altos - buscamos *modas* en las marginales de
-la distribución de las canastas. 
+la distribución de las canastas.
+```
 
-El comportamiento general de las canastas probablemente no se puede
-describir con una versión simple de estos modelos, sin embargo, es útil
+### Modelo de artículos independientes {-}
+Aunque el comportamiento general de las canastas probablemente no se puede
+describir con modelos simples para la conjunta, puede ser útil
 experimentar con modelos simples para entender qué tipo de cosas
 podemos obervar.
-
-### Modelo de artículos independientes
 
 En primer lugar, podemos considerar el modelo que establece que la aparición o no de cada artículo es independiente del resto:
 
@@ -372,7 +399,8 @@ un conjunto de $k$ artículos es
 $$P(X_{s_1}=1,X_{s_2}=1,\ldots, X_{s_k}=1)=p_{s_1}p_{s_2}\cdots p_{s_k}$$
 
 Podemos ver qué pasa si simulamos transacciones bajo este modelo
-simple.
+simple. Primero definimos una función para simular canastas con probabilidades
+dadas para los artículos
 
 ```{r, results=FALSE, messages=FALSE, warning=FALSE}
 simular_transacciones <- function(nItems, nTrans, iprob){
@@ -385,15 +413,41 @@ simular_transacciones <- function(nItems, nTrans, iprob){
   })
   trans
 }
+```
+
+Y ahora simulamos usando las proporciones que encontramos en el conjunto *Groceries*
+
+```{r}
+set.seed(1299)
 probs_items <- sort(itemFrequency(Groceries))
+trans <- simular_transacciones(nItems = 169, nTrans = 10000, 
+                               iprob = probs_items)
+ap_indep <- apriori(trans, parameter = 
+                       list(support=0.005, target='frequent itemsets'),
+                       control = list(verbose = FALSE))
+```
+
+Por ejemplo, aquí vemos algunos pares frecuentes encontrados por el algoritmo:
+
+```{r}
+inspect(subset(ap_indep, support > 0.015 & size(ap_indep)==2))
+```
+
+Estos pares frecuentes no se deben a asociaciones entre los artículos,
+sino a co-ocurrencia en las canastas. Artículos frecuentes apareceran en pares
+frecuentes, tríos frecuentes, etc. Comparamos por ejemplo el número de reglas
+encontradas para los datos reales, contra 10 simulaciones de este modelo:
+
+
+```{r}
 sims <- lapply(1:10, function(i){
   trans <- simular_transacciones(nItems = 169, 
                                nTrans = 10000, 
                                iprob = probs_items)
-  ap_random <- apriori(trans, parameter = 
-                       list(support=0.01, target='frequent itemsets'),
+  ap_indep <- apriori(trans, parameter = 
+                       list(support=0.005, target='frequent itemsets'),
                        control = list(verbose = FALSE))
-  df <- data.frame(table(size(ap_random)))
+  df <- data.frame(table(size(ap_indep)))
   df$rep <- i
   df
 })
@@ -404,7 +458,7 @@ Ahora vamos a comparar con el análisis de las canastas reales:
 
 ```{r, warning = FALSE}
 df_sims <- bind_rows(sims)
-pars <- list(supp = 0.01, target='frequent itemsets')
+pars <- list(supp = 0.005, target='frequent itemsets')
 ap <- apriori(lista_mb, parameter = pars, control = list(verbose = FALSE))
 df_obs <- data.frame(table(size(ap)))
 ggplot(df_sims, aes(x=Var1, y=Freq)) + geom_point() +
@@ -412,14 +466,37 @@ ggplot(df_sims, aes(x=Var1, y=Freq)) + geom_point() +
 ```
 
 Y vemos claramente que el modelo simple está lejos de ajustar los datos que observamos en
-las canastas de *Groceries*, aunque también observamos que una buena proporción de canastas
-de tamaño 2 puede explicarse por la co-ocurrencia de artículos que tienen frecuencia alta.
+las canastas de *Groceries*. Hay muchas más combinaciones frecuentes de tamaño
+2 y 3 de lo que esperaríamos si los artículos se compraran independientemente, y
+esto indica asociaciones positivas entre artículos que nos gustaría descubrir.
+¿Cómo podemos distinguir esas asociaciones?
+
+Finalmente, comparamos los itemsets de ambos casos:
+
+```{r, collapse = TRUE}
+coinciden <- match(ap, ap_indep)
+# match produce
+coinciden[500:505]
+inspect(ap[500])
+inspect(ap_indep[323])
+```
+
+```{r, collapse = TRUE}
+sum(!is.na(coinciden)) # contar los matches 
+length(ap)
+length(ap_indep)
+```
+
+Y vemos que en el análisis de datos reales estamos capturando la mayor parte
+de los itemsets frecuentes del modelo independiente. Estos itemsets se explican
+por la frecuencia simple de aparición de cada artículo.
+
 
 ## Reglas de asociación
 
-Aunque muchas veces lo único que nos interesa es la co-ocurrencia de artículos (por ejemplo,
+Aunque algunas veces lo único que nos interesa es la co-ocurrencia de artículos (por ejemplo,
 para entender qué artículos se podrían ver afectados por acciones en otros artículos que
-están en el mismo itemset frecuente), muchas veces nos interesa entender qué artículos
+están en el mismo itemset frecuente), otras veces nos interesa entender qué artículos
 están asociados a lo largo de canastas por otros factores, como tipo de cliente, tipo de
 ocasión o propósito (por ejemplo, hora del día, hacer un pastel), etc.
 
@@ -438,10 +515,6 @@ $$\hat{P}(I\to j) = \hat{P}(j|I) = \frac{n(I\cup {j})}{n(I)} = \hat{P}(I\cup j)/
 las canastas que incluyen al itemset $I$. La confianza siempre está entre 0 y 1.
 ```
 
-
-
-
-
 **Observaciones**:
 
 - Por monotonicidad, si  $J$ es un conjunto de artículos más grande que $I$ (es decir $I\subset J$), entonces $n(J) \leq n(I)$: cualquier canasta que 
@@ -450,32 +523,45 @@ contiene a $I$ también contiene a $J$, y puede haber algunas canastas que conti
 - Bajo el modelo de items independientes, todas las confianzas satisfacen $P(I\to j)=P(j)$ (la confianza simplemente es la probabilidad de observar el artículo $j$, independientemente del
 antecedente).
 
+- **Confianza alta** no necesariamente significa una asociación de los items: si el consecuente $j$ tiene soporte alto, entonces podemos obtener confianza alta aunque no haya asociación.
+
 ### Ejemplo {-}
 
 En nuestro ejemplo anterior, el soporte de  {whole milk,yogurt} es 
 de 0.0560, el soporte de {whole milk} es 0.2555, así que la confianza
 de la regla $whole milk \to yogurt$ es $\frac{0.0560}{0.2555}=$ `r round(0.0560/0.255,2)`
 
+---
+
+
+Podemos usar la confianza para filtrar reglas que tienen alta probabilidad de cumplirse:
+
 ### Ejemplo {-}
 
+
 ```{r, message = FALSE, results=FALSE}
-pars <- list(supp = 0.02, confidence = 0.0, target='rules', 
+pars <- list(supp = 0.01, confidence = 0.20, target='rules', 
              ext = TRUE, minlen = 2)
-a_reglas <- apriori(lista_mb, parameter = pars)
+reglas <- apriori(lista_mb, parameter = pars)
+```
+Podemos examinar algunas de las reglas:
+```{r}
+inspect(reglas[1:10,])
 ```
 
-```{r, message=FALSE, results=FALSE}
-df_1 <- sort(a_reglas, by = 'confidence') %>%
-        DATAFRAME 
-```
-
-En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
+En la siguiente tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side). Agregamos también el error estándar de la estimación de confidence (que es una proporción basada en el número de veces que se observa el antecedente):
 
 ```{r}
-df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
+df_1 <- sort(reglas, by = 'confidence') %>%
+        DATAFRAME 
+df_2 <- df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
   head(100) %>%
+  mutate(lhs.base = num_canastas*lhs.support) %>%
+  mutate(conf.ee = sqrt(confidence*(1-confidence)/lhs.base)) %>%
   mutate_if(is.numeric, funs(round(., 2))) 
+DT::datatable(df_2)
 ```
+
 
 **Observaciones**:
 
@@ -483,12 +569,21 @@ df_1 %>% select(LHS, RHS, lhs.support, confidence, support) %>%
 $lhs.support\times confidence = support$. Usa un argumento de probabilidad condicional 
 para mostrarlo.
 
+- Muchas de las reglas con confianza alta tienen como consecuente un artículo de soporte
+alto (por ejemplo, *whole milk*), como explicamos arriba. Nótese también que las reglas
+con confianza más alta tienden a tener soporte bajo. Esto lo discutiremos más adelante.
+
+#### Ejercicio {-} 
+- Para un mismo consecuente (por ejemplo whole milk), examina cómo varían
+los valores de *confidence*. ¿A qué crees que se deba esto?
+
 ---
 
 Es natural que artículos frecuentes ocurran en muchas canastas juntas, es decir,
 que reglas formadas con ellas tengan confianza relativamente alta. Por ejemplo,
 la regla *pan -> verduras* podría tener confianza y soporte alto, pero esto no
-indica ninguna asociación especial entre estos artículos.
+indica ninguna asociación especial entre estos artículos. La razón puede ser que
+*verduras* es un artículo muy común
 
 Podemos refinar las reglas de asociación considerando 
 qué tan diferente es $P(j|I)$ de $P(j)$. La primera cantidad es la probabilidad
@@ -498,41 +593,111 @@ no tiene mucho *interés*.
 
 ```{block2, type ='resumen'}
 El **lift** o **intéres** de una regla $I\to j$ se define como
-$$L(I\to j) = \frac{P({j}|I)}{P({j})},$$
+$$L(I\to j) = \frac{\hat{P}({j}|I)}{\hat{P}({j})},$$
   es decir, la confianza de la regla $I\to j$ dividida entre la proporción
 de canastas que contienen $j$.
 ```
 
 En nuestro ejemplo, veamos dos reglas con interés muy distinto:
 ```{r}
-df_1[c(5, 10),] %>% select(LHS, RHS, lhs.support, confidence, lift)
+df_1 <- arrange(df_1, desc(lift))
+df_1[c(4, nrow(df_1)),] %>% select(LHS, RHS, lhs.support, confidence, lift)
 ```
 La primera regla tiene un interés mucho más alto que la segunda, lo que indica una asociación
 más importante entre los dos artículos. 
 
+**Observaciones**
 
 - Cuando decimos que un grupo de artículos están asociados, generalmente
 estamos indicando que forma alguna regla de asociación con **lift** alto.
 
+- En principio también podría haber reglas con *lift* muy por debajo de uno,
+y eso también indica una asociación (por ejemplo coca y pepsi). Pero el método
+de itemsets frecuentes no es muy apropiado para buscar estas reglas, pues precisamente esas reglas tienden a tener soporte y confianza bajas.
+
+- El valor del lift también puede escribirse (deméstralo) como
+$$ \frac{\hat{P}(I\cup\{j\})}{\hat{P}(I)\hat{P}({j})},$$
+Cuando los artículos son independientes, esta cantidad está cercana a 1. Es una medida de qué tan lejos de independencia están
+la ocurrencia de los itemsets $I$ y $j$. 
+
+
 
 #### Ejemplo {-}
 ```{r, message=FALSE, results=FALSE}
-df_1 <- sort(a_reglas, by = 'lift') %>%
+df_1 <- sort(reglas, by = 'lift') %>%
         DATAFRAME 
 ```
 
 En esta tabla, *lhs.support* es el soporte del antecedente (lhs = left hand side):
 
 ```{r}
-df_1 %>% select(LHS, RHS, lhs.support, lift, confidence, support) %>%
+df_2 <- df_1 %>% select(LHS, RHS, lhs.support, lift, confidence, support) %>%
   head(100) %>%
   mutate_if(is.numeric, funs(round(., 2))) 
+DT::datatable(df_2)
 ```
 
+--- 
 
-### Valores de lift en el modelo simple
+Las reglas de asociación se calculan comenzando por calcular los
+itemsets frecuentes según el algoritmo a priori 
+explicado arriba. Para encontrar las reglas de asociación hacemos:
 
-Veamos cómo se comportan confianza y lift para el modelo donde no hay asociaciones:
+- Para cada itemset frecuente $f$, tomamos como candidatos a consecuentes
+los artículos $i$ de $f$
+- Si la confianza $\frac{\hat{P}(I)}{\hat{P}(I-\{j\})}$ es mayor que la confianza mínima,
+agregamos la regla de asociación $I\to j$.
+
+Con este proceso encontramos todas las reglas $I\to j$ tales que
+$I\cup\{j\}$ es un itemset frecuente.
+
+## Dificultades en el análisis de canastas
+
+El análisis de canastas es un método rápido y simple que nos da varias maneras
+de explorar las relaciones entre los artículos. Sin embargo, hay varias dificultades en su 
+aplicación.
+
+#### Número de reglas y itemsets {-}
+
+Muchas veces encontramos un número muy grande de itemsets o reglas. Hay varias maneras
+de filtrar estas reglas según el propósito. Si filtramos mucho, perdemos reglas que pueden
+ser interesantes. Si filtramos poco, es difícil entender globalmente los resultados del análisis.
+
+Un punto de vista es producir una cantidad
+de reglas para procesar posteriormente con *queries*: por ejemplo, si nos interesa entender las relaciones de **berries** con otros artículos, podemos filtrar las reglas encontradas y examinarlas más
+fácilmente. 
+
+#### Cortes estrictos en el filtrado {-}
+
+Cuando seleccionamos valores mínimos de soporte, confianza y/o lift, estas decisiones
+son más o menos arbitrarias. Distintos analistas pueden llegar a resultados distintos,
+incluso cuando el propósito del análisis sea similar, y en ocasiones hay que iterar el análisis
+para encontrar valores adecuados que den *conjuntos razonables con resultados interesantes*. 
+Este último concepto es subjetivo.
+
+#### Redundancia de reglas {-}
+
+Existe alguna redundancia en las reglas que encontramos. Por ejemplo,
+podríamos tener {yogurt, berries} -> {whipped cream}, pero también
+{yogurt} -> {whipped cream}. Este traslape de reglas hace también difícil
+entender conjuntos grandes de reglas.
+
+#### Variabilidad de medidas de calidad {-}
+
+Un problema del análisis clásico de soporte-confianza-lift es la variabilidad
+de las estimaciones de confianza y lift.
+
+- Cuando comenzamos poniendo valores de soporte y confianza relativamente bajos, encontramos muchas reglas
+- Intentamos muchas veces filtrar u ordenar por *lift*, para considerar las reglas más interesantes
+- Sin embargo, encontramos entonces que muchas reglas de lift y/o confianza altas son aquellas que tienen soporte bajo y consecuentes poco frecuentes.  Como veremos más adelante, esto se debe muchas veces
+a error de estimación. Los valores más grandes de lift generalmente son sobreestimaciones, por la naturaleza del análisis basado en cortes.
+- Si regresamos a incrementar soporte y confianza, potencialmente perdemos reglas interesantes.
+
+
+Podemos usar el modelo de independencia 
+Veamos cómo se comportan confianza y lift para el modelo donde no hay asociaciones. Obsérvese
+que en este modelo *todas las confianzas son iguales a la frecuencia del consecuente, y
+todos los valores de lift son 1*:
 
 ```{r}
 sims_reglas <- lapply(1:10, function(i){
@@ -540,28 +705,162 @@ sims_reglas <- lapply(1:10, function(i){
                                nTrans = 10000, 
                                iprob = probs_items)
   ap_random <- apriori(trans, parameter = 
-                       list(support=0.005, confidence = 0.0, 
+                       list(support=0.002, confidence = 0.0, 
                             target='rules', ext = TRUE, minlen = 2),
                        control = list(verbose = FALSE))
   ap_random
 })
 ```
 
+Y notamos que conforme el soporte de la regla es más bajo, hay más variabilidad 
+en las estimaciones del confianza y lift. En este caso utilizamos 
+
 ```{r, warning=FALSE}
-df_sims <- lapply(1:length(sims_reglas), function(i){ df <- sims_reglas[[i]] %>% DATAFRAME %>% mutate(rep=i)  }) %>% bind_rows
-ggplot(df_sims, aes(x=support, y= lift)) + geom_point() + facet_wrap(~rep)
-plotly_arules(sims_reglas[[2]], measure=c('support','lift'), shading = 'confidence')
+plotly_arules(subset(sims_reglas[[4]], rhs %pin% 'whole milk'), 
+              measure=c('support','confidence'), shading = 'lift')
 ```
 
+```{r, warning=FALSE}
+plotly_arules(subset(sims_reglas[[4]], rhs %pin% 'whole milk'), 
+              measure=c('support','lift'), shading = 'confidence')
+```
 
+El valor de *confianza* y de *lift* puede ser altamente variable para reglas con soporte
+bajo. Podemos tomar dos caminos:
+
+- Cuando hagamos el soporte más bajo, incrementamos el valor de lift mínimo. Esto evita que obtengamos demasiadas reglas que no representan interacciones reales entre los artículos.
+- Podemos usar otras medidas que tomen en cuenta la variabilidad de las estimaciones. Por ejemplo, hyper-lift y hyper-confidence están basados en modelos simples (como el que vimos arriba), que filtran aquellos valores de calidad que están en las colas de las distribuciones
+de los modelos simples.
+
+## Otras medidas de calidad de reglas
+
+Hay una gran cantidad de medidas de interés de reglas que se han
+propuesto desde que se usa el análisis de canasta. Aquí discutimos hyper-lift y hyper-confidence,
+que toman en cuenta el soporte de las reglas para proponer puntos de corte [@hyper]. 
+
+Explicamos aquí el hyper-lift para una regla $i\to j$.
+
+Consideramos el modelo de independencia (lo pensamos como
+el modelo nulo),
+fijando las probabilidades de ocurrencia de los artículos
+según los datos (como hicimos en los ejemplos de arriba) y el número
+de transacciones. Bajo este
+modelo, el número de ocurrencias $X_{\{i,j\}}$ de el itemset
+$\{i,j\}$ es una variable aleatoria
+con distribución conocida (binomial). Esta distribución representa
+la variación que podemos observar en los conteos de $\{i,j\}$
+bajo distintas muestras de transacciones del mismo tamaño.
+
+La idea básica del hyperlift es comparar el conteo $n(\{i,j\})$
+con la cola superior de la distribución de $X_{i,j}$ bajo el supuesto
+de independencia, poniendo
+
+$$HL(I\to j) = \frac{n(\{i,j\})}{Q_\delta (X_{i,j})},$$
+
+donde $Q_\delta$ es tal que $P(X_{i,j} > Q_\delta (X_{i,j}))\approx \delta$.
+Tomamos por ejemplo $\delta=0.99$. De esta forma, $HL>1$ sólo cuando
+el conteo observado $n(\{i,j\})$ está en la cola superior del conteo
+bajo la hipótesis nula. Esto toma en cuenta la variabilidad de los
+conteos (que es grande en términos relativos cuando el soporte es bajo).
+
+
+
+
+
+**Observaciones**:
+
+- El modelo de independencia que se usa en el
+paquete *arules* es una variación del que vimos aquí, 
+ver los detalles en [@hyper]. 
+- Los valores de *hyper-lift* no son realmente comparables a los de
+*lift*, son dos medidas de calidad de asociación diferentes, pero similares
+en cuanto a lo que quieren capturar.
 
 ```{r}
-ap_reglas <- apriori(Groceries, parameter = 
-                       list(support=0.005, confidence = 0.0, 
+trans <- simular_transacciones(nItems = 169, 
+                               nTrans = 10000, 
+                               iprob = probs_items)
+ap_random <- apriori(trans, parameter = 
+                       list(support=0.001, confidence = 0.10, 
                             target='rules', ext = TRUE, minlen = 2),
                        control = list(verbose = FALSE))
-  plotly_arules(ap_reglas, measure=c('lhs.support','confidence'), shading = 'confidence')
+agregar_hyperlift <- function(reglas, transacciones){
+  quality(reglas) <- cbind(quality(reglas), 
+	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
+	transactions = trans))
+  reglas
+}
+ap_random <- agregar_hyperlift(ap_random, trans)
 ```
+
+Podemos ver cómo se relacionan lift y hyper_lift. Vemos claramente
+que la gran mayoría de reglas obtenidas ahora tienen hyper-lift menor
+que uno
+
+```{r}
+plot(ap_random, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+Cortando en un valor relativamente bajo, vemos que nos deshacemos
+correctamente de casi todas las reglas:
+
+```{r, collapse=TRUE}
+length(ap_random)
+length(subset(ap_random, lift > 1))
+length(subset(ap_random, hyper_lift > 1))
+```
+
+Ahora aplicamos a los datos reales
+
+
+```{r, collapse = TRUE}
+pars <- list(supp = 0.002, confidence = 0.10, target='rules', 
+             ext = TRUE, minlen = 2)
+reglas <- apriori(lista_mb, parameter = pars,
+                  control = list(verbose=FALSE))
+reglas <- agregar_hyperlift(reglas, Groceries)
+length(reglas)
+```
+
+Vemos que podemos cortar niveles de hyper-lift donde obtenemos reglas
+de soporte relativamente alto. 
+
+```{r}
+plot(reglas, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+
+
+
+Si cortamos en valores que dan un número similar de reglas, por ejemplo:
+
+```{r}
+filtradas_hl <- subset(reglas, hyper_lift > 2)
+filtradas_lift <- subset(reglas, lift > 3.7)
+length(filtradas_hl)
+length(filtradas_lift)
+```
+
+Vemos que las reglas cortadas con hyperlift tienen mejores valores 
+de soporte
+
+```{r, fig.width=4, fig.asp=1}
+qqplot(quality(filtradas_hl)$support, 
+       quality(filtradas_lift)$support, xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Soporte')
+```
+
+Sin embargo, la distribución de valores de lift no es tan diferente:
+
+```{r, fig.width=4, fig.asp=1}
+qqplot(quality(filtradas_hl)$lift, 
+       quality(filtradas_lift)$lift,
+       xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Lift')
+```
+
+En resumen, al descartar aquellas reglas con soporte bajo que
+tienen lift alto por azar, encontramos reglas de mejor calidad en general.
 
 
 ## Selección de reglas
@@ -569,60 +868,47 @@ ap_reglas <- apriori(Groceries, parameter =
 Ahora discutiremos cómo seleccionar itemsets frecuentes y reglas.
 
 Filtrar con todos estos criterios (soporte, confianza, soporte del antecedente, lift)
-no es simple, y depende de los objetivos del análisis. Recordemos también que estos análisis están basados justamente en cortes “duros” de los datos, y por lo tanto pueden ser ruidosos.
+no es simple, y depende de los objetivos del análisis. 
+Recordemos también que estos análisis están basados justamente en cortes “duros” de los datos, más o menos arbitrarios, y por lo tanto pueden los resultados son variables.
 
-Resumiendo, podemos pensar en estas cuatro cantidades de la siguiente forma:
+Hay varias maneras de conducir el análisis. Dos tipos útiles son:
 
-- El *soporte* de una regla debe ser suficientemente alto, para que el itemset
-sea relevante a las ventas de la tienda, por ejemplo.
-- La *confianza* indica cuál es el potencial de explotación de una regla. Por ejemplo,
-si promocionamos artículos del antecedente, no esperaríamos ver grandes resultados en
-el consecuente si la confianza es baja.
-- El *lift* identifica dependencias entre items, afinidades, identificación de patrones de compra asociados a tipos de comprador o tipo de visita (por ejemplo, fresas y crema).
-
-La elección de estos parámetros también depende del número de reglas que
-obtenemos: generalmente queremos un número de reglas no muy grande para que
-sea posible examinarlas y actuar sobre ellas.
-
-En general, para calcular las reglas de interés, podemos filtrar como sigue:
-
-- **Soporte**: Cortamos con soporte para reducir el número de posibles itemsets o reglas. Este número generalmente se escoge (por ejemplo, 1%), que son combinaciones de interés *más práctico*.
-- **Lhs.support**: Filtramos con el soporte del antecedente (lhs.support) para controlar el error
-de estimación de confianza y lift. Si tenemos $N$ canastas totales, y $p$ es el soporte del antecedente, entonces el denominador de la confianza es $Np$ (número de canastas que contiene el antecedente). Generalmente queremos que al menos $Np > 100$, por ejemplo. Esto da mejores estimaciones de confidence y lift.
-
-Una vez que hacemos esta consideración, para analizar:
-
-- Filtramos y ordenamos por distintos valores de **lift** cuando nos interesa pensar en asociaciones por arriba de lo esperado, no simplemente asocación por frecuencia.
-- Filtramos adicionalmente por **confidence** si nos interesa también mantener la probabilidad de que ocurra el consecuente relativamente alta.
+- *Itemsets de alta frecuencia*: en este enfoque buscamos reglas con soporte y confianza relativamente altos. Generalmente están asociados a productos muy frecuentes, y
+nos indica potencial de interacción entre los artículos. Este análisis es
+más una reexpresión de la información contenida en los itemsets frecuentes.
+En este caso, podemos filtrar con soporte alto, para evitar estimaciones ruidosas (por ejemplo, soporte  mínimo de 300 canastas).
 
 
+- *Interacciones altas*: en este enfoque donde buscamos entender nichos. Consideramos valores de soporte y confianza más bajos, pero con valores de lift alto. Este análisis es más útil para entender, por ejemplo, propósitos de compras, convivencia de artículos, tipos de comprador, etc.
 
-### Ejemplo {-}
+- *Colección de reglas para hacer querys*:  la colección de reglas puede ser
+más grande, e incluir por ejemplo resultados de distintas corridas de
+market basket (incluyendo los dos enfoques de arriba). Las reglas se
+examinan seleccionando antecedentes o consecuentes, valores altos de
+soporte, etc, según la pregunta particular que se quiera explorar.
 
-Consideremos 
+
+### Ejemplo: canastas grandes {-}
+
+Para entender las canastas grandes, podemos variar valores de soporte
+y confianza para encontrar un número manejable de reglas.
 
 ```{r, message = FALSE, results=FALSE}
-pars <- list(support = 0.01,
+pars <- list(support = 0.03,
              confidence = 0.20,
+             minlen = 2,
              target='rules', ext = TRUE)
-a_reglas <- apriori(lista_mb, parameter = pars)
+reglas_1 <- apriori(lista_mb, parameter = pars)
 ```
 
-Esta elección de parámetros resulta en `r length(a_reglas)`. Como tenemos
-10000 canastas, podemos filtrar lhs.support de manera que $10000p > 300$, por ejemplo,
-que da $p>0.03$:
+Esta elección de parámetros resulta en `r length(reglas_1)`. 
+Podemos ordenar por hyper-lift:
 
 ```{r}
-reglas_1 <- subset(a_reglas, lhs.support > 0.01)
-reglas_1
-```
-
-Y ahora modemos filtrar por lift si nos interesa estudiar las asociaciones:
-
-```{r}
-reglas_2 <- subset(reglas_1, lift > 2)
-plotly_arules(reglas_2, colors=c('red','gray'))
-inspect(sort(reglas_2, by='lhs.support'))
+plotly_arules(reglas_1, colors=c('red','gray'))
+reglas_1 <- agregar_hyperlift(reglas_1, lista_mb)
+DT::datatable(DATAFRAME(sort(reglas_1, by='hyper_lift')) %>%
+                mutate_if(is.numeric, funs(round(., 3))))
 ```
 
 **Observaciones**: conforme bajamos en esta tabla (ordenada por soporte), las estimaciones
@@ -630,56 +916,112 @@ de confianza y lift son menos precisas.
 
 ## Búsqueda de reglas especializadas
 
-Otra manera de usar este análisis es intenando buscar asociaciones más fuertes (lift más alto),
+Otra manera de usar este análisis es intenando buscar asociaciones más fuertes (lift o hyper-lift más alto),
 aún cuando sacrificamos soporte. Por su naturaleza, este tipo de análisis puede resultar
 en reglas más ruidosas (malas estimaciones de confianza y lift), pero es posible filtrar valores
 más altos de estas cantidades para encontrar reglas útiles.
 
-Comenzamos con un soporte más bajo y confianza más alta
+Comenzamos con un soporte y confianza más bajas
 
 ```{r, message = FALSE, results=FALSE}
 pars <- list(support = 0.001,
-             confidence = 0.50,
+             confidence = 0.1,
+             minlen = 2,
              target='rules', ext = TRUE)
 b_reglas <- apriori(lista_mb, parameter = pars)
-```
-```{r}
-b_reglas
-b_reglas_lift <- subset(b_reglas, lift > 8 & size(b_reglas) < 5)
-b_reglas_lift
-inspect(sort(b_reglas_lift, by ='lift'))
+b_reglas <- agregar_hyperlift(b_reglas, lista_mb)
 ```
 
-## Visualización de reglas
+Y ahora filtramos con valores más grandes de hyper-lift. Podemos
+filtrar adicionalmente con lhs.support para obtener reglas que
+aplican con más frecuencia:
+
+```{r}
+b_reglas
+b_reglas_lift <- subset(b_reglas, 
+                        hyper_lift > 2.5 & size(b_reglas) < 4 &
+                        lhs.support > 0.01)
+b_reglas_lift <- sort(b_reglas_lift, by = 'hyper_lift')
+DT::datatable(DATAFRAME(b_reglas_lift)  %>%
+                mutate_if(is.numeric, funs(round(., 3))))
+```
+
+
+## Visualización de asociaciones
 
 Tener una visión amplia del market basket analysis es difícil (típicamente, funciona mejor como un resultado al que se le hacen querys, o uno donde filtramos cuidadosamente algunas reglas 
 que puedan ser útiles). Así que muchas veces ayuda visualizar los pares con asociación alta:
 
 - Construimos todas las reglas con un antecedente y un consecuente.
-- Filtramos las reglas con lift relativamente alto (por ejemplo > 1.5, pero hay que experimentar).
+- Filtramos las reglas con hyper-lift relativamente alto (por ejemplo > 1.5, pero hay que experimentar).
 - Representamos como una gráfica donde los nodos son artículos, y las aristas son relaciones de lift alto.
-- Usamos algún algoritmo para representar gráficas basado en fuerza, usando como peso el lift (software: Gephi)
+- Usamos algún algoritmo para representar gráficas basado en fuerza, usando como peso el lift.
 
 
 
 ### Ejemplo {#ejemplo}
 
-En nuestro caso, podríamos tomar
+En nuestro caso, podríamos tomar (ajustando parámetros para
+no obtener demasiadas reglas o demasiado pocas)
 
 ```{r, results=FALSE, message=FALSE}
+b_reglas_lift <- subset(b_reglas, 
+                        hyper_lift > 1.75 & confidence > 0.1)
+reglas_f <- subset(b_reglas_lift, size(b_reglas_lift)==2)
+```
+
+
+
+```{r, fig.width=10, fig.height=8, warning = FALSE}
+library(tidygraph)
+library(ggraph)
+df_reglas <- reglas_f %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(4, 'mm'))) + 
+  geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=4,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+
+
+Para gráficas más grandes, es mejor usar software especializado
+para investigar las redes que obtenemos (como [Gephi](https://gephi.org)):
+
+```{r}
 library(readr)
-reglas <- apriori(Groceries, 
-                parameter = list(support = 0.005, confidence=0.3, 
-                                 target='rules', ext=TRUE)) 
-reglas_f <- subset(reglas, lift > 2)
-reglas_f
+b_reglas_lift <- subset(b_reglas, 
+                        hyper_lift > 1.75 & confidence > 0.05)
+reglas_f <- subset(b_reglas_lift, size(b_reglas_lift)==2)
+write_csv(reglas_f %>% DATAFRAME %>% rename(source=LHS, target=RHS) %>%
+            select(-count), 
+          path='./salidas/reglas.csv')
 ```
 
-```{r}
-write_csv(reglas_f %>% DATAFRAME %>% rename(source=LHS, target=RHS), path='reglas.csv')
-saveAsGraph(reglas_f, file='reglas.gml', format="gml", type='itemsets')
-```
 
-```{r}
-plotly_arules(reglas)
+Para el análisis de canastas grandes: 
+
+
+```{r, fig.width=10, fig.height=8, warning = FALSE}
+library(tidygraph)
+library(ggraph)
+reglas_f2 <- subset(reglas_1, hyper_lift > 1.1)
+df_reglas <- reglas_f2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = 'all'))
+
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=hyper_lift), colour = 'red',arrow = arrow(length = unit(4, 'mm'))) + 
+      geom_node_point(aes(size = centrality, colour = centrality)) + 
+      geom_node_text(aes(label = name), size=4,
+                   colour = 'gray20', repel=TRUE) +
+  theme_graph()
 ```
