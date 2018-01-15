@@ -1010,8 +1010,6 @@ Para el análisis de canastas grandes:
 
 
 ```{r, fig.width=10, fig.height=8, warning = FALSE}
-library(tidygraph)
-library(ggraph)
 reglas_f2 <- subset(reglas_1, hyper_lift > 1.1)
 df_reglas <- reglas_f2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
 df_reglas$weight <- log(df_reglas$hyper_lift)
@@ -1025,3 +1023,4 @@ ggraph(graph_1, layout = 'fr', start.temp=100) +
                    colour = 'gray20', repel=TRUE) +
   theme_graph()
 ```
+
