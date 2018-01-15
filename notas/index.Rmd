@@ -14,7 +14,7 @@ description: "Notas para métodos analíticos 2018"
 # Métodos analíticos {-}
 
 Este curso trata sobre varias técnicas de análisis de datos diseñadas
-para escalar datos grandes. El enfoque del curso se concentra más en el entendimiento y aplicación de los algoritmos y los métodos, y menos en la tecnología para implementarlos.
+para escalar datos grandes. El enfoque del curso se concentra más en el entendimiento y aplicación de los algoritmos y los métodos, y menos en la tecnología para implementarlos. 
 
 
 ## Temario {-}
@@ -29,12 +29,12 @@ para escalar datos grandes. El enfoque del curso se concentra más en el entendi
 8. Modelos de lenguaje y aplicaciones
 9. Publicidad en línea, adwords
 
-
+- Las notas del curso están R, y en algunos casos usamos python o línea de comandos. Puedes usar python también para hacer tareas y ejercicios. 
 
 
 ## Evaluación {-}
 
-- Examen parcial (40\%)
+- Examen parcial (40\%, mitad en casa y mitad en clase)
 - Tareas semanales (20\%)
 - Proyecto final (40\%)
 
