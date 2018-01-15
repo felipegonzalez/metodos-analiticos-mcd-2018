@@ -784,7 +784,7 @@ ap_random <- apriori(trans, parameter =
                        list(support=0.001, confidence = 0.10, 
                             target='rules', ext = TRUE, minlen = 2),
                        control = list(verbose = FALSE))
-agregar_hyperlift <- function(reglas, transacciones){
+agregar_hyperlift <- function(reglas, trans){
   quality(reglas) <- cbind(quality(reglas), 
 	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
 	transactions = trans))
