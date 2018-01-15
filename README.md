@@ -5,10 +5,11 @@ Notas y material para el curso de Métodos Analíticos (ITAM, 2018).
 en un contenedor (con [imagen base de rocker](https://www.rocker-project.org), y unos
 4G de memoria)  construido con el Dockerfile del repositorio:
 
+```
 docker build -t ma-rstudio .
 docker run --rm -p 8787:8787 -v ~/tu/carpeta/local:/home/rstudio/ma ma-rstudio
-
-Para correr las notas usa el script notas/_build.sh
+```
+- Para correr las notas usa el script notas/_build.sh
 
 - Todos los ejercicios y tareas corren también en ese contenedor. Es opcional usarlo,
 pero si tienes problemas de reproducibilidad puedes intentarlo.
