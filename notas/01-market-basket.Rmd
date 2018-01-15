@@ -1024,3 +1024,15 @@ ggraph(graph_1, layout = 'fr', start.temp=100) +
   theme_graph()
 ```
 
+
+## Tarea {-}
+Considera los datos de *datos/recetas*. Cada receta es una canasta, y los
+artículos son los ingredientes que usan. Puedes consultar el artículo
+original [aquí](https://www.nature.com/articles/srep00196.pdf). Selecciona una
+o dos regiones y aplica market basket análisis para entender cuáles son los
+ingredientes importantes en ese tipo de cocina, y qué relaciones hay entre
+estos ingredientes.
+
+
+
+
