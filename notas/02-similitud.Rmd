@@ -1,0 +1,120 @@
+# Similitud
+
+En esta parte comenzamos atacando un problema fundamental (aunque conceptualmente simple) en varias tareas de minería de datos: ¿cómo medir similitud, y cómo encontrar elementos similares en colecciones grandes de elementos?
+
+Algunos ejemplos son:
+
+- Encontrar documentos similares en una colección grande (este es el que vamos a tratar más).
+- Encontrar imágenes similares en una colección grande.
+- Encontrar usuarios similares (Netflix), en el sentido de que tienen gustos similares.
+- Encontrar artículos (películas) similares, en el sentido de que les gusta a usuarios similares.
+
+Como vemos, en muchos casos tratamos con similitud **entre conjuntos** (los documentos pueden ser conjuntos de caracteres/palabras/Frases, las personas pueden ser son conjuntos de películas que les gustaron, las imágenes pueden ser conjuntos de pixeles o patrones de pixeles). 
+
+El tema principal de esta parte es el siguiente:
+
+```{block, type='resumen'}
+- Podemos usar reducción probabilística de dimensión (usando funciones hash) para reducir el tamaño del problema de similitud en cuanto a dimensión.
+- Podemos usar estos métodos para obtener de manera eficiente elementos similares a uno dado, sin necesidad de calcular TODAS las similitudes posibles.
+- A diferencia de market
+basket análisis, aquí nuestro enfoque es la búsqueda de vecinos cercanos, 
+con menos énfasis en el contenido de esos conjuntos.
+```
+
+Las técnicas que veremos aquí resultan del problema de similitud en
+colecciones grandes. Imaginemos, por ejemplo, que tenemos 1 millón de
+documentos, y nos interesa encontrar documentos similares (por ejemplo, para
+eliminar duplicados en noticias, encontrar textos plagiados). El número
+de posibles pares de esta colección es de alrededor de 500 mil millones, 
+de forma que intentar encontrar pares siilares por fuerza bruta puede ser difícil. 
+
+Sin embargo, si lo que nos interesa es encontrar pares de similitud alta,
+mostraremos que hay técnicas aproximadas que nos permiten hacerlo en
+tiempo y espacio razonable.
+
+
+## Similitud para conjuntos 
+
+Como discutimos arriba, muchas veces el problema de encontrar objetos
+similares se puede representar como uno de encontrar conjuntos similares.
+
+Hay varias maneras de medir simiitud entre conjuntos, generalmente
+basadas en el tamaño relativo de su intersección. Una medida común,
+que explotaremos después por su estructura,
+es la  *similitud de Jaccard*.
+
+```{block2, type='resumen'}
+La **similitud de Jaccard** de los conjuntos $A$ y $B$ está dada por
+
+$$sim(A,B) = \frac{|A\cap B|}{|A\cup B|}$$
+
+```
+
+```{r, collapse = TRUE}
+library(dplyr)
+sim_jaccard <- function(a, b){
+    length(intersect(a, b)) / length(union(a, b))
+}
+sim_jaccard(c(1,3,2,8,5), c(8,2,1))
+sim_jaccard(c(1,3,2,8,5), c(8,9,1,10))
+sim_jaccard(c(3,2,5), c(8,9,1,10))
+```
+
+**Observaciones**: si $A$ y $B$ son disjuntos, su similitud es cero.
+$A$ y $B$ son idénticos si y sólo si su similitud es igual a 1.
+
+## Representación de documentos como conjuntos de tejas.
+
+Documentos textualmente similares deben contener palabras, frases similares. Más específicamente (y de manera más simple) deben contener corridas de caracteres similares.
+
+Nótese que nos concentramos en una comparación textual 
+de los documentos, no en su tema, significado o su sentimiento (positivo, negativo), etc.
+
+
+Idea: un documento tienen muchas corridas de caracteres distintas. Cuando dos documentos coinciden en muchas de estas corridas, entonces son similares.
+
+```{block2, type = 'comentario'}
+**Tejas (shingles)**
+  
+Sea $k>0$ un entero. Las $k$-tejas ($k$-shingles) de un documento d
+ es el conjunto de todas las corridas (distintas) de $k$
+caracteres sucesivos.
+```
+
+#### Ejemplo {-}
+
+```{r, collapse= TRUE}
+tejas <- function(texto, k){
+            if(nchar(texto) < k ){
+                stop('Documento demasiado corto')
+            }  
+            tejas <- lapply(1:(nchar(texto) - k +1), function(pos){
+                substr(texto, start = pos, stop = pos + k -1)
+            })
+            unique(tejas)
+}
+
+ejemplo <- tejas('Este es el documento de ejemplo', 6)
+as.character(ejemplo)
+```
+
+Tejas de documentos similares
+
+Documentos textualmente similares tienen tejas similares:
+
+```{r, collapse = TRUE}
+t_1 <- tejas('el perro persigue al gato', 3)
+t_2 <- tejas('el gato persigue al perro', 3)
+t_3 <- tejas('este es el documento de ejemplo', 3)
+t_4 <- tejas('el documento con la historia del perro y el gato', 3)
+sim_jaccard(t_1, t_2)
+sim_jaccard(t_1, t_3)
+sim_jaccard(t_3, t_4)
+```
+
+
+#### Ejercicio {-}
+Calcula la similitud de jaccard entre los conjuntos $A=\{5,2,34,1,20,3,4\}$
+ y $B=\{19,1,2,5\}$
+
+
