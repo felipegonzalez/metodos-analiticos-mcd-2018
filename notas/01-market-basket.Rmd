@@ -958,7 +958,7 @@ que puedan ser útiles). Así que muchas veces ayuda visualizar los pares con as
 
 
 
-### Ejemplo {-}
+### Ejemplo {#ejemplo-canastas}
 
 En nuestro caso, podríamos tomar (ajustando parámetros para
 no obtener demasiadas reglas o demasiado pocas)
@@ -1042,14 +1042,19 @@ artículos (documentos), entonces esas oraciones son indicadores de plagio
 
 ## Tarea {-}
 
-- Considera los datos de *datos/recetas*. Cada receta es una canasta, y los
+1. Considera los datos de *datos/recetas*. Lee los datos, asegúrate
+que puedes filtrar por tipo de cocina, y que puedes aplicarles
+la función *apriori* de *arules* (o cualquier otra herramienta que 
+estés utilizando). Calcula la frecuencia de todos los artículos (ingredientes). **El resto de este ejercicio lo haremos a principio
+de la siguiente clase**. Acerca de los datos: Cada receta es una canasta, y los
 artículos son los ingredientes que usan. Puedes consultar el artículo
-original [aquí](https://www.nature.com/articles/srep00196.pdf). Selecciona una
-o dos regiones y aplica market basket análisis para entender cuáles son los
-ingredientes importantes en ese tipo de cocina, y qué relaciones hay entre
-estos ingredientes.
+original [aquí](https://www.nature.com/articles/srep00196.pdf).
 
-- (Opcional) Muchas veces el análisis de canastas puede hacerse
+2. Haz algunos experimentos el ejemplo \@ref(ejemplo-canastas) que vimos
+en clase: incrementa/decrementa hyperlift, incrementa/decrementa 
+soporte. ¿Qué pasa con las gráficas resultantes y el número de reglas?
+
+3. (Opcional) Muchas veces el análisis de canastas puede hacerse
 con una muestra de transacciones. Leer secciones 6.4.1 a 6.4.4 de [@mmd].
 
 
