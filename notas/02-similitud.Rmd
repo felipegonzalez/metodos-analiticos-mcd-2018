@@ -235,6 +235,7 @@ df_1 %>% summarise_if(is.numeric, primer_uno)
 Ahora repetimos con otras permutaciones:
 
 ```{r}
+set.seed(29)
 firmas_df <- lapply(1:5, function(i){
     df_1 <- df %>% sample_n(nrow(df))
     df_1 %>% summarise_if(is.numeric, primer_uno) 
@@ -260,26 +261,55 @@ Sea $\pi$ una permutación escogida al azar, y $a$ y $b$ dos columnas
 dadas. Entonces
 $$P(h_\pi(a) = h_\pi(b)) = sim(a, b)$$
 donde $sim$ es la similitud de jaccard basada en las tejas usadas.
+
+Sean $\pi_1, \pi_2, \ldots \pi_n$ permutaciones escogidas al azar de
+manera independiente. Si $n$ es grande, entonces por la ley de los grandes números
+$$sim(a,b) \approx \frac{|\pi_j : h\pi_j(a) = h\pi_j(b)|}{n}, $$
+es decir, la similitud de jaccard es aproximadamente el número
+de 
 ```
 
 
+#### Ejemplo {-}
+Antes de hacer la demostración, veamos como aplicaríamos a la matriz
+de firmas que calculamos arriba. Tendríamos, por ejemplo para los primeros
+dos documentos
 
+```{r}
+mean(firmas_df$doc_1 == firmas_df$doc_2)
+mean(firmas_df$doc_1 == firmas_df$doc_3)
+mean(firmas_df$doc_3 == firmas_df$doc_4)
 
+```
 
+Ahora veamos qué sucede si usamos más firmas:
 
-El primer renglón con al menos un 1 es el `r which((df_1$doc_1+df_1$doc_2)>0)[1]`.
+```{r, collapse = TRUE}
+firmas_df <- lapply(1:40, function(i){
+    df_1 <- df %>% sample_n(nrow(df))
+    df_1 %>% summarise_if(is.numeric, primer_uno) 
+}) %>% bind_rows()
+
+firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:40), .before = 1)
+firmas_df
+mean(firmas_df$doc_1 == firmas_df$doc_2)
+mean(firmas_df$doc_1 == firmas_df$doc_3)
+mean(firmas_df$doc_3 == firmas_df$doc_4)
+```
+
 ---
 
+Ahora damos un argumento de este resultado.
+Consideremos dos columnas $a,b$ de la matriz
+de 0's y 1's, con conjuntos de tejas asociados $A,B$.
 
-v
-Ahora la pregunta es: ¿cuál es la probabilidad de que el primero de estos
-renglones sea de tipo $(1,1)$, y no de tipo $(1,0)$ o $(0,1)$?
+- Supongamos que entre las dos columnas $a$ y $b$, el primer 1 ocurre en el renglón $k$.
+- El renglón $k$ puede ser de tipo $(1,0), (0,1), (1,1)$. El número de estos
+renglones es el tamaño de $A\cup B$, pues este número cuenta cuántas tejas en común
+tienen estos conjuntos.
+- El número de tejas $(1,1)$ es el tamaño de $A\cap B$, el número de tejas en común de los dos documentos.
+- Entonces, la probabilidad condicional de que el renglón $k$ sea de tipo $(1,1)$, dado que es de algún tipo de $(1,0), (0,1), (1,1)$, es 
+$$\frac{|A\cap B|}{|A\cup B|},$$
+que es la similitud de Jaccard de los dos documentos.
 
-
-
-
-Supongamos que escogemos al azar alguna teja que esté en la unión de
-ambos documentos. La probabilidad de que esa teja esté en los dos documentos es
-
-$$P(ambos|alguno) = P(ambos)/P(alguno)= sim(d_1, d_2)$$
 
