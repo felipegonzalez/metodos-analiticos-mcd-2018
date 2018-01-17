@@ -192,8 +192,8 @@ Calcular la unión e intersección se puede hacer haciendo OR y AND de las colum
 entonces podemos calcular la similitud
 ```{r}
 
-inter_12 <- sum(df[1,-1] & df[2,-1])
-union_12 <- sum(df[1, -1] | df[2, -1])
+inter_12 <- sum(df$doc_1 & df$doc_2)
+union_12 <- sum(df$doc_1 | df$doc_2)
 similitud <- inter_12/union_12
 similitud # comparar con el número que obtuvimos arriba.
 ```
