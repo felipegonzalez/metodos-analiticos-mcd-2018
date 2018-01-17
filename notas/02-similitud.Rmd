@@ -264,7 +264,7 @@ donde $sim$ es la similitud de jaccard basada en las tejas usadas.
 
 Sean $\pi_1, \pi_2, \ldots \pi_n$ permutaciones escogidas al azar de
 manera independiente. Si $n$ es grande, entonces por la ley de los grandes números
-$$sim(a,b) \approx \frac{|\pi_j : h\pi_j(a) = h\pi_j(b)|}{n}, $$
+$$sim(a,b) \approx \frac{|\pi_j : h_{\pi_j}(a) = h_{\pi_j}(b)|}{n}, $$
 es decir, la similitud de jaccard es aproximadamente el número
 de 
 ```
