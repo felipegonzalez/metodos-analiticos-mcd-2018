@@ -1,5 +1,5 @@
 --- 
-title: "Métodos analíticos (ITAM 2017)"
+title: "Métodos analíticos (ITAM 2018)"
 author: "Felipe González"
 date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
