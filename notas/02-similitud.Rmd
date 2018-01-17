@@ -155,7 +155,7 @@ sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
 ```
 
 
-## Representación matricial
+## Reducción probablística de dimensión.
 
 La representación de k-tejas de documentos es una representación de dimensión alta (pues
 hay muchas tejas), pues cada documento se escribir como un vector de 0s y 1s:
@@ -198,7 +198,6 @@ similitud <- inter_12/union_12
 similitud # comparar con el número que obtuvimos arriba.
 ```
 
-## Reducción probablística de dimensión.
 
 Ahora consideramos una manera probabilística de reducir la
 dimensión de esta matriz sin perder información útil para
