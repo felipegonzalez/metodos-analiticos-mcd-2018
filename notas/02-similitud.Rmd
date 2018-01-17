@@ -1,47 +1,42 @@
 # Similitud
 
-En esta parte comenzamos atacando un problema fundamental (aunque conceptualmente simple) en varias tareas de minería de datos: ¿cómo medir similitud, y cómo encontrar elementos similares en colecciones grandes de elementos?
+En esta parte trata de un problema fundamental en varias tareas de minería de datos: ¿cómo medir similitud, y cómo encontrar vecinos cercanos en un conjunto de elementos?
 
 Algunos ejemplos son:
 
-- Encontrar documentos similares en una colección grande (este es el que vamos a tratar más).
+- Encontrar documentos similares en una colección de documentos (este es el que vamos a tratar más).
 - Encontrar imágenes similares en una colección grande.
 - Encontrar usuarios similares (Netflix), en el sentido de que tienen gustos similares.
 - Encontrar artículos (películas) similares, en el sentido de que les gusta a usuarios similares.
+- Uber: rutas similares que indican (fraude o abusos)[https://eng.uber.com/lsh/].
 
-Como vemos, en muchos casos tratamos con similitud **entre conjuntos** (los documentos pueden ser conjuntos de caracteres/palabras/Frases, las personas pueden ser son conjuntos de películas que les gustaron, las imágenes pueden ser conjuntos de pixeles o patrones de pixeles). 
+Estos problemas no son triviales por dos razones:
+
+- Los elementos que queremos comparar muchas veces están naturalmente representados en espacios de dimensión muy alta, y es relativamente costoso comparar un par (documentos, imágenes, usuarios, rutas).
+- Si la colección de elementos es grande ($N$), entonces el número de pares 
+posibles es del orden de $N^2$, y no es posible hacer todas las posibles comparaciones para encontrar los elementos similares.
 
 El tema principal de esta parte es el siguiente:
 
 ```{block, type='resumen'}
-- Podemos usar reducción probabilística de dimensión (usando funciones hash) para reducir el tamaño del problema de similitud en cuanto a dimensión.
-- Podemos usar estos métodos para obtener de manera eficiente elementos similares a uno dado, sin necesidad de calcular TODAS las similitudes posibles.
-- A diferencia de market
-basket análisis, aquí nuestro enfoque es la búsqueda de vecinos cercanos, 
-con menos énfasis en el contenido de esos conjuntos.
+- Podemos usar reducción probabilística de dimensión (usando funciones hash) para reducir la dimensionalidad del problema de similitud, sin
+perder mucha precisión en el cálculo de similitudes.
+- Podemos usar métodos probabilísticos para agrupar elementos similares, sin necesidad de calcular TODAS las similitudes posibles.
 ```
 
-Las técnicas que veremos aquí resultan del problema de similitud en
-colecciones grandes. Imaginemos, por ejemplo, que tenemos 1 millón de
-documentos, y nos interesa encontrar documentos similares (por ejemplo, para
-eliminar duplicados en noticias, encontrar textos plagiados). El número
-de posibles pares de esta colección es de alrededor de 500 mil millones, 
-de forma que intentar encontrar pares siilares por fuerza bruta puede ser difícil. 
+## Similitud de conjuntos
 
-Sin embargo, si lo que nos interesa es encontrar pares de similitud alta,
-mostraremos que hay técnicas aproximadas que nos permiten hacerlo en
-tiempo y espacio razonable.
+Muchos de estos problemas de similitud se pueden pensar como 
+problemas de similitud entre conjuntos. Por ejemplo, los documentos son conjuntos de palabras, pares de palabras, sucesiones de caracteres, etc,
+una película como el conjunto de personas a las que le gustó, o una ruta
+como un conjunto de tramos, etc.
+
+Hay muchas medidas que son útiles para cuantificar la similitud entre
+conjuntos. Una que es popular, y que explotaremos por sus propiedades,
+es la similitud de Jaccard:
 
 
-## Similitud para conjuntos 
 
-Como discutimos arriba, muchas veces el problema de encontrar objetos
-similares se puede representar como uno de encontrar conjuntos similares.
-
-Hay varias maneras de medir simiitud entre conjuntos, generalmente
-basadas en el tamaño relativo de su intersección. Una medida común,
-que explotaremos después por su estructura,
-es la  *similitud de Jaccard*.
 
 ```{block2, type='resumen'}
 La **similitud de Jaccard** de los conjuntos $A$ y $B$ está dada por
@@ -50,28 +45,81 @@ $$sim(A,B) = \frac{|A\cap B|}{|A\cup B|}$$
 
 ```
 
-```{r, collapse = TRUE}
-library(dplyr)
+Esta medida cuantifica qué tan cerca está la unión de $A$ y $B$ de su intersección. Cuanto más parecidos sean $A\cup B$ y $A\cap B$, más similares son los conjuntos. En términos geométricos, es el área de la intersección entre el área de la unión.
+
+#### Ejercicio {-}
+Calcula la similitud de jaccard entre los conjuntos $A=\{5,2,34,1,20,3,4\}$
+ y $B=\{19,1,2,5\}$
+ 
+
+```{r, collapse = TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(textreuse)
+library(tm)
+
 sim_jaccard <- function(a, b){
     length(intersect(a, b)) / length(union(a, b))
 }
-sim_jaccard(c(1,3,2,8,5), c(8,2,1))
-sim_jaccard(c(1,3,2,8,5), c(8,9,1,10))
+
+sim_jaccard(c(0,1,2,5,8), c(1,2,5,8,9))
+sim_jaccard(c(2,3,5,8,10), c(1,8,9,10))
 sim_jaccard(c(3,2,5), c(8,9,1,10))
 ```
 
-**Observaciones**: si $A$ y $B$ son disjuntos, su similitud es cero.
-$A$ y $B$ son idénticos si y sólo si su similitud es igual a 1.
 
-## Representación de documentos como conjuntos de tejas.
+## Representación en tejas para documentos
 
-Documentos textualmente similares deben contener palabras, frases similares. Más específicamente (y de manera más simple) deben contener corridas de caracteres similares.
+En primer lugar, buscamos representaciones
+de documentos como conjuntos. Hay varias maneras de hacer esto. 
 
-Nótese que nos concentramos en una comparación textual 
-de los documentos, no en su tema, significado o su sentimiento (positivo, negativo), etc.
+Consideremos una colección de textos cortos:
+
+```{r}
+textos <- character(4)
+textos[1] <- 'el perro persigue al gato.'
+textos[2] <- 'el gato persigue al perro'
+textos[3] <- 'este es el documento de ejemplo'
+textos[4] <- 'el documento con la historia del perro y el gato'
+```
 
 
-Idea: un documento tienen muchas corridas de caracteres distintas. Cuando dos documentos coinciden en muchas de estas corridas, entonces son similares.
+- La representación
+más simple es la bolsa de palabras, que es conjunto de palabras que contiene un
+documento. Podríamos comparar entonces documentos calculando la similitud de jaccard 
+de sus bolsas de palabras (1-gramas)
+
+```{r}
+tokenize_words(textos[1])
+```
+
+- Podemos generalizar esta idea y pensar en n-gramas de palabras, que son sucesiones
+de $n$ palabras que ocurren en un documento.
+
+```{r}
+tokenize_ngrams(textos[1], n = 2)
+```
+
+
+- Otro camino, que es el que veremos aquí, es el k-tejas, que son k-gramas de *caracteres*
+
+```{r, collapse= TRUE}
+library(textreuse)
+shingle_chars <- function(string, lowercase = FALSE, k = 3){
+    # produce shingles (con repeticiones)
+    if(lowercase) {
+      string <- str_to_lower(string)
+    }
+    shingles <- seq(1, nchar(string) - k + 1) %>%
+        map_chr(function(x) substr(string, x, x + k))
+    shingles
+  }
+ejemplo <- shingle_chars('Este es un ejemplo', 3)
+ejemplo
+```
+
+Si lo que nos interesa principalmente
+similitud textual (no significado, o polaridad, etc.) entre documentos, entonces podemos comparar dos documentos considerando que sucesiones de caracteres de tamaño fijo ocurren en ambos documentos. Esta
+representación es **flexible** en el sentido de que se puede adaptar para documentos muy cortos (mensajes o tweets, por ejemplo), pero también para documentos más grandes.
 
 ```{block2, type = 'comentario'}
 **Tejas (shingles)**
@@ -81,40 +129,158 @@ Sea $k>0$ un entero. Las $k$-tejas ($k$-shingles) de un documento d
 caracteres sucesivos.
 ```
 
+Es importante escoger suficientemente grande, de forma que la probabilidad de que
+una teja particular tenga probabilidad baja de ocurrir en un texto dado. Si los textos
+son cortos, entonces basta tomar valores como $k=4,5$, pues hay un total de $27^4$ tejas
+de tamaño 4, y el número de tejas de un documento corto (mensajes, tweets) es mucho más bajo que
+$27^4$ (nota: ¿puedes explicar por qué este argumento no es exactamente correcto?)
+
+Para documentos grandes, como noticias o artículos, es mejor escoger un tamaño más grande,
+como $k=9,10$  (pues en documentos largos puede haber cientos de miles
+de caracteres).
+
 #### Ejemplo {-}
-
-```{r, collapse= TRUE}
-tejas <- function(texto, k){
-            if(nchar(texto) < k ){
-                stop('Documento demasiado corto')
-            }  
-            tejas <- lapply(1:(nchar(texto) - k +1), function(pos){
-                substr(texto, start = pos, stop = pos + k -1)
-            })
-            unique(tejas)
-}
-
-ejemplo <- tejas('Este es el documento de ejemplo', 6)
-as.character(ejemplo)
-```
-
-Tejas de documentos similares
-
 Documentos textualmente similares tienen tejas similares:
 
 ```{r, collapse = TRUE}
-t_1 <- tejas('el perro persigue al gato', 3)
-t_2 <- tejas('el gato persigue al perro', 3)
-t_3 <- tejas('este es el documento de ejemplo', 3)
-t_4 <- tejas('el documento con la historia del perro y el gato', 3)
-sim_jaccard(t_1, t_2)
-sim_jaccard(t_1, t_3)
-sim_jaccard(t_3, t_4)
+textos <- character(4)
+textos[1] <- 'el perro persigue al gato'
+textos[2] <- 'el gato persigue al perro'
+textos[3] <- 'este es el documento de ejemplo'
+textos[4] <- 'el documento con el perro y el gato'
+tejas_doc <- lapply(textos, shingle_chars, k = 3)
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
+sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
 ```
 
 
-#### Ejercicio {-}
-Calcula la similitud de jaccard entre los conjuntos $A=\{5,2,34,1,20,3,4\}$
- y $B=\{19,1,2,5\}$
+## Representación matricial
 
+La representación de k-tejas de documentos es una representación de dimensión alta (pues
+hay muchas tejas), pues cada documento se escribir como un vector de 0s y 1s:
+
+```{r}
+todas_tejas <- Reduce('c', tejas_doc) %>% unique %>% sort
+vector_1 <- as.numeric(todas_tejas %in% tejas_doc[[1]])
+vector_1
+```
+
+Para esta colección chica, con $k$ relativamente chico, el vector
+que usamos para representar cada documento es de tamaño `r length(vector_1)`,
+pero en casos más realistas este número será mucho más grande. 
+
+Podemos construir expícitamente la matriz de tejas-documentos de las siguiente forma (OJO: esto normalmente **no** queremos hacerlo, pero lo hacemos para ilustrar):
+
+
+```{r}
+df <- data_frame(id_doc = paste0('doc_',
+                                 seq(1, length(tejas_doc))),
+           tejas = tejas_doc) %>% 
+           unnest %>%
+           unique %>%
+           mutate(val = 1) %>%
+           spread(id_doc, val, fill = 0) 
+df
+```
+
+
+
+¿Cómo calculamos la similitud de Jaccard usando estos datos?
+
+Calcular la unión e intersección se puede hacer haciendo OR y AND de las columnas, y
+entonces podemos calcular la similitud
+```{r}
+
+inter_12 <- sum(df[1,-1] & df[2,-1])
+union_12 <- sum(df[1, -1] | df[2, -1])
+similitud <- inter_12/union_12
+similitud # comparar con el número que obtuvimos arriba.
+```
+
+## Reducción probablística de dimensión.
+
+Ahora consideramos una manera probabilística de reducir la
+dimensión de esta matriz sin perder información útil para
+calcular similitud. Queremos obtener una matriz con menos renglones
+(menor dimensión) y las mismas columnas.
+
+Las proyecciones que usaremos son escogidas al azar, y son sobre
+el espacio de enteros.
+
+- Sea $\pi$ una permutación al azar de los renglones de la matriz.
+- Permutamos los renglones de la matriz tejas-documentos según $\pi$.
+- Definimos una nueva renglón $h_\pi$, que en cada elemento $h_\pi$ da
+el número de renglón mínimo que es distinto de 0
+
+
+#### Ejemplo {-}
+
+Ordenamos al azar:
+```{r}
+set.seed(321)
+df_1 <- df %>% sample_n(nrow(df))
+head(df_1)
+```
+
+
+
+```{r}
+mayor_uno <- function(x) x > 0
+primer_uno <- function(col){
+  detect_index(col, mayor_uno)
+}
+df_1 %>% summarise_if(is.numeric, primer_uno) 
+```
+
+Ahora repetimos con otras permutaciones:
+
+```{r}
+firmas_df <- lapply(1:5, function(i){
+    df_1 <- df %>% sample_n(nrow(df))
+    df_1 %>% summarise_if(is.numeric, primer_uno) 
+}) %>% bind_rows()
+
+firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:5), .before = 1)
+firmas_df
+```
+
+
+Cada documento se describe ahora con `r nrow(firmas_df)` entradas,
+en lugar de `r nrow(df_1)`.
+
+Nótese que por construicción, cuando dos documentos son muy similares,
+es natural que sus columnas de firmas sean similares, pues al hacer las permutaciones
+es altamente probable que el primer 1 ocurra en la misma posición.
+
+Resulta que podemos cuantificar esta probabilidad. Tenemos el siguiente
+resultado simple pero sorprendente:
+
+```{block2, type = 'resumen'}
+Sea $\pi$ una permutación escogida al azar, y $a$ y $b$ dos columnas
+dadas. Entonces
+$$P(h_\pi(a) = h_\pi(b)) = sim(a, b)$$
+donde $sim$ es la similitud de jaccard basada en las tejas usadas.
+```
+
+
+
+
+
+
+El primer renglón con al menos un 1 es el `r which((df_1$doc_1+df_1$doc_2)>0)[1]`.
+---
+
+
+v
+Ahora la pregunta es: ¿cuál es la probabilidad de que el primero de estos
+renglones sea de tipo $(1,1)$, y no de tipo $(1,0)$ o $(0,1)$?
+
+
+
+
+Supongamos que escogemos al azar alguna teja que esté en la unión de
+ambos documentos. La probabilidad de que esa teja esté en los dos documentos es
+
+$$P(ambos|alguno) = P(ambos)/P(alguno)= sim(d_1, d_2)$$
 
