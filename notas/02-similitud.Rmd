@@ -4,10 +4,10 @@ En esta parte trata de un problema fundamental en varias tareas de minería de d
 
 Algunos ejemplos son:
 
-- Encontrar documentos similares en una colección de documentos (este es el que vamos a tratar más).
+- Encontrar documentos similares en una colección de documentos (este es el que vamos a tratar más). Esto puede servir para detectar
+plagio, deduplicar noticias o páginas web, etc.
 - Encontrar imágenes similares en una colección grande.
-- Encontrar usuarios similares (Netflix), en el sentido de que tienen gustos similares.
-- Encontrar artículos (películas) similares, en el sentido de que les gusta a usuarios similares.
+- Encontrar usuarios similares (Netflix), en el sentido de que tienen gustos similares. O películas similares, en el sentido de qe le gustan a las mismas personas
 - Uber: rutas similares que indican (fraude o abusos)[https://eng.uber.com/lsh/].
 
 Estos problemas no son triviales por dos razones:
@@ -21,7 +21,7 @@ El tema principal de esta parte es el siguiente:
 ```{block, type='resumen'}
 - Podemos usar reducción probabilística de dimensión (usando funciones hash) para reducir la dimensionalidad del problema de similitud, sin
 perder mucha precisión en el cálculo de similitudes.
-- Podemos usar métodos probabilísticos para agrupar elementos similares, sin necesidad de calcular TODAS las similitudes posibles.
+- Podemos usar métodos probabilísticos para agrupar elementos similares (encontrar vecinos cercanos), sin necesidad de calcular TODAS las similitudes posibles.
 ```
 
 ## Similitud de conjuntos
@@ -31,11 +31,7 @@ problemas de similitud entre conjuntos. Por ejemplo, los documentos son conjunto
 una película como el conjunto de personas a las que le gustó, o una ruta
 como un conjunto de tramos, etc.
 
-Hay muchas medidas que son útiles para cuantificar la similitud entre
-conjuntos. Una que es popular, y que explotaremos por sus propiedades,
-es la similitud de Jaccard:
-
-
+Hay muchas medidas que son útiles para cuantificar la similitud entre conjuntos. Una que es popular, y que explotaremos por sus propiedades, es la similitud de Jaccard:
 
 
 ```{block2, type='resumen'}
@@ -121,12 +117,13 @@ Si lo que nos interesa principalmente
 similitud textual (no significado, o polaridad, etc.) entre documentos, entonces podemos comparar dos documentos considerando que sucesiones de caracteres de tamaño fijo ocurren en ambos documentos. Esta
 representación es **flexible** en el sentido de que se puede adaptar para documentos muy cortos (mensajes o tweets, por ejemplo), pero también para documentos más grandes.
 
-```{block2, type = 'comentario'}
+```{block2, type = 'resumen'}
 **Tejas (shingles)**
   
 Sea $k>0$ un entero. Las $k$-tejas ($k$-shingles) de un documento d
  es el conjunto de todas las corridas (distintas) de $k$
 caracteres sucesivos.
+
 ```
 
 Es importante escoger suficientemente grande, de forma que la probabilidad de que
@@ -136,18 +133,18 @@ de tamaño 4, y el número de tejas de un documento corto (mensajes, tweets) es 
 $27^4$ (nota: ¿puedes explicar por qué este argumento no es exactamente correcto?)
 
 Para documentos grandes, como noticias o artículos, es mejor escoger un tamaño más grande,
-como $k=9,10$  (pues en documentos largos puede haber cientos de miles
-de caracteres).
+como $k=9,10$, pues en documentos largos puede haber cientos de miles
+de caracteres, si $k$ fuera más chica entonces una gran parte de las tejas aparecería en muchos de los documentos.
 
 #### Ejemplo {-}
 Documentos textualmente similares tienen tejas similares:
 
 ```{r, collapse = TRUE}
 textos <- character(4)
-textos[1] <- 'el perro persigue al gato'
-textos[2] <- 'el gato persigue al perro'
+textos[1] <- 'el perro persigue al gato, pero no lo alcanza'
+textos[2] <- 'el gato persigue al perro, pero no lo alcanza'
 textos[3] <- 'este es el documento de ejemplo'
-textos[4] <- 'el documento con el perro y el gato'
+textos[4] <- 'el documento habla de perros, gatos, y otros animales'
 tejas_doc <- lapply(textos, shingle_chars, k = 3)
 sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
 sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
@@ -168,7 +165,7 @@ vector_1
 
 Para esta colección chica, con $k$ relativamente chico, el vector
 que usamos para representar cada documento es de tamaño `r length(vector_1)`,
-pero en casos más realistas este número será mucho más grande. 
+pero en otros casos este número será mucho más grande. 
 
 Podemos construir expícitamente la matriz de tejas-documentos de las siguiente forma (OJO: esto normalmente **no** queremos hacerlo, pero lo hacemos para ilustrar):
 
@@ -209,8 +206,7 @@ el espacio de enteros.
 
 - Sea $\pi$ una permutación al azar de los renglones de la matriz.
 - Permutamos los renglones de la matriz tejas-documentos según $\pi$.
-- Definimos una nueva renglón $h_\pi$, que en cada elemento $h_\pi$ da
-el número de renglón mínimo que es distinto de 0
+- Definimos una nuevo descriptor del documento: para cada documento $d$, tomamos el entero $h_\pi (d)$, que da el número del primer renglón de $d$ que es distinto de 0
 
 
 #### Ejemplo {-}
@@ -219,7 +215,7 @@ Ordenamos al azar:
 ```{r}
 set.seed(321)
 df_1 <- df %>% sample_n(nrow(df))
-head(df_1)
+head(df_1, 14)
 ```
 
 
@@ -245,11 +241,12 @@ firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:5), .before = 1)
 firmas_df
 ```
 
+A esta nueva matriz le llamamos **matriz de firmas** de los documentos.  La firma de un documento es una sucesión de enteros.
 
 Cada documento se describe ahora con `r nrow(firmas_df)` entradas,
 en lugar de `r nrow(df_1)`.
 
-Nótese que por construicción, cuando dos documentos son muy similares,
+Nótese que por construcción, cuando dos documentos son muy similares,
 es natural que sus columnas de firmas sean similares, pues al hacer las permutaciones
 es altamente probable que el primer 1 ocurra en la misma posición.
 
@@ -265,17 +262,15 @@ donde $sim$ es la similitud de jaccard basada en las tejas usadas.
 Sean $\pi_1, \pi_2, \ldots \pi_n$ permutaciones escogidas al azar de
 manera independiente. Si $n$ es grande, entonces por la ley de los grandes números
 $$sim(a,b) \approx \frac{|\pi_j : h_{\pi_j}(a) = h_{\pi_j}(b)|}{n}, $$
-es decir, la similitud de jaccard es aproximadamente el número
-de 
+es decir, la similitud de jaccard es aproximadamente la proporción 
+de elementos de las firmas que coinciden.
 ```
 
 
 #### Ejemplo {-}
 Antes de hacer la demostración, veamos como aplicaríamos a la matriz
-de firmas que calculamos arriba. Tendríamos, por ejemplo para los primeros
-dos documentos
-
-```{r}
+de firmas que calculamos arriba. Tendríamos, por ejemplo :
+```{r, collapse = TRUE}
 mean(firmas_df$doc_1 == firmas_df$doc_2)
 mean(firmas_df$doc_1 == firmas_df$doc_3)
 mean(firmas_df$doc_3 == firmas_df$doc_4)
@@ -304,12 +299,50 @@ Consideremos dos columnas $a,b$ de la matriz
 de 0's y 1's, con conjuntos de tejas asociados $A,B$.
 
 - Supongamos que entre las dos columnas $a$ y $b$, el primer 1 ocurre en el renglón $k$.
-- El renglón $k$ puede ser de tipo $(1,0), (0,1), (1,1)$. El número de estos
+- El renglón $k$ puede ser de tipo $(1,0), (0,1), (1,1)$. Todos estos renglones tienen la misma probabilidad de aparecer en el rengón k. El número de estos
 renglones es el tamaño de $A\cup B$, pues este número cuenta cuántas tejas en común
 tienen estos conjuntos.
-- El número de tejas $(1,1)$ es el tamaño de $A\cap B$, el número de tejas en común de los dos documentos.
+- El número de renglones de tipo  $(1,1)$ es el tamaño de $A\cap B$, el número de tejas en común de los dos documentos.
 - Entonces, la probabilidad condicional de que el renglón $k$ sea de tipo $(1,1)$, dado que es de algún tipo de $(1,0), (0,1), (1,1)$, es 
 $$\frac{|A\cap B|}{|A\cup B|},$$
 que es la similitud de Jaccard de los dos documentos.
+
+
+## Min-hashing
+
+En la sección anterior propusimos una manera probabilítica de 
+reducir dimensionalidad para el problema de calcular similitud de Jaccard usando proyecciones aleatorias de los datos
+basadas en permutaciones de las tejas. Esto nos da una representación
+más compacta, que podemos muchas veces almacenar en memoria.
+
+El problema con el procedimiento de arriba es el costo de calcular las permutaciones,
+permutar los renglones,
+y buscar el primer elemento de cada columna que es distinto de 0. 
+
+Podemos hacer una aproximación adicional: en lugar de calcular permutaciones,
+
+- Escogemos funciones al azar que mapean tejas (cadenas) a enteros de forma determinística.
+- Aplicamos una de estas
+funciones a cada una de las tejas, y obtenemos una lista de enteros que interpretaremos como el orden de una permutación.
+
+Las funciones usadas deben comportarse de manera aproximadamente aleatoria. 
+Tomemos un ejemplo simple
+
+```{r}
+crear_hash <- function(m){
+  primo <- 773
+  a <- sample(1:primo)
+  b <- sample(1:primo)
+  function(x){ (a*x + b) %% p %% m}
+}
+```
+
+
+### Funciones hash
+
+
+
+
+
 
 
