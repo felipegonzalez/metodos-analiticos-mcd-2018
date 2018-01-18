@@ -1,4 +1,4 @@
-# Similitud
+# Similitud: Minhashing
 
 En esta parte trata de un problema fundamental en varias tareas de minería de datos: ¿cómo medir similitud, y cómo encontrar vecinos cercanos en un conjunto de elementos?
 
@@ -51,7 +51,6 @@ Calcula la similitud de jaccard entre los conjuntos $A=\{5,2,34,1,20,3,4\}$
 ```{r, collapse = TRUE, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(textreuse)
-library(tm)
 
 sim_jaccard <- function(a, b){
     length(intersect(a, b)) / length(union(a, b))
@@ -78,6 +77,7 @@ textos[3] <- 'este es el documento de ejemplo'
 textos[4] <- 'el documento con la historia del perro y el gato'
 ```
 
+Los métodos que veremos aquí se aplican para varias representaciones:
 
 - La representación
 más simple es la bolsa de palabras, que es conjunto de palabras que contiene un
@@ -96,10 +96,9 @@ tokenize_ngrams(textos[1], n = 2)
 ```
 
 
-- Otro camino, que es el que veremos aquí, es el k-tejas, que son k-gramas de *caracteres*
+- Otro camino, es el k-tejas, que son k-gramas de *caracteres*
 
 ```{r, collapse= TRUE}
-library(textreuse)
 shingle_chars <- function(string, lowercase = FALSE, k = 3){
     # produce shingles (con repeticiones)
     if(lowercase) {
@@ -114,8 +113,9 @@ ejemplo
 ```
 
 Si lo que nos interesa principalmente
-similitud textual (no significado, o polaridad, etc.) entre documentos, entonces podemos comparar dos documentos considerando que sucesiones de caracteres de tamaño fijo ocurren en ambos documentos. Esta
+similitud textual (no significado, o polaridad, etc.) entre documentos, entonces podemos comparar dos documentos considerando que sucesiones de caracteres de tamaño fijo ocurren en ambos documentos, usando $k$-tejas. Esta
 representación es **flexible** en el sentido de que se puede adaptar para documentos muy cortos (mensajes o tweets, por ejemplo), pero también para documentos más grandes.
+
 
 ```{block2, type = 'resumen'}
 **Tejas (shingles)**
@@ -150,6 +150,9 @@ sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
 sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
 sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
 ```
+
+*Observación*: las $n$-tejas de palabras se llaman usualmente $n$-gramas. Lo
+que veremos aquí aplica para estos dos casos.
 
 
 ## Reducción probablística de dimensión.
@@ -206,7 +209,22 @@ el espacio de enteros.
 
 - Sea $\pi$ una permutación al azar de los renglones de la matriz.
 - Permutamos los renglones de la matriz tejas-documentos según $\pi$.
-- Definimos una nuevo descriptor del documento: para cada documento $d$, tomamos el entero $h_\pi (d)$, que da el número del primer renglón de $d$ que es distinto de 0
+- Definimos una nuevo descriptor del documento: para cada documento (columna) $d$ de la matriz permutada, tomamos el entero $h_\pi (d)$, que da el número del primer renglón que es distinto de 0.
+
+#### Ejercicio {#ej1}
+
+Considera la matriz de tejas-documentos para cuatro documentos y cinco tejas
+dada a continuación, con las permutaciones $(2,3,4,5,1)$ (indica que el renglón
+1 va al 2, el 5 al 1, etc.) y $(2,5,3,1,4)$.
+
+```{r, echo = FALSE}
+mat <- matrix(c(c(1,0,0,1), c(0,0,1,0), 
+            c(0,1,0,1), c(1,0,1,1),
+            c(0,0,1,0)), nrow = 4, ncol = 5 )
+colnames(mat) <- c('d_1','d_2','d_3','d_4', 'd_5')
+rownames(mat) <- c('abc', 'ab ','xyz','abx')
+mat
+```
 
 
 #### Ejemplo {-}
@@ -231,13 +249,17 @@ df_1 %>% summarise_if(is.numeric, primer_uno)
 Ahora repetimos con otras permutaciones:
 
 ```{r}
-set.seed(29)
-firmas_df <- lapply(1:5, function(i){
-    df_1 <- df %>% sample_n(nrow(df))
+set.seed(32)
+num_hashes <- 10
+permutaciones <- sapply(1:num_hashes, function(i){
+  sample(1:nrow(df), nrow(df))
+})
+firmas_df <- lapply(1:num_hashes, function(i){
+    df_1 <- df[order(permutaciones[,i]), ]
     df_1 %>% summarise_if(is.numeric, primer_uno) 
 }) %>% bind_rows()
 
-firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:5), .before = 1)
+firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:num_hashes), .before = 1)
 firmas_df
 ```
 
@@ -313,36 +335,215 @@ que es la similitud de Jaccard de los dos documentos.
 En la sección anterior propusimos una manera probabilítica de 
 reducir dimensionalidad para el problema de calcular similitud de Jaccard usando proyecciones aleatorias de los datos
 basadas en permutaciones de las tejas. Esto nos da una representación
-más compacta, que podemos muchas veces almacenar en memoria.
+más compacta, que es más fácil de almacenar en memoria.
 
 El problema con el procedimiento de arriba es el costo de calcular las permutaciones,
 permutar los renglones,
 y buscar el primer elemento de cada columna que es distinto de 0. 
 
-Podemos hacer una aproximación adicional: en lugar de calcular permutaciones,
+Primero escribimos un algoritmo para hacer el cálculo dado que
+tenemos las permutaciones, sin permutar la matriz y recorriendo
+por renglones. 
 
-- Escogemos funciones al azar que mapean tejas (cadenas) a enteros de forma determinística.
-- Aplicamos una de estas
-funciones a cada una de las tejas, y obtenemos una lista de enteros que interpretaremos como el orden de una permutación.
+Supongamos que tenemos $\pi_1,\ldots, \pi_k$ permutaciones. Denotamos por $SIG_{i,c}$ el elemento de la matriz de
+firmas para la $i$-ésima permutación y el documento $c$.
 
-Las funciones usadas deben comportarse de manera aproximadamente aleatoria. 
-Tomemos un ejemplo simple
+
+```{block2, type='resumen'}
+**Cálculo de matriz de firmas**
+
+- Inicializamos la matriz de firmas como $SIG_{i,c}=\infty$
+
+- Para cada renglón $r$:
+      - Para cada columna $c$:
+              1. Si $c$ tiene un cero en el renglón $r$, no hacemos nada
+              2. Si $c$ tiene un uno en el renglón $r$, ponemos 
+                  $SIG_{i,c} = \min\{SIG_{i,c}, h_i(r)\}$
+
+```
+
+#### Ejercicio {-}
+Aplicar este algoritmo al ejercicio \@ref(ej1).
+
+---
+
+### Ejemplo {-}
+
+Consideramos el ejemplo que vimos antes
 
 ```{r}
-crear_hash <- function(m){
-  primo <- 773
-  a <- sample(1:primo)
-  b <- sample(1:primo)
-  function(x){ (a*x + b) %% p %% m}
+df
+mat_df <- df %>% select(-tejas) %>% as.matrix
+calc_firmas <- function(mat_df, permutaciones){
+    firmas <- list()
+    num_hashes <- ncol(permutaciones)
+    firmas <- sapply(1:ncol(mat_df), function(r) rep(Inf, num_hashes))
+    for(r in 1:nrow(df)){
+        indices <- mat_df[r,] > 0
+        firmas[, indices] = pmin(firmas[, indices], permutaciones[r, ])
+    }
+    firmas
 }
+calc_firmas(mat_df, permutaciones)
 ```
 
 
-### Funciones hash
 
 
+Cuando vemos este algoritmo, nos damos cuenta de que las funciones
+$h_\pi$ no necesariamente tienen que ser una permutación de los renglones. Simplemente estamos buscando en cada columna el mínimo entero que 
+corresponde a una teja que aparezca en la columna.
+Podemos **simular** estas permutaciones de las siguiente forma:
+
+Si $h$ es una función que envía los renglones (tejas)
+a un rango grande de enteros, podríamos aplicar el algoritmo con los enteros
+que porduce esta función. Para realmente *simular las permutaciones*, necesitamos:
+
+- Una familia de funciones que sean fáciles de calcular, y que podamos escoger al azar entre ellas.
+- Si escogemos una función al azar de esta familia, necesitamos que la probabilidad de que $h(x)=h(y)$ para un par $x$,$y$ de tejas sea muy baja (baja probabilidad de colisión).
+
+Estas son propiedades de (funciones hash)[https://en.wikipedia.org/wiki/Hash_function], y hay varias maneras de
+construirlas.
+
+En [@mmd], por ejemplo, una sugerencia es construir una familia como sigue:
+Si tenemos $m$ posibles tejas (renglones), escogemos un primo mayor a $m$.
+En nuestro ejemplo con 110 tejas, podríamos hacer
+
+```{r}
+hash_simple <- function(...){
+  primo <- 761
+  a <- sample.int(761, 2)
+  out_fun <- function(x) {
+        (((a[1]*x + a[2]) %% primo) %% 110) +1
+    }
+  out_fun
+}
+set.seed(12342)
+hash_f <- lapply(1:20, hash_simple)
+
+```
+
+Veamos cómo funciona en nuestro ejemplo
+```{r}
+hashes <- sapply(hash_f, function(f) f(1:110))
+dim(hashes)
+hashes[1:10,1:5]
+```
 
 
+Estas son nuestra permutaciones simuladas. Ahora aplicamos el algoritmo
+de arriba:
+
+```{r}
+firmas_2 <- calc_firmas(mat_df, hashes)
+mean(firmas_2[,1]==firmas_2[,2])
+mean(firmas_2[,1]==firmas_2[,3])
+mean(firmas_2[,3]==firmas_2[,4])
+
+```
+
+Y estas son nuestras estimaciones de la similitud de Jaccard. 
+
+Podemos usar mejores funciones hash, que no requieren de ajustar
+parámetros para cada problema, como en el paquete textreuse [@R-textreuse], 
+que utiliza  hashes de cadenas (que serán las tejas) a los enteros, y
+ y utiliza como base función hash ampliamente probada 
+ (De librerías de Boost para C++):
+
+```{block2, type='resumen'}
+**Min-hashing**
+Para obtener la estimación de min-hashing de la similitud de dos documentos:
+  
+  1. Convertimos los documentos a tejas
+  2. Escogemos al azar funciones hash $h_1,h_2,\ldots, h_k$ que mapean tejas a enteros.
+  3. Aplicamos el algoritmo anterior para encontrar la matriz de firmas
+  4. Calculamos la fracción de colisiones de las dos firmas.
+
+```
 
 
+```{r}
+library(textreuse)
+set.seed(253)
+options("mc.cores" = 4L)
+minhash <- minhash_generator(50)
+corpus <- TextReuseCorpus(text = textos, 
+                          tokenizer = shingle_chars, 
+                          hash_func = minhash,
+                          keep_tokens = TRUE)
+str(corpus[[1]])
+```
 
+```{r}
+minhashes_corpus <- hashes(corpus)
+```
+
+```{r}
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])
+mean(minhashes_corpus[[1]]==minhashes_corpus[[3]])
+mean(minhashes_corpus[[4]]==minhashes_corpus[[3]])
+```
+
+```{r}
+pairwise_compare(corpus, ratio_of_matches) %>% pairwise_candidates
+```
+
+*Observación*:
+- El cálculo de minhashes es fácilmente escalable: por ejemplo, podemos
+procesar bloques de documentos en paralelo (enviando las funciones hash a los trabajadores) para obtener las firmas de ese bloque de documentos. ¿Cómo
+se podría hacer esto si los datos estuvieran distribuidos por renglones (tejas)?
+
+### Ejemplo {-}
+
+```{r}
+minhash <- minhash_generator(50)
+x <- scan("../datos/noticias/gamergate_antigg.txt", what="", sep="\n")
+```
+
+```{r}
+system.time(
+corpus_tweets <- TextReuseCorpus(text = x, 
+                          tokenizer = shingle_chars, 
+                          k = 5, 
+                          lowercase = TRUE,
+                          hash_func = minhash,
+                          keep_tokens = TRUE,
+                          keep_text = TRUE, skip_short = FALSE))
+```
+
+```{r}
+str(corpus_tweets[[16]])
+mh <- hashes(corpus_tweets)
+similitud <- sapply(mh, function(x) mean(mh[[16]]==x))
+indices <- which(similitud > 0.5)
+names(indices)
+```
+
+```{r}
+corpus_tweets[['doc-16']]$content
+corpus_tweets[['doc-11']]$content
+```
+
+```{r}
+similitud <- sapply(mh, function(x) mean(mh[[147]]==x))
+indices <- which(similitud > 0.35)
+names(indices)
+```
+
+```{r}
+lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
+```
+
+```{r}
+system.time(
+pares  <- pairwise_compare(corpus_tweets[1:200], ratio_of_matches) %>%
+      pairwise_candidates())
+
+pares <- pares %>% filter(score > 0.20) %>% arrange(desc(score)) 
+```
+
+```{r}
+pares
+corpus_tweets[['doc-107']]$content
+corpus_tweets[['doc-186']]$content
+```
