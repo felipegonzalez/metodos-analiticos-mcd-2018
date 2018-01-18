@@ -525,7 +525,7 @@ corpus_tweets[['doc-11']]$content
 ```
 
 ```{r}
-similitud <- sapply(mh, function(x) mean(mh[[147]]==x))
+similitud <- sapply(mh, function(x) mean(mh[[186]]==x))
 indices <- which(similitud > 0.35)
 names(indices)
 ```
@@ -533,6 +533,26 @@ names(indices)
 ```{r}
 lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
 ```
+
+¿Cuáles son las verdaderas distancias de jaccard?
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 3),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 3)
+  )
+sim_jaccard(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 3),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 3)
+  )
+```
+
+## Buscando vecinos cercanos
+
+Aunque hemos reducido el trabajo para hacer comparaciones de documentos,
+no hemos hecho mucho avance en encontrar todos los pares similares
+de la colección completa de documentos. Intentar calcular similitud
+para todos los pares (del orden $n^2$) es demasiado trabajo:
 
 ```{r}
 system.time(
@@ -547,3 +567,6 @@ pares
 corpus_tweets[['doc-107']]$content
 corpus_tweets[['doc-186']]$content
 ```
+
+En la siguiente parte veremos como aprovechar estos minhashes para hacer una
+búsqueda eficiente de pares similares.
