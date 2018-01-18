@@ -461,6 +461,9 @@ Para obtener la estimación de min-hashing de la similitud de dos documentos:
 
 ```
 
+**Observación**: Otra forma de ver el paso 3 es el siguiente: simplemente
+calculamos los hashes para las tejas que están en el documento, y luego
+calculamos el mínimo de estos hashes.
 
 ```{r}
 library(textreuse)
@@ -497,7 +500,7 @@ se podría hacer esto si los datos estuvieran distribuidos por renglones (tejas)
 
 ```{r}
 minhash <- minhash_generator(50)
-x <- scan("../datos/noticias/gamergate_antigg.txt", what="", sep="\n")
+x <- scan("../datos/similitud/gamergate_antigg.txt", what="", sep="\n")
 ```
 
 ```{r}
