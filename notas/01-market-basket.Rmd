@@ -281,7 +281,7 @@ Para itemsets de tamaño más grande, el algoritmo original a priori  [@Agrawal]
 ```{block2, type='resumen'}
 **Algoritmo a-priori**
   
-Sea $L_1$ el número de itemsets frecuentes de tamaño $k$.
+Sea $L_1$ el número de itemsets frecuentes de tamaño $1$.
 
 Para obtener $L_k$, el número de itemsets frecuentes de tamaño $k$:
   
@@ -312,9 +312,8 @@ lexicográficamente).
 paper original sugiere una estructura de árbol para encontrar los
 subconjuntos de $t$ que están en $C_k$. Ver también [@borgelt].
 
-- Otros algoritmos también son explicados en [@borgelt]. A priori es el algoritmo clásico,
-pero actualmente hay otros mejores.
-
+- Más detalles de la implementación de los algoritmos (incluyendo
+algunos más modernos como FPGrowth, que está implementado en spark) se puede encontrar en [@mmd] y en [@borgelt].
 
 ## Modelos simples para análisis de canastas
 
@@ -959,7 +958,7 @@ que puedan ser útiles). Así que muchas veces ayuda visualizar los pares con as
 
 
 
-### Ejemplo {#ejemplo}
+### Ejemplo {#ejemplo-canastas}
 
 En nuestro caso, podríamos tomar (ajustando parámetros para
 no obtener demasiadas reglas o demasiado pocas)
@@ -1025,14 +1024,38 @@ ggraph(graph_1, layout = 'fr', start.temp=100) +
 ```
 
 
-## Tarea {-}
-Considera los datos de *datos/recetas*. Cada receta es una canasta, y los
-artículos son los ingredientes que usan. Puedes consultar el artículo
-original [aquí](https://www.nature.com/articles/srep00196.pdf). Selecciona una
-o dos regiones y aplica market basket análisis para entender cuáles son los
-ingredientes importantes en ese tipo de cocina, y qué relaciones hay entre
-estos ingredientes.
+## Otras aplicaciones {-}
 
+- Análisis de tablas de variables categóricas: podemos considerar una tabla con varias variables categóricas. Una canasta son los valores que toman las variables. Por ejemplo, podríamos encontrar reglas como {hogar = propio, ocupación=profesional} -> ingreso = alto. Puedes ver más de este análisis
+en [@esl], por ejemplo, sección 14.2.
+
+- Conceptos relacionados: si los artículos son palabras y las canastas documentos (tweets, por ejemplo), este tipo de análisis (una vez que eliminamos las palabras más
+frecuentes, que no tienen significado como artículos, preposiciones, etc.), 
+puede mostrar palabras que co-ocurren para formar conceptos relacionados
+(por ejemplo, )
+
+- Plagiarismo: si los artículos son documentos y los canastas oraciones, el análisis de canastas puede encontrar documentos que contienen las mismas oraciones. Si varias canastas (oraciones) "contienen" los mismos 
+artículos (documentos), entonces esas oraciones son indicadores de plagio
+
+
+
+
+## Tarea {-}
+
+1. Considera los datos de *datos/recetas*. Lee los datos, asegúrate
+que puedes filtrar por tipo de cocina, y que puedes aplicarles
+la función *apriori* de *arules* (o cualquier otra herramienta que 
+estés utilizando). Calcula la frecuencia de todos los artículos (ingredientes). **El resto de este ejercicio lo haremos a principio
+de la siguiente clase**. Acerca de los datos: Cada receta es una canasta, y los
+artículos son los ingredientes que usan. Puedes consultar el artículo
+original [aquí](https://www.nature.com/articles/srep00196.pdf).
+
+2. Haz algunos experimentos el ejemplo \@ref(ejemplo-canastas) que vimos
+en clase: incrementa/decrementa hyperlift, incrementa/decrementa 
+soporte. ¿Qué pasa con las gráficas resultantes y el número de reglas?
+
+3. (Opcional) Muchas veces el análisis de canastas puede hacerse
+con una muestra de transacciones. Leer secciones 6.4.1 a 6.4.4 de [@mmd].
 
 
 

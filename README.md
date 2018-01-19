@@ -9,7 +9,8 @@ en un contenedor (con [imagen base de rocker](https://www.rocker-project.org), y
 docker build -t ma-rstudio .
 docker run --rm -p 8787:8787 -v ~/tu/carpeta/local:/home/rstudio/ma ma-rstudio
 ```
-- Para correr las notas usa el script notas/_build.sh
+
+- Para correr las notas usa el script notas/\_build.sh. Abre el archivo notas/\_book/index.html para ver tu copia local de las notas.
 
 - Todos los ejercicios y tareas corren también en ese contenedor. Es opcional usarlo,
 pero si tienes problemas de reproducibilidad puedes intentarlo.
