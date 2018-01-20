@@ -220,9 +220,9 @@ dada a continuación, con las permutaciones $(2,3,4,5,1)$ (indica que el rengló
 ```{r, echo = FALSE}
 mat <- matrix(c(c(1,0,0,1), c(0,0,1,0), 
             c(0,1,0,1), c(1,0,1,1),
-            c(0,0,1,0)), nrow = 4, ncol = 5 )
-colnames(mat) <- c('d_1','d_2','d_3','d_4', 'd_5')
-rownames(mat) <- c('abc', 'ab ','xyz','abx')
+            c(0,0,1,0)), nrow = 5, ncol = 4, byrow = TRUE)
+colnames(mat) <- c('d_1','d_2','d_3','d_4')
+rownames(mat) <- c('abc', 'ab ','xyz','abx','abd')
 mat
 ```
 
@@ -299,21 +299,28 @@ mean(firmas_df$doc_3 == firmas_df$doc_4)
 
 ```
 
-Ahora veamos qué sucede si usamos más firmas:
+Ahora veamos qué sucede repetimos varias veces:
 
 ```{r, collapse = TRUE}
-firmas_df <- lapply(1:40, function(i){
-    df_1 <- df %>% sample_n(nrow(df))
-    df_1 %>% summarise_if(is.numeric, primer_uno) 
-}) %>% bind_rows()
+firmas_rep <- lapply(1:50, function(i){
+    firmas_df <- lapply(1:20, function(i){
+        df_1 <- df %>% sample_n(nrow(df))
+        df_1 %>% summarise_if(is.numeric, primer_uno) 
+    }) %>% bind_rows()
+    firmas_df$rep <- i
+    firmas_df
+})
 
-firmas_df <- firmas_df %>% add_column(firma = paste0('h_', 1:40), .before = 1)
-firmas_df
-mean(firmas_df$doc_1 == firmas_df$doc_2)
-mean(firmas_df$doc_1 == firmas_df$doc_3)
-mean(firmas_df$doc_3 == firmas_df$doc_4)
+sapply(firmas_rep, function(mat){
+  mean(mat[, 1] == mat[,2])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
+sapply(firmas_rep, function(mat){
+  mean(mat[, 3] == mat[,4])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
 ```
 
+*Observación*: si la similitud de dos documentos es cero, entonces
+este procedimiento siempre da la respuesta exacta. ¿Por qué?
 ---
 
 Ahora damos un argumento de este resultado.
@@ -337,8 +344,7 @@ reducir dimensionalidad para el problema de calcular similitud de Jaccard usando
 basadas en permutaciones de las tejas. Esto nos da una representación
 más compacta, que es más fácil de almacenar en memoria.
 
-El problema con el procedimiento de arriba es el costo de calcular las permutaciones,
-permutar los renglones,
+El problema con el procedimiento de arriba es el costo de calcular las permutaciones, permutar los renglones,
 y buscar el primer elemento de cada columna que es distinto de 0. 
 
 Primero escribimos un algoritmo para hacer el cálculo dado que
