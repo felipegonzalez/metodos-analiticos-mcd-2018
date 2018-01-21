@@ -1,0 +1,138 @@
+---
+title: "Análisis de instacart"
+output: html_notebook
+---
+
+```{r, warning = FALSE, message = FALSE}
+library(arules)
+library(arulesViz)
+library(tidyverse)
+library(ggraph)
+library(tidygraph)
+library(readr)
+```
+
+```{r, engine = 'bash'}
+head -10 ../datos/instacart-kaggle/order_products__train.csv
+```
+
+
+
+```{r, message = FALSE}
+# Puedes bajar el archivo con 3 millones de transacciones de 
+# https://s3.amazonaws.com/ma-instacart/order_products__prior.csv
+#path = paste0('../datos/instacart-kaggle',
+#              '/order_products__prior.csv')
+# Empieza primero con el archivo más chico:
+# https://s3.amazonaws.com/ma-instacart/order_products__train.csv
+path = paste0('../datos/instacart-kaggle',
+               '/order_products__train.csv')
+instacart_df <- read_csv()
+productos_df <- read_csv('../datos/instacart-kaggle/products.csv')            
+instacart_df <- instacart_df %>% 
+                left_join(productos_df) %>%
+                select(order_id, product_name) 
+```
+
+Los productos más frecuentes:
+
+```{r}
+n_transacciones <- length(unique(instacart_df$order_id))
+instacart_df %>% group_by(product_name) %>% 
+                 tally %>% 
+                 arrange(desc(n)) %>% mutate(p = n/n_transacciones) %>%
+                 head(200)
+```
+
+
+
+```{r}
+trans_list <- split(instacart_df$product_name, instacart_df$order_id)              
+trans_list[[1]]
+trans_list[[2]]
+```
+
+
+
+
+```{r}
+pars <- list(supp = 0.01, 
+             target='frequent itemsets', 
+             ext = TRUE)
+ap_instacart <- apriori(trans_list, parameter = pars)
+
+```
+
+```{r}
+DT::datatable(DATAFRAME(sort(ap_instacart, by = 'support')) %>%
+                mutate_if(is.numeric, funs(round(., 3))))
+```
+
+```{r}
+inspect(ap_instacart)
+```
+
+
+```{r}
+agregar_hyperlift <- function(reglas, trans){
+  quality(reglas) <- cbind(quality(reglas), 
+	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
+	transactions = trans))
+  reglas
+}
+pars <- list(supp = 0.001, confidence = 0.1, 
+             target='rules', minlen=2,
+             ext = TRUE)
+ap_instacart <- apriori(trans_list, parameter = pars, control=list(verbose=FALSE))
+ap_instacart <- agregar_hyperlift(ap_instacart, trans_list)
+```
+
+```{r}
+reglas_chicas <- subset(ap_instacart, hyper_lift > 4 & confidence > 0.2)
+reglas_chicas
+```
+
+```{r}
+reglas_2 <- subset(reglas_chicas, size(reglas_chicas) == 2)
+df_reglas <- reglas_2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr') +
+  geom_edge_link(aes(alpha=lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(2, 'mm'))) + 
+  geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=2,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+Canastas grandes
+
+```{r}
+reglas_grandes <- subset(ap_instacart, support > 0.005, hyper_lift > 1.5 & confidence > 0.5)
+reglas_grandes
+inspect(reglas_grandes)
+```
+
+```{r, fig.width=10}
+reglas_2 <- subset(reglas_grandes)
+df_reglas <- reglas_2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr') +
+  geom_edge_link(aes(alpha=hyper_lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(4, 'mm'))) + 
+ geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=3,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+
+
