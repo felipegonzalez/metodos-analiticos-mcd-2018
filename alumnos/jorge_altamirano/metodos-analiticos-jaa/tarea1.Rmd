@@ -1,0 +1,34 @@
+---
+title: "Tarea 1: 2018/01/22"
+output: html_notebook
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(arules)
+```
+
+
+```{r}
+data(Groceries) # del paquete arules
+lista_mb <- as(Groceries, 'list')
+num_items <- sapply(lista_mb, length)
+qplot(num_items, binwidth=1)  
+```
+
+```{r}
+canastas_nest <- data_frame(canasta_id = 1:length(lista_mb),
+                      articulos = lista_mb) 
+canastas <- canastas_nest %>% unnest
+num_canastas <- nrow(canastas_nest)
+articulos_frec <- canastas %>% group_by(articulos) %>%
+                  summarise(n  = n()) %>%
+                  mutate(prop = n / num_canastas) %>%
+                  arrange(desc(n))
+DT::datatable(articulos_frec %>%
+  mutate_if(is.numeric, funs(round(., 3))))
+```
+
