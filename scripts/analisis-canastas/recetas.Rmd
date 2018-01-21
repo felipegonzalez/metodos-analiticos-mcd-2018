@@ -1,0 +1,147 @@
+---
+title: "Análisis de ingredientes en recetas"
+output: html_notebook
+---
+
+Análisis de
+https://www.nature.com/articles/srep00196.pdf
+
+Podemos usar *read_lines_chunked* si el archivo original es grande:
+
+```{r, message = FALSE}
+library(tidyverse)
+limpiar <- function(lineas,...){
+  str_split(lineas, ',') %>% 
+    keep(function(x) x[1] == 'EastAsian') %>%
+    map(function(x){
+          ing <- x[-1]
+          ing[nchar(ing) > 0]
+        })
+}
+filtrado <- read_lines_chunked('../datos/recetas/srep00196-s3.csv',
+                    skip = 1, callback = ListCallback$new(limpiar))
+recetas <-  filtrado %>% flatten
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+library(arules)
+length(recetas)
+pars <- list(support = 0.05,  target = 'frequent itemsets',
+             ext = TRUE)
+ap_recetas <- apriori(recetas, parameter = pars)
+length(ap_recetas)
+```
+
+Vemos los items frecuentes
+
+```{r}
+frecs <- ap_recetas %>% subset(size(.) == 1 ) %>% sort(by = 'support') %>%
+ DATAFRAME
+DT::datatable(frecs %>% mutate_if(is.numeric, function(x) round(x, 3)))
+```
+
+Y ahora examinamos combinaciones frecuentes de distintos tamaños
+
+```{r}
+ap_recetas %>% 
+  subset(size(.) == 3) %>%
+  subset(support > 0.20) %>%
+  sort(by = 'support') %>%
+  inspect
+```
+
+Incluso hay algunas combinaciones de 4 ingredientes que ocurren con frecuencia alta:
+estos ingredientes son bases de salsas, combinaciones de condimentos:
+
+```{r}
+ap_recetas %>% 
+  subset(size(.) == 4) %>%
+  subset(support > 0.10) %>%
+  sort(by = 'support') %>%
+  inspect
+```
+
+
+```{r}
+pars <- list(support = 0.005, confidence = 0.10,
+             target = 'rules',
+             ext = TRUE)
+reglas_recetas <- apriori(recetas, parameter = pars)
+```
+
+```{r}
+agregar_hyperlift <- function(reglas, trans){
+  quality(reglas) <- cbind(quality(reglas), 
+	hyper_lift = interestMeasure(reglas, measure = "hyperLift", 
+	transactions = trans))
+  reglas
+}
+reglas_recetas <- agregar_hyperlift(reglas_recetas, recetas)
+```
+
+
+## Análisis de pares comunes
+
+```{r}
+library(arulesViz)
+reglas_1 <- subset(reglas_recetas, hyper_lift > 1.2 & support > 0.05 & confidence > 0.40)
+length(reglas_1)
+reglas_tam_2 <- subset(reglas_1, size(reglas_1)==2)
+#inspect(reglas_tam_2 %>% sort(by = 'hyper_lift')) 
+plotly_arules(reglas_1 %>% subset(support > 0.2))
+```
+
+```{r, fig.width=10, fig.height=8}
+library(tidygraph)
+library(ggraph)
+frecs <- 
+df_reglas <- reglas_tam_2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr') +
+  geom_edge_link(aes(alpha=lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(4, 'mm'))) + 
+  geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=4,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+
+```{r}
+reglas_1 <- subset(reglas_recetas, hyper_lift > 1.8 & confidence > 0.1)
+length(reglas_1)
+reglas_tam_2 <- subset(reglas_1, size(reglas_1)==2)
+length(reglas_tam_2)
+```
+
+```{r, fig.width=10, fig.height=8}
+library(tidygraph)
+library(ggraph)
+df_reglas <- reglas_tam_2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas$weight <- log(df_reglas$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(4, 'mm'))) + 
+  geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=4,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+Exportamos para examinar en Gephi:
+
+
+```{r}
+write_csv(df_reglas %>% rename(source=from, target=to) %>%
+            select(-count), 
+          path='reglas.csv')
+```
