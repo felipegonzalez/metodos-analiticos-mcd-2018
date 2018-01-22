@@ -11,24 +11,33 @@ library(ggplot2)
 library(arules)
 ```
 
-
 ```{r}
-data(Groceries) # del paquete arules
-lista_mb <- as(Groceries, 'list')
-num_items <- sapply(lista_mb, length)
-qplot(num_items, binwidth=1)  
+datos <- read_csv("../../../datos/recetas/srep00196-s3.csv") %>%
+  unclass %>%
+  as.data.frame
+lista_mb2 <-datos[,2:33] %>% t %>% as.data.frame %>% as.list
+names(lista_mb2) <- datos[,1] %>% unlist
+ap2 <- apriori(datos[,2:33],
+        list(supp = 0.005, target = 'frequent itemsets'))
+ap2
 ```
 
 ```{r}
-canastas_nest <- data_frame(canasta_id = 1:length(lista_mb),
-                      articulos = lista_mb) 
-canastas <- canastas_nest %>% unnest
-num_canastas <- nrow(canastas_nest)
-articulos_frec <- canastas %>% group_by(articulos) %>%
-                  summarise(n  = n()) %>%
-                  mutate(prop = n / num_canastas) %>%
-                  arrange(desc(n))
-DT::datatable(articulos_frec %>%
+canastas2_nest <- data_frame(id = 1:length(lista_mb2),
+                      articulos = lista_mb2) 
+canastas2 <- canastas2_nest %>% 
+  unnest
+freq_ingredients <- canastas2 %>%
+  group_by(articulos) %>%
+  summarise(n  = n()) %>%
+  mutate(prop = n / num_canastas) %>%
+  arrange(desc(n))
+#DT::datatable
+(articulos_frec %>%
   mutate_if(is.numeric, funs(round(., 3))))
+```
+
+```{r}
+datos 
 ```
 
