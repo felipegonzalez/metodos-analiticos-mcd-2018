@@ -1,0 +1,35 @@
+---
+title: "Artículos similares de wikipedia"
+output: html_notebook
+---
+
+Este ejemplo es tomado de un [curso anterior](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb).
+
+El objetivo es encontrar artículos similares usando las categorías 
+a las que pertenecen.
+
+```{r}
+library(sparklyr)
+library(dplyr)
+path <- '../../datos/similitud/wiki-100000.txt'
+sc <- spark_connect(master = 'local')
+archivo <- spark_read_csv(sc, 'wiki', path = path, delimiter = ' ',
+                         columns = c('article', 'category')) 
+archivo %>% head(20)
+```
+
+
+```{r}
+wiki <- archivo %>%
+        group_by(article) %>%
+        summarise(lista = collect_list(category)) %>%
+        ft_count_vectorizer('lista', 'vector', binary=TRUE)
+```
+
+
+```{r}
+lsh_wiki <- wiki %>%
+            ft_minhash_lsh('vector', 'hashes', 
+                           bucket_length = 5,
+                           num_hash_tables = 3)
+```
