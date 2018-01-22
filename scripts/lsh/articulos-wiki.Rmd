@@ -12,7 +12,9 @@ a las que pertenecen.
 library(sparklyr)
 library(dplyr)
 path <- '../../datos/similitud/wiki-100000.txt'
-sc <- spark_connect(master = 'local')
+config <- spark_config()
+config$`sparklyr.shell.driver-memory` <- "4G"
+sc <- spark_connect(master = 'local', config = config)
 archivo <- spark_read_csv(sc, 'wiki', path = path, delimiter = ' ',
                          columns = c('article', 'category')) 
 archivo %>% head(20)
@@ -23,13 +25,61 @@ archivo %>% head(20)
 wiki <- archivo %>%
         group_by(article) %>%
         summarise(lista = collect_list(category)) %>%
-        ft_count_vectorizer('lista', 'vector', binary=TRUE)
+        ft_count_vectorizer('lista', 'vector', binary=TRUE) %>%
+        ft_string_indexer('article','id')
 ```
 
 
 ```{r}
-lsh_wiki <- wiki %>%
-            ft_minhash_lsh('vector', 'hashes', 
+lsh_wiki <- ft_minhash_lsh(sc, 'vector', 'hashes', 
                            bucket_length = 5,
-                           num_hash_tables = 3)
+                           num_hash_tables = 3,
+                           dataset = wiki)
+```
+
+
+
+```{r}
+library(tidyr)
+vec_1 <- wiki %>% filter(article =='Submarine') %>% pull(vector)
+similares <- ml_approx_nearest_neighbors(lsh_wiki, 
+            wiki, vec_1[[1]], num_nearest_neighbors = 10) %>% 
+  select(article, lista, distCol)
+similares
+```
+
+Y notamos un par que en realidad tiene similitud cero, pero
+en nuestra aproximación no:
+
+```{r}
+ejemplos <- wiki %>% filter(article =='Submarine' | article =='Slide_rule') %>% 
+  collect() %>% select(article, lista) 
+ejemplos$lista[[1]]
+ejemplos$lista[[2]]
+```
+```{r}
+library(tidyr)
+vec_1 <- wiki %>% filter(article =='David_Hilbert') %>% pull(vector)
+similares <- ml_approx_nearest_neighbors(lsh_wiki, 
+            wiki, vec_1[[1]], num_nearest_neighbors = 10) %>% 
+  select(article, lista, distCol)
+similares
+```
+
+```{r}
+#threshold es para la distancia
+pares_similares <- 
+      ml_approx_similarity_join(lsh_wiki, 
+                            wiki, wiki, threshold = 0.05) %>%
+      filter(id_a > id_b) %>% collect
+
+nrow(pares_similares)
+articulos <- wiki %>% select(id, article) %>% collect
+pares <- pares_similares %>% 
+         left_join(articulos %>% rename(id_b = id)) %>%
+         rename(article_b = article) %>%
+         left_join(articulos %>% rename(id_a = id)) %>%
+         rename(article_a = article) %>%
+         select(-id_a, -id_b)
+DT::datatable(pares)
 ```
