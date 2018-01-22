@@ -1,0 +1,743 @@
+# Similitud: Minhashing
+
+En esta parte trata de un problema fundamental en varias tareas de minería de datos: ¿cómo medir similitud, y cómo encontrar vecinos cercanos en un conjunto de elementos?
+
+Algunos ejemplos son:
+
+- Encontrar documentos similares en una colección de documentos (este es el que vamos a tratar más). Esto puede servir para detectar
+plagio, deduplicar noticias o páginas web, etc.
+- Encontrar imágenes similares en una colección grande.
+- Encontrar usuarios similares (Netflix), en el sentido de que tienen gustos similares. O películas similares, en el sentido de qe le gustan a las mismas personas
+- Uber: rutas similares que indican (fraude o abusos)[https://eng.uber.com/lsh/].
+
+Estos problemas no son triviales por dos razones:
+
+- Los elementos que queremos comparar muchas veces están naturalmente representados en espacios de dimensión muy alta, y es relativamente costoso comparar un par (documentos, imágenes, usuarios, rutas).
+- Si la colección de elementos es grande ($N$), entonces el número de pares 
+posibles es del orden de $N^2$, y no es posible hacer todas las posibles comparaciones para encontrar los elementos similares (por ejemplo, comparar
+100 mil documentos, con unas 10000 comparaciones por segundo, tardaría alrededor de 10 días).
+
+El tema principal de esta parte es el siguiente:
+
+```{block, type='resumen'}
+- Podemos usar reducción probabilística de dimensión (usando funciones hash) para reducir la dimensionalidad del problema de similitud, sin
+perder mucha precisión en el cálculo de similitudes.
+- Podemos usar métodos probabilísticos para agrupar elementos similares (encontrar vecinos cercanos), sin necesidad de calcular TODAS las similitudes posibles.
+```
+
+
+
+## Similitud de conjuntos
+
+Muchos de estos problemas de similitud se pueden pensar como 
+problemas de similitud entre conjuntos. Por ejemplo, los documentos son conjuntos de palabras, pares de palabras, sucesiones de caracteres, etc,
+una película como el conjunto de personas a las que le gustó, o una ruta
+como un conjunto de tramos, etc.
+
+Hay muchas medidas que son útiles para cuantificar la similitud entre conjuntos. Una que es popular, y que explotaremos por sus propiedades, es la similitud de Jaccard:
+
+
+```{block2, type='resumen'}
+La **similitud de Jaccard** de los conjuntos $A$ y $B$ está dada por
+
+$$sim(A,B) = \frac{|A\cap B|}{|A\cup B|}$$
+
+```
+
+Esta medida cuantifica qué tan cerca está la unión de $A$ y $B$ de su intersección. Cuanto más parecidos sean $A\cup B$ y $A\cap B$, más similares son los conjuntos. En términos geométricos, es el área de la intersección entre el área de la unión.
+
+#### Ejercicio {-}
+Calcula la similitud de jaccard entre los conjuntos $A=\{5,2,34,1,20,3,4\}$
+ y $B=\{19,1,2,5\}$
+ 
+
+```{r, collapse = TRUE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(textreuse)
+
+sim_jaccard <- function(a, b){
+    length(intersect(a, b)) / length(union(a, b))
+}
+
+sim_jaccard(c(0,1,2,5,8), c(1,2,5,8,9))
+sim_jaccard(c(2,3,5,8,10), c(1,8,9,10))
+sim_jaccard(c(3,2,5), c(8,9,1,10))
+```
+
+
+## Representación en tejas para documentos
+
+En primer lugar, buscamos representaciones
+de documentos como conjuntos. Hay varias maneras de hacer esto. 
+
+Consideremos una colección de textos cortos:
+
+```{r}
+textos <- character(4)
+textos[1] <- 'el perro persigue al gato.'
+textos[2] <- 'el gato persigue al perro'
+textos[3] <- 'este es el documento de ejemplo'
+textos[4] <- 'el documento con la historia del perro y el gato'
+```
+
+Los métodos que veremos aquí se aplican para varias representaciones:
+
+- La representación
+más simple es la bolsa de palabras, que es conjunto de palabras que contiene un
+documento. Podríamos comparar entonces documentos calculando la similitud de jaccard 
+de sus bolsas de palabras (1-gramas)
+
+```{r}
+tokenize_words(textos[1])
+```
+
+- Podemos generalizar esta idea y pensar en n-gramas de palabras, que son sucesiones
+de $n$ palabras que ocurren en un documento.
+
+```{r}
+tokenize_ngrams(textos[1], n = 2)
+```
+
+
+- Otro camino, es el k-tejas, que son k-gramas de *caracteres*
+
+```{r, collapse= TRUE}
+shingle_chars <- function(string, lowercase = FALSE, k = 3){
+    # produce shingles (con repeticiones)
+    if(lowercase) {
+      string <- str_to_lower(string)
+    }
+    shingles <- seq(1, nchar(string) - k + 1) %>%
+        map_chr(function(x) substr(string, x, x + k))
+    shingles
+  }
+ejemplo <- shingle_chars('Este es un ejemplo', 3)
+ejemplo
+```
+
+Si lo que nos interesa principalmente
+similitud textual (no significado, o polaridad, etc.) entre documentos, entonces podemos comparar dos documentos considerando que sucesiones de caracteres de tamaño fijo ocurren en ambos documentos, usando $k$-tejas. Esta
+representación es **flexible** en el sentido de que se puede adaptar para documentos muy cortos (mensajes o tweets, por ejemplo), pero también para documentos más grandes.
+
+
+```{block2, type = 'resumen'}
+**Tejas (shingles)**
+  
+Sea $k>0$ un entero. Las $k$-tejas ($k$-shingles) de un documento d
+ es el conjunto de todas las corridas (distintas) de $k$
+caracteres sucesivos.
+
+```
+
+Es importante escoger suficientemente grande, de forma que la probabilidad de que
+una teja particular tenga probabilidad baja de ocurrir en un texto dado. Si los textos
+son cortos, entonces basta tomar valores como $k=4,5$, pues hay un total de $27^4$ tejas
+de tamaño 4, y el número de tejas de un documento corto (mensajes, tweets) es mucho más bajo que
+$27^4$ (nota: ¿puedes explicar por qué este argumento no es exactamente correcto?)
+
+Para documentos grandes, como noticias o artículos, es mejor escoger un tamaño más grande,
+como $k=9,10$, pues en documentos largos puede haber cientos de miles
+de caracteres, si $k$ fuera más chica entonces una gran parte de las tejas aparecería en muchos de los documentos.
+
+#### Ejemplo {-}
+Documentos textualmente similares tienen tejas similares:
+
+```{r, collapse = TRUE}
+textos <- character(4)
+textos[1] <- 'el perro persigue al gato, pero no lo alcanza'
+textos[2] <- 'el gato persigue al perro, pero no lo alcanza'
+textos[3] <- 'este es el documento de ejemplo'
+textos[4] <- 'el documento habla de perros, gatos, y otros animales'
+tejas_doc <- lapply(textos, shingle_chars, k = 3)
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
+sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
+```
+
+*Observación*: las $n$-tejas de palabras se llaman usualmente $n$-gramas. Lo
+que veremos aquí aplica para estos dos casos.
+
+
+## Reducción probablística de dimensión.
+
+La representación de k-tejas de documentos es una representación de dimensión alta (pues
+hay muchas tejas), pues cada documento se escribir como un vector de 0s y 1s:
+
+```{r}
+todas_tejas <- Reduce('c', tejas_doc) %>% unique %>% sort
+vector_1 <- as.numeric(todas_tejas %in% tejas_doc[[1]])
+vector_1
+```
+
+Para esta colección chica, con $k$ relativamente chico, el vector
+que usamos para representar cada documento es de tamaño `r length(vector_1)`,
+pero en otros casos este número será mucho más grande. 
+
+Podemos construir expícitamente la matriz de tejas-documentos de las siguiente forma (OJO: esto normalmente **no** queremos hacerlo, pero lo hacemos para ilustrar):
+
+
+```{r}
+df <- data_frame(id_doc = paste0('doc_',
+                                 seq(1, length(tejas_doc))),
+           tejas = tejas_doc) %>% 
+           unnest %>%
+           unique %>%
+           mutate(val = 1) %>%
+           spread(id_doc, val, fill = 0) 
+df
+```
+
+
+
+¿Cómo calculamos la similitud de Jaccard usando estos datos?
+
+Calcular la unión e intersección se puede hacer haciendo OR y AND de las columnas, y
+entonces podemos calcular la similitud
+```{r}
+
+inter_12 <- sum(df$doc_1 & df$doc_2)
+union_12 <- sum(df$doc_1 | df$doc_2)
+similitud <- inter_12/union_12
+similitud # comparar con el número que obtuvimos arriba.
+```
+
+
+Ahora consideramos una manera probabilística de reducir la
+dimensión de esta matriz sin perder información útil para
+calcular similitud. Queremos obtener una matriz con menos renglones
+(menor dimensión) y las mismas columnas.
+
+Las proyecciones que usaremos son escogidas al azar, y son sobre
+el espacio de enteros.
+
+- Sea $\pi$ una permutación al azar de los renglones de la matriz.
+- Permutamos los renglones de la matriz tejas-documentos según $\pi$.
+- Definimos una nuevo descriptor del documento: para cada documento (columna) $d$ de la matriz permutada, tomamos el entero $f_\pi (d)$, que da el número del primer renglón que es distinto de 0.
+
+#### Ejercicio {#ej1}
+
+Considera la matriz de tejas-documentos para cuatro documentos y cinco tejas
+dada a continuación, con las permutaciones $(2,3,4,5,1)$ (indica que el renglón
+1 va al 2, el 5 al 1, etc.) y $(2,5,3,1,4)$.
+
+```{r, echo = FALSE}
+mat <- matrix(c(c(1,0,0,1), c(0,0,1,0), 
+            c(0,1,0,1), c(1,0,1,1),
+            c(0,0,1,0)), nrow = 5, ncol = 4, byrow = TRUE)
+colnames(mat) <- c('d_1','d_2','d_3','d_4')
+rownames(mat) <- c('abc', 'ab ','xyz','abx','abd')
+mat
+```
+
+
+#### Ejemplo {-}
+
+Ordenamos al azar:
+```{r}
+set.seed(321)
+df_1 <- df %>% sample_n(nrow(df))
+head(df_1, 14)
+```
+
+
+
+```{r}
+primer_uno <- function(col){
+  purrr::detect_index(col, function(x) x > 0)
+}
+df_1 %>% summarise_if(is.numeric, primer_uno) 
+```
+
+Ahora repetimos con otras permutaciones:
+
+```{r}
+set.seed(32)
+num_hashes <- 10
+permutaciones <- sapply(1:num_hashes, function(i){
+  sample(1:nrow(df), nrow(df))
+})
+firmas_df <- lapply(1:num_hashes, function(i){
+    df_1 <- df[order(permutaciones[,i]), ]
+    df_1 %>% summarise_if(is.numeric, primer_uno) 
+}) %>% bind_rows()
+
+firmas_df <- firmas_df %>% add_column(firma = paste0('f_', 1:num_hashes),
+                                              .before = 1)
+firmas_df
+```
+
+A esta nueva matriz le llamamos **matriz de firmas** de los documentos.  La firma de un documento es una sucesión de enteros.
+
+Cada documento se describe ahora con `r nrow(firmas_df)` entradas,
+en lugar de `r nrow(df_1)`.
+
+Nótese que por construcción, cuando dos documentos son muy similares,
+es natural que sus columnas de firmas sean similares, pues al hacer las permutaciones
+es altamente probable que el primer 1 ocurra en la misma posición.
+
+Resulta que podemos cuantificar esta probabilidad. Tenemos el siguiente
+resultado simple pero sorprendente:
+
+```{block2, type = 'resumen'}
+Sea $\pi$ una permutación escogida al azar, y $a$ y $b$ dos columnas
+dadas. Entonces
+$$P(f_\pi(a) = f_\pi(b)) = sim(a, b)$$
+donde $sim$ es la similitud de jaccard basada en las tejas usadas.
+
+Sean $\pi_1, \pi_2, \ldots \pi_n$ permutaciones escogidas al azar de
+manera independiente. Si $n$ es grande, entonces por la ley de los grandes números
+$$sim(a,b) \approx \frac{|\pi_j : f_{\pi_j}(a) = f_{\pi_j}(b)|}{n}, $$
+es decir, la similitud de jaccard es aproximadamente la proporción 
+de elementos de las firmas que coinciden.
+```
+
+
+#### Ejemplo {-}
+Antes de hacer la demostración, veamos como aplicaríamos a la matriz
+de firmas que calculamos arriba. Tendríamos, por ejemplo :
+```{r, collapse = TRUE}
+mean(firmas_df$doc_1 == firmas_df$doc_2)
+mean(firmas_df$doc_1 == firmas_df$doc_3)
+mean(firmas_df$doc_3 == firmas_df$doc_4)
+
+```
+
+Ahora veamos qué sucede repetimos varias veces:
+
+```{r, collapse = TRUE}
+firmas_rep <- lapply(1:50, function(i){
+    firmas_df <- lapply(1:20, function(i){
+        df_1 <- df %>% sample_n(nrow(df))
+        df_1 %>% summarise_if(is.numeric, primer_uno) 
+    }) %>% bind_rows()
+    firmas_df$rep <- i
+    firmas_df
+})
+
+sapply(firmas_rep, function(mat){
+  mean(mat[, 1] == mat[,2])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
+sapply(firmas_rep, function(mat){
+  mean(mat[, 3] == mat[,4])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
+```
+
+*Observación*: si la similitud de dos documentos es cero, entonces
+este procedimiento siempre da la respuesta exacta. ¿Por qué?
+
+---
+
+Ahora damos un argumento de este resultado.
+Consideremos dos columnas $a,b$ de la matriz
+de 0's y 1's, con conjuntos de tejas asociados $A,B$.
+
+- Supongamos que entre las dos columnas $a$ y $b$, el primer 1 ocurre en el renglón $k$.
+- El renglón $k$ puede ser de tipo $(1,0), (0,1), (1,1)$. Todos estos renglones tienen la misma probabilidad de aparecer en el rengón k. El número de estos
+renglones es el tamaño de $A\cup B$, pues este número cuenta cuántas tejas en común
+tienen estos conjuntos.
+- El número de renglones de tipo  $(1,1)$ es el tamaño de $A\cap B$, el número de tejas en común de los dos documentos.
+- Entonces, la probabilidad condicional de que el renglón $k$ sea de tipo $(1,1)$, dado que es de algún tipo de $(1,0), (0,1), (1,1)$, es 
+$$\frac{|A\cap B|}{|A\cup B|},$$
+que es la similitud de Jaccard de los dos documentos.
+
+
+## Mejoras al método de permutaciones
+
+En la sección anterior propusimos una manera probabilítica de 
+reducir dimensionalidad para el problema de calcular similitud de Jaccard usando proyecciones aleatorias de los datos
+basadas en permutaciones de las tejas. Esto nos da una representación
+más compacta, que es más fácil de almacenar en memoria.
+
+El problema con el procedimiento de arriba es el costo de calcular las permutaciones y permutar la matriz característica (tejas-documentos).
+
+Primero escribimos un algoritmo para hacer el cálculo de la matriz
+de firmas dado que
+tenemos las permutaciones, sin permutar la matriz y recorriendo
+por renglones. 
+
+Supongamos que tenemos $\pi_1,\ldots, \pi_k$ permutaciones. Denotamos por $SIG_{i,c}$ el elemento de la matriz de
+firmas para la $i$-ésima permutación y el documento $c$, y
+escribimos $h_i = \pi_i$.
+
+
+```{block2, type='resumen'}
+**Cálculo de matriz de firmas**
+
+  Inicializamos la matriz de firmas como $SIG_{i,c}=\infty$. Para cada
+renglón $r$:
+
+  - Para cada columna $c$:
+      1. Si $c$ tiene un cero en el renglón $r$, no hacemos nada.
+      2. Si $c$ tiene un uno en el renglón $r$, ponemos 
+                  $SIG_{i,c} = \min\{SIG_{i,c}, h_i(r)\}$.
+```
+
+#### Ejercicio {-}
+Aplicar este algoritmo al ejercicio \@ref(ej1).
+
+---
+
+### Ejemplo {-}
+
+Consideramos el ejemplo que vimos antes
+
+```{r}
+df
+mat_df <- df %>% select(-tejas) %>% as.matrix
+calc_firmas <- function(mat_df, permutaciones){
+    firmas <- list()
+    num_hashes <- ncol(permutaciones)
+    firmas <- sapply(1:ncol(mat_df), function(r) rep(Inf, num_hashes))
+    for(r in 1:nrow(df)){
+        indices <- mat_df[r,] > 0
+        firmas[, indices] = pmin(firmas[, indices], permutaciones[r, ])
+    }
+    firmas
+}
+calc_firmas(mat_df, permutaciones)
+```
+
+
+## Min-hashing
+
+Cuando vemos este algoritmo, nos damos cuenta de que las funciones
+$h_i$ no necesariamente tienen que ser una permutación de los renglones. Simplemente estamos buscando en cada columna el mínimo entero que 
+corresponde a una teja que aparezca en la columna.
+Podemos **simular** estas permutaciones de las siguiente forma:
+
+Si $h$ es una función que envía los renglones (tejas)
+a un rango grande de enteros, podríamos aplicar el algoritmo con los enteros
+que produce esta función. Para estar cerca de *simular las permutaciones*,
+necesitamos:
+
+- Una familia de funciones que sean fáciles de calcular, y que podamos escoger al azar entre ellas.
+- Si escogemos una función al azar de esta familia, necesitamos que la probabilidad de que $h(x)=h(y)$ para un par $x$,$y$ de tejas sea muy baja (baja probabilidad de colisión al mismo entero). En las permutaciones no tenemos colisiones.
+
+Estas son, entre otras, propiedades de (funciones hash)[https://en.wikipedia.org/wiki/Hash_function], y hay varias maneras de
+construirlas.
+
+En [@mmd], por ejemplo, una sugerencia es construir una familia como sigue:
+Si tenemos $m$ posibles tejas (renglones), escogemos un primo mayor a $m$.
+En nuestro ejemplo con 110 tejas, podríamos tomar el primo 113 y hacer:
+
+```{r}
+hash_simple <- function(...){
+  primo <- 113
+  a <- sample.int(primo - 1, 2)
+  out_fun <- function(x) {
+        (((a[1]*x + a[2]) %% primo) %% 110) + 1
+    }
+  out_fun
+}
+set.seed(123)
+hash_f <- lapply(1:20, hash_simple)
+```
+
+**Observación**: usamos un primo en la congruencia para evitar casos
+con muchas colisiones, por ejemplo: si por azar escogemos $10x + 7\mod 110$,
+entonces todos los mútlipos de de 11 caen en la misma cubeta 7.
+
+Veamos cómo funciona en nuestro ejemplo
+```{r}
+hashes <- sapply(hash_f, function(f) f(1:110))
+dim(hashes)
+hashes[1:10,1:5]
+```
+
+
+Estas son nuestra permutaciones simuladas. Ahora aplicamos el algoritmo
+de arriba:
+
+```{r}
+firmas_2 <- calc_firmas(mat_df, hashes)
+mean(firmas_2[,1]==firmas_2[,2])
+mean(firmas_2[,1]==firmas_2[,3])
+mean(firmas_2[,3]==firmas_2[,4])
+hash_f <- lapply(1:20, hash_simple)
+hashes <- sapply(hash_f, function(f) f(1:110))
+firmas_2 <- calc_firmas(mat_df, hashes)
+mean(firmas_2[,1]==firmas_2[,2])
+mean(firmas_2[,1]==firmas_2[,3])
+mean(firmas_2[,3]==firmas_2[,4])
+```
+
+Y estas son nuestras estimaciones de la similitud de Jaccard. 
+
+Podemos usar mejores funciones hash, que no requieren de ajustar
+parámetros para cada problema, como en el paquete textreuse [@R-textreuse], 
+que utiliza  hashes de cadenas (que serán las tejas) a los enteros, y
+ y utiliza como base función hash ampliamente probada 
+ (De librerías de Boost para C++):
+
+```{block2, type='resumen'}
+**Min-hashing** (con permutaciones)
+Para obtener la estimación de min-hashing de la similitud de dos documentos:
+  
+  1. Convertimos los documentos a tejas
+  2. Escogemos al azar funciones hash $h_1,h_2,\ldots, h_k$ que mapean tejas a  un rango grande enteros.
+  3. Aplicamos el algoritmo anterior para encontrar la matriz de firmas.
+  4. Calculamos la fracción de coincidencias de las dos firmas.
+
+```
+
+**Observación**: El paso 3 también podemos hacerlo por columna: simplemente hay
+que calcular los hashes de las tejas y tomar el mínimo valor.
+
+```{r}
+library(textreuse)
+set.seed(253)
+options("mc.cores" = 4L)
+minhash <- minhash_generator(50)
+corpus <- TextReuseCorpus(text = textos, 
+                          tokenizer = shingle_chars, 
+                          minhash_func = minhash,
+                          keep_tokens = TRUE)
+# En este objeto:
+# hashes: los hashes de las tejas, con la función hash base - puede ser útil para # almacenar los documentos para postprocesar:
+# minhashes: contiene los valores minhash bajo las funciones hash
+# que escogimos al azar en minhash_generator.
+str(corpus[[1]])
+```
+
+```{r}
+minhashes_corpus <- minhashes(corpus)
+```
+
+```{r}
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])
+mean(minhashes_corpus[[1]]==minhashes_corpus[[3]])
+mean(minhashes_corpus[[4]]==minhashes_corpus[[3]])
+```
+
+*Observación*:
+- El cálculo de minhashes es fácilmente escalable: por ejemplo, podemos
+procesar grupos de documentos en paralelo (enviando las funciones hash a los trabajadores) para obtener las firmas de ese bloque de documentos. ¿Cómo
+se podría hacer esto si los datos estuvieran distribuidos por renglones (tejas)?
+
+### Ejemplo {-}
+
+Consideramos un ejemplo de unos 2000 tweets:
+
+```{r}
+minhash <- minhash_generator(50)
+x <- scan("../datos/similitud/gamergate_antigg.txt", what="", sep="\n")
+```
+
+```{r}
+# este caso ponemos en hash_func los minhashes, para después
+# usar la función pairwise_compare (que usa los hashes)
+system.time(
+corpus_tweets <- TextReuseCorpus(text = x, 
+                          tokenizer = shingle_chars, 
+                          k = 5, 
+                          lowercase = TRUE,
+                          hash_func = minhash,
+                          keep_tokens = TRUE,
+                          keep_text = TRUE, skip_short = FALSE))
+```
+
+Busquemos tweets similares a uno en partiuclar
+
+```{r}
+corpus_tweets[[16]]$content
+mh <- hashes(corpus_tweets)
+similitud <- sapply(mh, function(x) mean(mh[[16]]==x))
+indices <- which(similitud > 0.5)
+names(indices)
+```
+
+```{r}
+corpus_tweets[['doc-16']]$content
+corpus_tweets[['doc-11']]$content
+```
+
+```{r}
+similitud <- sapply(mh, function(x) mean(mh[[186]]==x))
+indices <- which(similitud > 0.35)
+names(indices)
+```
+
+```{r}
+lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
+```
+
+¿Cuáles son las verdaderas distancias de jaccard? Por ejemplo,
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 3),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 3)
+  )
+```
+
+
+## Buscando vecinos cercanos
+
+Aunque hemos reducido el trabajo para hacer comparaciones de documentos,
+no hemos hecho mucho avance en encontrar todos los pares similares
+de la colección completa de documentos. Intentar calcular similitud
+para todos los pares (del orden $n^2$) es demasiado trabajo:
+
+```{r}
+system.time(
+pares  <- pairwise_compare(corpus_tweets[1:200], ratio_of_matches) %>%
+      pairwise_candidates())
+
+pares <- pares %>% filter(score > 0.20) %>% arrange(desc(score)) 
+```
+
+```{r}
+pares
+corpus_tweets[['doc-107']]$content
+corpus_tweets[['doc-186']]$content
+```
+
+Y si quisiéramos entender esto, todavía faltaría hacer clusters basados
+en los scores, para agrupar todos los tweets similares.
+
+En la siguiente parte veremos como aprovechar estos minhashes para hacer una
+búsqueda eficiente de pares similares.
+
+## Locality sensitive hashing (LSH) para documentos
+
+Como discutimos arriba, calcular todas las posibles similitudes de una
+colección de un conjunto no tan grande de documentos es difícil. Sin
+embargo, muchas veces lo que nos interesa es simplemente agrupar
+colecciones de documentos que tienen alta similitad (por ejemplo para
+deduplicar, hacer clusters de usuarios muy similares, etc.).
+
+Una técnica para encontrar vecinos cercanos de este tipo es LSH. Comenzamos
+construyendo LSH basado en las firmas de minhash. La idea general
+es hacer agrupar los documentos en cubetas (no es exactamente clustering) usando
+que tan similares son sus firmas. Estos son los candidatos (que esperamos
+sean mucho menos que el número posible de pares), y podemos calcular
+la similitud exacta para estos candidatos y filtrar.
+
+Supongamos que tenemos una lista de documentos con
+firmas de dimensión $k$, y queremos encontrar todos los pares
+similares de similitud mayor a $s_0=0.8$, por ejemplo. Veamos dos opciones:
+
+- Podemos agrupar los documentos en cubetas
+para cada una de estas firmas: si coinciden en al menos una dimensión, caen en la misma cubeta. La probabilidad de que dos documentos con similitud $s$ caigan en al menos una misma
+cubeta es es $1-(1-s)^k$. Las cubetas son combinaciones como "h1-3432", "h2-128", dependiendo la función hash y su valor.
+
+```{r, fig.width=4, fig.asp=1.0}
+sim_alguna <- function(s){
+  1-(1-s)^80
+}
+curve(sim_alguna, xlab = 'Prob ser candidato')
+abline(v=0.8, col='red')
+```
+
+
+Y vemos que con muy alta probabilidad documentos con similitud muy alta
+van a caer en la misma cubeta. El problema es que vamos a tener muchos falsos
+positivos: documentos con similitud tan chica como 0.2 tienen probabilidad muy alta de caer en al menos una misma cubeta juntos, y ahora tenemos
+que revisar muchos candidatos para descartar.
+
+
+- Considerar como una cubeta la firma completa del documento, por
+ejemplo "123-345-388-9812", si tenemos 4 hashes. En este caso,
+la probabilidad de que dos documentos con similitud $s$ caigan en la misma
+cubeta es de $s^k$.
+
+
+```{r, fig.width=4, fig.asp=1.0}
+sim_todas <- function(s){
+  s^80
+}
+curve(sim_todas)
+abline(v=0.8, col='red')
+```
+
+Y ahora casi no tendremos falsos positivos, pero tendremos muchos
+falsos negativos.
+
+
+### Técnica de bandas
+
+Estas curvas no son muy útiles. Lo que realmente buscamos es una curva que sea cercana a 0 para valores menores
+a 0.8 y cercana a 1 para valores mayores a 0.8.
+
+Una buena solución es crear bandas de minhashes. Por ejemplo, podríamos
+hacer 10 bloques de 8 hashes cada uno . Una cubeta está definida por documentos en los que al menos uno de los 10 bloques tiene sus cinco hashes idénticos.
+
+Si dos documentos tienen similitud $s$, entonces la probabilidad de que
+un bloque particular sea idéntico es $s^10$. Así que la probabilidad de al menos
+algún bloque sea idéntico es igual a $1-(1-s^10)^8$
+
+```{r, fig.width=4, fig.asp=1.0}
+sim_bloques <- function(s){
+  1-(1-s^10)^8
+}
+curve(sim_bloques)
+abline(v=0.8, col='red')
+```
+
+Esta curva es más apropiada para nuestros propósitos: después de obtener los candidatos, podemos checar todos los pares y descartar los falsos positivos, sin
+haber perdido mucho por los falsos negativos. Nótese adicionalmente que los falsos negativos tenderán a ser de probabilidad relativamente cercana a 0.8 (y no cercana a 0.9 o más).
+
+
+### Ejemplo {-}
+Consideremos nuestro mini-ejemplo del principio, con la matriz de firmas que habíamos calculado:
+
+```{r}
+textos
+firmas_df
+```
+
+Construiremos 5 bandas de 2 hashes cada uno, lo que nos da las siguientes
+probabilidades de caer en la misma cubeta:
+
+```{r, fig.width=4, fig.asp=1.0}
+sim_bloques <- function(s){
+  1-(1-s^2)^5
+}
+curve(sim_bloques)
+```
+
+Agrupamos en cubetas:
+
+```{r}
+colapsar <- function(x){
+  paste(x, collapse = '-')
+}
+firmas_df
+firmas_bandas <- firmas_df %>% 
+          mutate(firma = as.integer(substr(firma, 3, 4))) %>%
+          mutate(banda = (firma - 1) %% 5 + 1) %>%
+          select(-firma) %>%
+          arrange(banda) %>%
+          group_by(banda) %>%
+          summarise_all(colapsar)
+firmas_bandas
+```
+
+
+```{r}
+firmas_bandas <- firmas_bandas %>% gather(documento, valor, doc_1:doc_4) %>%
+                  mutate(cubeta = paste('b',banda, valor, sep='-'))
+firmas_bandas
+```
+
+```{r}
+cubetas <- firmas_bandas %>% group_by(cubeta) %>%
+           summarise(documentos = as.character(list(documento)))
+cubetas        
+```
+
+Y en este caso, correctamente concluimos que sólo hay un par similar
+(con similitud mínima 0.8)
+
+
+
+
+
+
+
+
+
+
+
+
+
