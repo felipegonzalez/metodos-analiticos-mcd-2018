@@ -61,7 +61,7 @@ agregar_hyperlift <- function(reglas, trans){
   reglas
 }
 b_reglas2 <- apriori(datos[,2:33],
-                    list(support = 0.004,
+                    list(support = 0.0045,
                          confidence = 0.1,
                          minlen = 2,
                          target='rules',
