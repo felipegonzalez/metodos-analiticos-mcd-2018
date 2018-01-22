@@ -13,6 +13,7 @@ library(ggplot2)
 library(arules)
 library(tidygraph)
 library(ggraph)
+library(arulesViz)
 ```
 
 ## Lectura y a priori
@@ -52,8 +53,6 @@ freq_ingredients <- freq_ingredients[-c(1),]
 
 ## Hyperlift
 
-Código de clase...
-
 ```{r}
 agregar_hyperlift <- function(reglas, trans){
   quality(reglas) <- cbind(quality(reglas),
@@ -62,18 +61,15 @@ agregar_hyperlift <- function(reglas, trans){
   reglas
 }
 b_reglas2 <- apriori(datos[,2:33],
-                    list(support = 0.001,
+                    list(support = 0.004,
                          confidence = 0.1,
                          minlen = 2,
                          target='rules',
                          ext = TRUE))
 b_reglas2 <- agregar_hyperlift(b_reglas2, datos[,2:33])
 b_reglas_lift2 <- subset(b_reglas2,
-                        hyper_lift > 1.75 & confidence > 0.1)
+                        hyper_lift > 3.75 & confidence > 0.1)
 reglas_f2 <- subset(b_reglas_lift2, size(b_reglas_lift2)==2)
-```
-
-```{r}
 df_reglas2 <- reglas_f2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
 df_reglas2$weight <- log(df_reglas2$hyper_lift)
 graph_1 <- as_tbl_graph(df_reglas2) %>%
@@ -87,5 +83,27 @@ ggraph(graph_1, layout = 'fr', start.temp=100) +
   geom_node_text(aes(label = name), size=4,
                  colour = 'gray20', repel=TRUE) +
   theme_graph()
+```
+
+```{r}
+plot(b_reglas2, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+```{r}
+plot(b_reglas2, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+```{r}
+filtradas_hl <- subset(b_reglas2, hyper_lift > 2)
+filtradas_lift <- subset(b_reglas2, lift > 3.7)
+qqplot(quality(filtradas_hl)$support, 
+       quality(filtradas_lift)$support, xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Soporte')
+```
+
+```{r}
+qqplot(quality(filtradas_hl)$support, 
+       quality(filtradas_lift)$support, xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Soporte')
 ```
 
