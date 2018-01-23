@@ -531,6 +531,7 @@ mean(minhashes_corpus[[4]]==minhashes_corpus[[3]])
 ```
 
 *Observación*:
+
 - El cálculo de minhashes es fácilmente escalable: por ejemplo, podemos
 procesar grupos de documentos en paralelo (enviando las funciones hash a los trabajadores) para obtener las firmas de ese bloque de documentos. ¿Cómo
 se podría hacer esto si los datos estuvieran distribuidos por renglones (tejas)?
