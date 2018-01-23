@@ -102,16 +102,16 @@ tokenize_ngrams(textos[1], n = 2)
 - Otro camino, es el k-tejas, que son k-gramas de *caracteres*
 
 ```{r, collapse= TRUE}
-shingle_chars <- function(string, lowercase = FALSE, k = 3){
+shingle_chars <- function(string, lowercase = FALSE, k = 4){
     # produce shingles (con repeticiones)
     if(lowercase) {
       string <- str_to_lower(string)
     }
     shingles <- seq(1, nchar(string) - k + 1) %>%
-        map_chr(function(x) substr(string, x, x + k))
+        map_chr(function(x) substr(string, x, x + k - 1))
     shingles
   }
-ejemplo <- shingle_chars('Este es un ejemplo', 3)
+ejemplo <- shingle_chars('Este es un ejemplo', 4)
 ejemplo
 ```
 
@@ -148,7 +148,7 @@ textos[1] <- 'el perro persigue al gato, pero no lo alcanza'
 textos[2] <- 'el gato persigue al perro, pero no lo alcanza'
 textos[3] <- 'este es el documento de ejemplo'
 textos[4] <- 'el documento habla de perros, gatos, y otros animales'
-tejas_doc <- lapply(textos, shingle_chars, k = 3)
+tejas_doc <- lapply(textos, shingle_chars, k = 4)
 sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
 sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
 sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
@@ -565,8 +565,8 @@ lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
 
 ```{r}
 jaccard_similarity(
-  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 3),
-  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 3)
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 5)
   )
 ```
 
