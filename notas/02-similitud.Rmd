@@ -709,7 +709,7 @@ cubetas_df
 
 ```{r}
 cubetas_lista <- cubetas_df$docs
-names(cubetas_lista) <- cubetas$cubeta
+names(cubetas_lista) <- cubetas_df$cubeta
 cubetas_lista
 ```
 
@@ -804,10 +804,10 @@ cubetas_df
 
 
 ```{r}
-cubetas_df <- firmas_3 %>% 
+docs_agrupados <- cubetas_df %>% 
     group_by(cubeta) %>%
     summarise(docs = list(documento)) 
-cubetas_df$docs %>% keep(function(x) length(x) > 1) %>% extraer_pares
+docs_agrupados$docs %>% keep(function(x) length(x) > 1) %>% extraer_pares
 ```
 
 Y vemos que de esta forma obtenemos los dos documentos con similitud más alta.
