@@ -574,6 +574,18 @@ jaccard_similarity(
   shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 5)
   )
 ```
+Este es un falso positivo (no tiene similitud mayor a 0.35):
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-859"]]$content, lowercase=TRUE, k = 5)
+  )
+```
+
+**Observación**: Una vez que calculamos los que tienen similitud
+aproximada > 0.35, podemos calcular la función de jaccard exacta
+para los elementos similares resultantes.
 
 
 ## Buscando vecinos cercanos
