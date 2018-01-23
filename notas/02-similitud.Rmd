@@ -413,33 +413,37 @@ necesitamos:
 - Una familia de funciones que sean fáciles de calcular, y que podamos escoger al azar entre ellas.
 - Si escogemos una función al azar de esta familia, necesitamos que la probabilidad de que $h(x)=h(y)$ para un par $x$,$y$ de tejas sea muy baja (baja probabilidad de colisión al mismo entero). En las permutaciones no tenemos colisiones.
 
-Estas son, entre otras, propiedades de (funciones hash)[https://en.wikipedia.org/wiki/Hash_function], y hay varias maneras de
+Estas son, entre otras, propiedades de [funciones hash](https://en.wikipedia.org/wiki/Hash_function), y hay varias maneras de
 construirlas.
 
 En [@mmd], por ejemplo, una sugerencia es construir una familia como sigue:
 Si tenemos $m$ posibles tejas (renglones), escogemos un primo mayor a $m$.
-En nuestro ejemplo con 110 tejas, podríamos tomar el primo 113 y hacer:
+En nuestro ejemplo con `r nrow(df)` tejas, podríamos tomar el primo 113 y hacer:
 
 ```{r}
+num_renglones <- nrow(mat_df)
 hash_simple <- function(...){
   primo <- 113
   a <- sample.int(primo - 1, 2)
   out_fun <- function(x) {
-        (((a[1]*x + a[2]) %% primo) %% 110) + 1
+        ((a[1]*(x-1) + a[2]) %% primo) + 1
     }
   out_fun
 }
-set.seed(123)
+set.seed(1323)
 hash_f <- lapply(1:20, hash_simple)
 ```
 
-**Observación**: usamos un primo en la congruencia para evitar casos
+**Observación**: 
+
+- Usamos un primo en la congruencia para evitar casos
 con muchas colisiones, por ejemplo: si por azar escogemos $10x + 7\mod 110$,
 entonces todos los mútlipos de de 11 caen en la misma cubeta 7.
 
-Veamos cómo funciona en nuestro ejemplo
+
+Veamos cómo funciona en nuestro ejemplo:
 ```{r}
-hashes <- sapply(hash_f, function(f) f(1:110))
+hashes <- sapply(hash_f, function(f) f(1:num_renglones))
 dim(hashes)
 hashes[1:10,1:5]
 ```
@@ -450,11 +454,12 @@ de arriba:
 
 ```{r}
 firmas_2 <- calc_firmas(mat_df, hashes)
+firmas_2
 mean(firmas_2[,1]==firmas_2[,2])
 mean(firmas_2[,1]==firmas_2[,3])
 mean(firmas_2[,3]==firmas_2[,4])
 hash_f <- lapply(1:20, hash_simple)
-hashes <- sapply(hash_f, function(f) f(1:110))
+hashes <- sapply(hash_f, function(f) f(1:num_renglones))
 firmas_2 <- calc_firmas(mat_df, hashes)
 mean(firmas_2[,1]==firmas_2[,2])
 mean(firmas_2[,1]==firmas_2[,3])
