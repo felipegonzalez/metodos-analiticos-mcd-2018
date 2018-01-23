@@ -764,12 +764,36 @@ Y en este caso, correctamente concluimos que sólo hay un par similar
 (con similitud mínima 0.8)
 
 
+## Tarea {-}
+
+1. (Ejercicio de [@mmd]) Considera la siguiente matriz de tejas-documentos:
+
+```{r}
+mat <- matrix(c(0,1,0,1,0,1,0,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,0,0),
+              nrow = 6, byrow = TRUE)
+colnames(mat) <- c('d_1','d_2','d_3','d_4')
+rownames(mat) <- c(0,1,2,3,4,5)
+mat
+```
+
+  - Sin permutar esta matriz, calcula la matriz de firmas minhash usando las siguientes funciones
+  hash: $h_1(x) = 2x+1\mod 6$, $h_2(x) = 3x+2\mod 6$, $h_3(x)=5x+2\mod 6$.
+Recuerda que $a\mod 6$ es el residuo que se obtiene al dividir a entre 6, por ejemplo $14\mod 6 = 2$, y usa la numeración de renglones comenzando en 0.
+  - Compara tu resultado usando el algoritmo por renglón que vimos en clase,
+    y usando el algoritmo por columna (el mínimo hash de los números de renglón que tienen un 1).
+  - ¿Cuál de estas funciones hash son verdaderas permutaciones?
+  - ¿Qué tan cerca están las similitudes de Jaccard estimadas por minhash de las verdaderas similitudes?
 
 
+2. Calcula la similitud de jaccard de las cadenas "Este es el ejemplo 1" y "Este es el ejemplo 2", usando tejas de tamaño 3.
 
+3. Funciones hash. Como vimos en clase, podemos directamente hacer hash
+de las tejas (que son cadenas de texto), en lugar de usar hashes de números enteros (número de renglón). Para lo siguiente, puedes usar la función *hash_string* del paquete *textreuse* (o usar la función  *pyhash.murmur3_32* de la librería *pyhash*):
 
-
-
+ - Calcula valores hash de algunas cadenas como 'a', 'Este es el ejemplo 1', 'Este es el ejemplo 2'. 
+ - Calcula los valores hash para las tejas de tamaño 3 de 'Este es el ejemplo 1'. ¿Cuántos valores obtienes?
+ - Calcula el valor minhash de la cadena anterior. Repite para la cadena 'Este es el ejemplo 2', y usa este minhash para estimar la similitud de jaccard (en general usamos más funciones minhash para tener una buena estimación, no solo una!).
+- Para hacer en clase: repite usando 10 funciones minhash (puedes usar *minhash_generator* de *textreuse*, o usar distintas semillas para *pyhash.murmur3_32*).
 
 
 
