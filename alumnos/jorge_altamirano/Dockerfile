@@ -4,6 +4,7 @@ RUN install2.r --error \
 	--deps TRUE \
 	sparklyr
 
+RUN r -e 'devtools::install_github("rstudio/sparklyr")'
 RUN r -e 'sparklyr::spark_install()'
 
 RUN mkdir /home/rstudio/.cache \
