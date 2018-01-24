@@ -56,7 +56,7 @@ Si la similitud de jaccard de dos documentos es $s$, la probabilidad
 de que sean un par candidato es igual a $$1-(1-s^r)^b$$.
 ```
 
-### Ejemplos
+### Ejemplo {-}
 Supongamos que tenemos 8 minhashes, y que nos
 interesa encontrar documentos con similitud mayor a 0.7. 
 Tenemos las siguientes posiblidades:
@@ -117,7 +117,7 @@ dependiendo de que similitud nos interesa capturar (quizá moviendo un poco
 hacia abajo si queremos tener menos falsos negativos).
 
 
-### Ejemplo {--}
+### Ejemplo {-}
 
 Supongamos que nos interesan documentos con similitud mayor a 0.5,
 con 50 o 100 hashes:
@@ -146,5 +146,33 @@ Con 120 hashes podemos obtener curvas con mayor pendiente:
 graficar_curvas(combinaciones_120)
 ```
 
+**Observación**: La decisión de los valores para estos parámetros
+debe balancear qué tan importante es tener pares no detectados,
+y el cómputo necesario para calcular los hashes y filtrar los
+falsos positivos.
+
+
+## Resumen de LSH basado en minhashing
+
+Resumen de [@mmd]
+
+1. Escogemos un número $k$ de tamaño de tejas, y construimos el
+conjunto de tejas de cada documento. Si es necesario las tejas
+pueden hashearse a números de tamaño razonable.
+2. Ordenar los pares documento-teja y agrupar por teja.
+3. Escoger $n$, el número de minhashes. Aplicamos el algoritmo de la
+clase anterior (teja por teja) para calcular las 
+firmas minhash de todos los documentos.
+4. Escoger el umbral $s$ de similitud que nos ineresa. Escogemos $b$ y $r$
+(número de bandas y de qué tamaño), usando la fórmula de arriba hasta
+obtener un valor cercano al umbral. 
+Si es importante evitar falsos negativos, escoger valores de b y r que
+den un umbral más bajo, si la velocidad es importante entonces escoger
+para un umbral más alto y evitar falsos positivos.
+5. Construir pares similares usando LSH
+6. Examinar las firmas de cada par candidato y determinar si 
+la fracción de coincidencias sobre todos los minhashes es satisfactorio.
+Alternativamente (más preciso), calcular directamente la similitud 
+de jaccard a partir de las tejas originales. 
 
 
