@@ -102,16 +102,16 @@ tokenize_ngrams(textos[1], n = 2)
 - Otro camino, es el k-tejas, que son k-gramas de *caracteres*
 
 ```{r, collapse= TRUE}
-shingle_chars <- function(string, lowercase = FALSE, k = 3){
+shingle_chars <- function(string, lowercase = FALSE, k = 4){
     # produce shingles (con repeticiones)
     if(lowercase) {
       string <- str_to_lower(string)
     }
     shingles <- seq(1, nchar(string) - k + 1) %>%
-        map_chr(function(x) substr(string, x, x + k))
+        map_chr(function(x) substr(string, x, x + k - 1))
     shingles
   }
-ejemplo <- shingle_chars('Este es un ejemplo', 3)
+ejemplo <- shingle_chars('Este es un ejemplo', 4)
 ejemplo
 ```
 
@@ -148,7 +148,7 @@ textos[1] <- 'el perro persigue al gato, pero no lo alcanza'
 textos[2] <- 'el gato persigue al perro, pero no lo alcanza'
 textos[3] <- 'este es el documento de ejemplo'
 textos[4] <- 'el documento habla de perros, gatos, y otros animales'
-tejas_doc <- lapply(textos, shingle_chars, k = 3)
+tejas_doc <- lapply(textos, shingle_chars, k = 4)
 sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
 sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
 sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
@@ -413,33 +413,37 @@ necesitamos:
 - Una familia de funciones que sean fáciles de calcular, y que podamos escoger al azar entre ellas.
 - Si escogemos una función al azar de esta familia, necesitamos que la probabilidad de que $h(x)=h(y)$ para un par $x$,$y$ de tejas sea muy baja (baja probabilidad de colisión al mismo entero). En las permutaciones no tenemos colisiones.
 
-Estas son, entre otras, propiedades de (funciones hash)[https://en.wikipedia.org/wiki/Hash_function], y hay varias maneras de
+Estas son, entre otras, propiedades de [funciones hash](https://en.wikipedia.org/wiki/Hash_function), y hay varias maneras de
 construirlas.
 
 En [@mmd], por ejemplo, una sugerencia es construir una familia como sigue:
 Si tenemos $m$ posibles tejas (renglones), escogemos un primo mayor a $m$.
-En nuestro ejemplo con 110 tejas, podríamos tomar el primo 113 y hacer:
+En nuestro ejemplo con `r nrow(df)` tejas, podríamos tomar el primo 113 y hacer:
 
 ```{r}
+num_renglones <- nrow(mat_df)
 hash_simple <- function(...){
   primo <- 113
   a <- sample.int(primo - 1, 2)
   out_fun <- function(x) {
-        (((a[1]*x + a[2]) %% primo) %% 110) + 1
+        ((a[1]*(x-1) + a[2]) %% primo) + 1
     }
   out_fun
 }
-set.seed(123)
+set.seed(1323)
 hash_f <- lapply(1:20, hash_simple)
 ```
 
-**Observación**: usamos un primo en la congruencia para evitar casos
+**Observación**: 
+
+- Usamos un primo en la congruencia para evitar casos
 con muchas colisiones, por ejemplo: si por azar escogemos $10x + 7\mod 110$,
 entonces todos los mútlipos de de 11 caen en la misma cubeta 7.
 
-Veamos cómo funciona en nuestro ejemplo
+
+Veamos cómo funciona en nuestro ejemplo:
 ```{r}
-hashes <- sapply(hash_f, function(f) f(1:110))
+hashes <- sapply(hash_f, function(f) f(1:num_renglones))
 dim(hashes)
 hashes[1:10,1:5]
 ```
@@ -450,11 +454,12 @@ de arriba:
 
 ```{r}
 firmas_2 <- calc_firmas(mat_df, hashes)
+firmas_2
 mean(firmas_2[,1]==firmas_2[,2])
 mean(firmas_2[,1]==firmas_2[,3])
 mean(firmas_2[,3]==firmas_2[,4])
 hash_f <- lapply(1:20, hash_simple)
-hashes <- sapply(hash_f, function(f) f(1:110))
+hashes <- sapply(hash_f, function(f) f(1:num_renglones))
 firmas_2 <- calc_firmas(mat_df, hashes)
 mean(firmas_2[,1]==firmas_2[,2])
 mean(firmas_2[,1]==firmas_2[,3])
@@ -467,7 +472,23 @@ Podemos usar mejores funciones hash, que no requieren de ajustar
 parámetros para cada problema, como en el paquete textreuse [@R-textreuse], 
 que utiliza  hashes de cadenas (que serán las tejas) a los enteros, y
  y utiliza como base función hash ampliamente probada 
- (De librerías de Boost para C++):
+ (De librerías de Boost para C++). Por ejemplo, la función *hash_string*
+ del paquete *textreuse*:
+ 
+```{r, collapse = TRUE}
+hash_string('a')
+hash_string('El perro persigue al gato') 
+hash_string('El perro persigue al gat') 
+``` 
+
+Y por ejempo, si mapeamos las tejas de un documento, los hashes
+correspondientes para esta función son:
+
+```{r}
+hash_string(shingle_chars('El perro persigue al gato'))
+```
+
+
 
 ```{block2, type='resumen'}
 **Min-hashing** (con permutaciones)
@@ -510,6 +531,7 @@ mean(minhashes_corpus[[4]]==minhashes_corpus[[3]])
 ```
 
 *Observación*:
+
 - El cálculo de minhashes es fácilmente escalable: por ejemplo, podemos
 procesar grupos de documentos en paralelo (enviando las funciones hash a los trabajadores) para obtener las firmas de ese bloque de documentos. ¿Cómo
 se podría hacer esto si los datos estuvieran distribuidos por renglones (tejas)?
@@ -565,10 +587,22 @@ lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
 
 ```{r}
 jaccard_similarity(
-  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 3),
-  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 3)
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 5)
   )
 ```
+Este es un falso positivo (no tiene similitud mayor a 0.35):
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-859"]]$content, lowercase=TRUE, k = 5)
+  )
+```
+
+**Observación**: Una vez que calculamos los que tienen similitud
+aproximada > 0.35, podemos calcular la función de jaccard exacta
+para los elementos similares resultantes.
 
 
 ## Buscando vecinos cercanos
@@ -730,12 +764,36 @@ Y en este caso, correctamente concluimos que sólo hay un par similar
 (con similitud mínima 0.8)
 
 
+## Tarea {-}
+
+1. (Ejercicio de [@mmd]) Considera la siguiente matriz de tejas-documentos:
+
+```{r}
+mat <- matrix(c(0,1,0,1,0,1,0,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,0,0),
+              nrow = 6, byrow = TRUE)
+colnames(mat) <- c('d_1','d_2','d_3','d_4')
+rownames(mat) <- c(0,1,2,3,4,5)
+mat
+```
+
+  - Sin permutar esta matriz, calcula la matriz de firmas minhash usando las siguientes funciones
+  hash: $h_1(x) = 2x+1\mod 6$, $h_2(x) = 3x+2\mod 6$, $h_3(x)=5x+2\mod 6$.
+Recuerda que $a\mod 6$ es el residuo que se obtiene al dividir a entre 6, por ejemplo $14\mod 6 = 2$, y usa la numeración de renglones comenzando en 0.
+  - Compara tu resultado usando el algoritmo por renglón que vimos en clase,
+    y usando el algoritmo por columna (el mínimo hash de los números de renglón que tienen un 1).
+  - ¿Cuál de estas funciones hash son verdaderas permutaciones?
+  - ¿Qué tan cerca están las similitudes de Jaccard estimadas por minhash de las verdaderas similitudes?
 
 
+2. Calcula la similitud de jaccard de las cadenas "Este es el ejemplo 1" y "Este es el ejemplo 2", usando tejas de tamaño 3.
 
+3. Funciones hash. Como vimos en clase, podemos directamente hacer hash
+de las tejas (que son cadenas de texto), en lugar de usar hashes de números enteros (número de renglón). Para lo siguiente, puedes usar la función *hash_string* del paquete *textreuse* (o usar la función  *pyhash.murmur3_32* de la librería *pyhash*):
 
-
-
+ - Calcula valores hash de algunas cadenas como 'a', 'Este es el ejemplo 1', 'Este es el ejemplo 2'. 
+ - Calcula los valores hash para las tejas de tamaño 3 de 'Este es el ejemplo 1'. ¿Cuántos valores obtienes?
+ - Calcula el valor minhash de la cadena anterior. Repite para la cadena 'Este es el ejemplo 2', y usa este minhash para estimar la similitud de jaccard (en general usamos más funciones minhash para tener una buena estimación, no solo una!).
+- Para hacer en clase: repite usando 10 funciones minhash (puedes usar *minhash_generator* de *textreuse*, o usar distintas semillas para *pyhash.murmur3_32*).
 
 
 
