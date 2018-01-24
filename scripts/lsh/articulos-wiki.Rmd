@@ -3,10 +3,10 @@ title: "Artículos similares de wikipedia"
 output: html_notebook
 ---
 
-Este ejemplo es tomado de un [curso anterior](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb).
+Este ejemplo es tomado de un [curso anterior, versión de python](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb).
 
 El objetivo es encontrar artículos similares usando las categorías 
-a las que pertenecen.
+a las que pertenecen. Vamos a usar las herramientas de spark para LSH:
 
 ```{r}
 library(sparklyr)
@@ -20,6 +20,8 @@ archivo <- spark_read_csv(sc, 'wiki', path = path, delimiter = ' ',
 archivo %>% head(20)
 ```
 
+Agrupamos las categorías en una lista, y luego las convertimos
+en vectores de 0's y 1's, que es lo que usa la función [LSH de spark](https://spark.apache.org/docs/2.1.0/ml-features.html#minhash-for-jaccard-distance):
 
 ```{r}
 wiki <- archivo %>%
@@ -29,15 +31,16 @@ wiki <- archivo %>%
         ft_string_indexer('article','id')
 ```
 
+Aplicamos lsh basado en minhashes:
 
 ```{r}
 lsh_wiki <- ft_minhash_lsh(sc, 'vector', 'hashes', 
-                           bucket_length = 5,
-                           num_hash_tables = 3,
+                           bucket_length = 10,   #r
+                           num_hash_tables = 5, #b
                            dataset = wiki)
 ```
 
-
+Calculamos similares al artículo "Submarine":
 
 ```{r}
 library(tidyr)
@@ -48,14 +51,12 @@ similares <- ml_approx_nearest_neighbors(lsh_wiki,
 similares
 ```
 
-Y notamos un par que en realidad tiene similitud cero, pero
-en nuestra aproximación no:
+
 
 ```{r}
-ejemplos <- wiki %>% filter(article =='Submarine' | article =='Slide_rule') %>% 
+ejemplos <- wiki %>% filter(article =='Slide_rule') %>% 
   collect() %>% select(article, lista) 
 ejemplos$lista[[1]]
-ejemplos$lista[[2]]
 ```
 ```{r}
 library(tidyr)
