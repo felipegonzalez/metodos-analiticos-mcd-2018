@@ -1,0 +1,54 @@
+# Similitud: Locality sensitive hashing
+
+En esta parte continuaremos con la búsqueda de pares similares
+para colecciones de textos, y después mostraremos cómo aplicar
+estas técnicas para otras medidas de distancia  (como distancia
+euclideana y coseno). 
+
+Como vimos en la parte anterior, la técnica de LSH (locality sensitive
+hashing) consiste en poner en cubetas a elementos que tengan 
+hashes similares. Si diseñamos correctamente el método, entonces
+no es necesario hacer todas las comparaciones entre los pares,
+y basta examinar los elementos que compartan cubeta con otros elementos
+(eliminando la mayor parte de las cubetas que tendrán solo un elemento).
+
+
+## Análisis de la técnica de bandas 
+
+En la sección anterior dimos la primera idea como usar
+la *técnica de bandas* con minhashes para encontrar documentos de similitud alta, con distintos umbrales de similitud alta. Aquí describimos un análisis
+más detallado de la técncia
+
+```{block2 , type='resumen'}
+Supongamos que tenemos un total de $k$ minhashes, que dividimos
+en $b$ bandas de tamaño $r$, de modo que $k=br$. 
+
+- Decimos que un par de documentos *coinciden* en una banda de $r$ hashes
+si coinciden en todos los hashes de esa banda.
+
+- Un par de documentos es un **par candidato** si 
+por al menos coinciden en una banda (es decir, en al menos dentro
+de una banda todos los hashes coinciden).
+
+```
+
+Ahora vamos a calcular la probabilidad de que un par de documentos
+con similitud $s$ sea un par candidato:
+
+1. La probabilidad de que estos dos documentos coincidan en un hash
+particular es $s$, la similitud de Jaccard.
+2. La probabiliad de que todos los hashes de una banda coincidan es
+$s^r$, pues seleccionamos los hashes independientemente. 
+3. Así que la probabilidad de que los documentos no coincidan en una banda
+particular es:
+es $1-s^r$
+4. Esto implica que la probabilidad de que los documentos no coincidan en ninguna banda es $(1-s^r)^b$.
+5. Finalmente, la probabilidad de que estos dos documentos sea un par candidato es $1-(1-s^r)^b$, que es la probabilidad de que coincidan en al menos una banda.
+
+```{block2, type='resumen'}
+Si la similitud de jaccard de dos documentos es $s$, la probabilidad
+de que sean un par candidato es igual a $$1-(1-s^r)^b$$.
+```
+
+
+
