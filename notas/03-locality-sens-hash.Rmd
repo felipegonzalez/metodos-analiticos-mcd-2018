@@ -267,7 +267,11 @@ shingle_chars <- function(string, lowercase = FALSE, k = 3){
     shingles
 }
 minhashes <- minhash_generator(60, seed = 1223)
-textos <- as.character(articulos_df$categorias)
+# esta línea solo es necesaria porque TextReuseCorpus espera una
+# línea de texto, no un vector de tokens.
+textos <- articulos_df$categorias %>% lapply(function(x){
+  paste(x, collapse = ' ')
+}) %>% as.character
 names(textos) <- articulos_df$articulo
 system.time(
 wiki_corpus <-  TextReuseCorpus(
@@ -292,6 +296,21 @@ lsh_wiki <- lsh(wiki_corpus, bands = 20)
 ```{r}
 lsh_wiki %>% sample_n(20)
 ```
+
+**Observación**: en la parte anterior sugerimos que podíamos
+normalizar los nombres de las cubetas. Esto también lo podemos
+hacer con funciones hash. Podemos usar por ejemplo el algoritmo *md5*,
+que está implementado para hacer hashes de objetos de R arbitrarios.
+
+```{r}
+library(digest)
+digest(c(-2341, 2221 , 21112))
+digest(c('una' , 'dos'))
+x <- c(0,1); y <- c(2,3)
+a <- lm(y~x)
+digest(a)
+```
+
 
 Agrupamos por cubetas y filtramos las cubetas con más de un documento:
 
@@ -365,7 +384,7 @@ lsh_query(lsh_wiki, 'Icosahedron') %>%
 
 
 
-### Filtrar falsos positivos:
+### Filtrar falsos positivos {-}
 
 Y también podemos preprocesar todos los candidatos y eliminar
 los falsos positivos:
