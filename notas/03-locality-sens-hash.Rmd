@@ -39,7 +39,7 @@ de una banda todos los hashes coinciden).
 ```
 
 Ahora vamos a calcular la probabilidad de que un par de documentos
-con similitud $s$ sea un par candidato:
+con similitud $s$ sean un par candidato:
 
 1. La probabilidad de que estos dos documentos coincidan en un hash
 particular es $s$, la similitud de Jaccard.
@@ -49,7 +49,7 @@ $s^r$, pues seleccionamos los hashes independientemente.
 particular es:
 es $1-s^r$
 4. Esto implica que la probabilidad de que los documentos no coincidan en ninguna banda es $(1-s^r)^b$.
-5. Finalmente, la probabilidad de que estos dos documentos sea un par candidato es $1-(1-s^r)^b$, que es la probabilidad de que coincidan en al menos una banda.
+5. Finalmente, la probabilidad de que estos dos documentos sean un par candidato es $1-(1-s^r)^b$, que es la probabilidad de que coincidan en al menos una banda.
 
 ```{block2, type='resumen'}
 Si la similitud de jaccard de dos documentos es $s$, la probabilidad
@@ -63,7 +63,8 @@ de que sean un par candidato es igual a $$1-(1-s^r)^b$$.
 Supongamos que tenemos 8 minhashes, y que nos
 interesa encontrar documentos con similitud mayor a 0.7. 
 Tenemos las siguientes posiblidades:
-```{r, fig.width=4, fig.asp=0.6}
+
+```{r, fig.width=4, fig.asp=0.6, echo = FALSE}
 graficar_curvas <- function(df_br, colour = TRUE){
   r <- df_br$r
   b <- df_br$b
@@ -87,17 +88,20 @@ graficar_curvas <- function(df_br, colour = TRUE){
                  
   graf_salida
 }
+```
+
+```{r}
 r <- c(1,2,4,8)
 df_br <- data_frame(r = r, b = rev(r))
 graficar_curvas(df_br) + 
                  geom_vline(xintercept = 0.7)
 ```
 
-- Con la configuración $r=8, b=1$ (un solo grupo de 8 hashes) es posible
+- Con la configuración $b=1, r=8$ (un solo grupo de 8 hashes) es posible
 que no capturemos muchos pares de la similitud que nos interesa.
-- Con $r=1, b=8$ (al menos un hash de los 8), dejamos pasar 
+- Con $b=8, r=1$ (al menos un hash de los 8), dejamos pasar 
 demasiados falsos positivos, que después vamos a tener que filtrar.
-- Los otros dos casos son mejores para nuestro propósito. $r=2$ produce falsos negativos que hay que filtrar, y para $r=4$ hay una probabilidad de alrededor de 50\%
+- Los otros dos casos son mejores para nuestro propósito. $b=4$ produce falsos negativos que hay que filtrar, y para $b=2$ hay una probabilidad de alrededor de 50\%
 de que no capturemos pares con similitud cercana a 0.7
 
 Generalmente quisiéramos obtener algo más cercano a una función escalón.
@@ -137,7 +141,7 @@ textreuse::lsh_threshold(20,5)
 ### Ejemplo {-}
 
 Supongamos que nos interesan documentos con similitud mayor a 0.5,
-con 50 o 100 hashes:
+con 50 o 120 hashes:
 Algunas combinaciones que podemos tratar son:
 
 ```{r, fig.width=5, fig.asp=0.6}
@@ -153,8 +157,8 @@ params_umbral <- function(num_hashes, umbral_inf, umbral_sup){
   combinaciones_pr
 }
 
-combinaciones_50 <- params_umbral(50, 0.0, 0.5)
-combinaciones_120 <- params_umbral(120, 0.0, 0.5)
+combinaciones_50 <- params_umbral(50, 0.2, 0.6)
+combinaciones_120 <- params_umbral(120, 0.2, 0.5)
 
 graficar_curvas(combinaciones_50)
 ```
@@ -436,3 +440,123 @@ lsh_query(lsh_wiki, 'Ghana') %>%
   left_join(candidatos_finales) %>%
   filter(!is.na(score))
 ```
+
+
+## Medidas de distancia
+
+La técnica de LSH puede aplicarse a otras medidas de distancia, con
+otras formas de hacer hash diferente del minhash. La definición
+de distancia puedes consultarla [aquí](https://en.wikipedia.org/wiki/Metric_(mathematics))
+
+### Distancia de Jaccard
+
+Puede definirse simplemente como 
+$$1-sim(a,b),$$
+donde $a$ y $b$ son conjuntos.
+
+### Distancia euclideana
+
+Es la distancia más común para vectores de números reales:
+
+Si $x=(x_1,\ldots, x_p)$ y $y=(y_1,\ldots, y_p)$ son dos vectores,
+su norma $L_2$ está dada por
+
+$$ d(x,y) = \sqrt{\sum_{i=1}^p (x_i-y_i)^2  } = ||x-y||$$
+
+### Distancia coseno
+
+La distancia coseno, definida también para vectores de números reales, no toma en cuenta la magnitud de vectores, sino solamente su dirección.
+
+La similitud coseno se define primero como
+$$sim_{cos}(x,y) = \frac{<x, y>}{||x||||y||} = \cos (\theta)$$
+donde $<x, y> = \sum_{i=1}^p x_iy_i$ es el producto punto de $x$ y $y$. Esta cantidad es igual al coseno del ángulo entre los vectores $x$ y $y$ (¿por qué?).
+
+
+La
+distancia coseno es entones
+$$d_{cos}(x,y) = 1- sim_{cos}(x,y).$$
+
+Esta distancia es útil cuando el tamaño general de los vectores no nos importa. Como veremos más adelante, una aplicación usual es comparar
+documentos según las frecuencias de los términos que contienen: en este
+caso, nos importa más la frecuencia relativa de los términos que su frecuencia absoluta (pues esta última también refleja la el tamaño de los documentos).
+
+A veces se utiliza la distancia angular (medida con un número entre 0 y 180), que se obtiene de la distancia coseno, es decir,
+$$d_a(x,y) = \theta,$$
+donde $\theta$ es tal que $\cos(\theta) = d_{cos}(x,y).$
+
+### Distancia de edición
+
+Esta es una medida útil para medir distancia entre cadena. La
+distancia de edición entre dos cadenas $x=x_1\cdots x_n$ y 
+$y=y_1\cdots y_n$ es el número mínimo de inserciones y eliminaciones (un caracter a la vez) para convertir a $x$ en $y$. 
+
+Por ejemplo, la distancia entre "abcde" y "cefgh" se calcula como
+sigue: para pasar de la primera cadena, necesitamos agregar f, g y h (3 adiciones), eliminar d, y eliminar a,b (3 eliminaciones). La distancia entre estas dos cadenas es 6.
+
+
+## Teoría de funciones sensibles a la localidad
+
+Vimos como la familia de funciones minhash puede combinarse (usando 
+la técnica d bandas) para discriminar entre pares de baja similitud
+y de alta similitud.
+
+En esta parte consideramos otras posibles familias de funciones para lograr 
+lo mismo (hacer LSH), bajo otras medidas de distancia. Veamos las características básicas de las funciones minhash:
+
+ 1. Cuando la distancia entre dos elementos $x,y$ es baja (similitud alta),
+ entonces $f(x)=f(y)$ tiene probabilidad alta.
+ 2. Podemos escoger varias funciones minhash $f_1,\ldots,f_k$ con la propiedad anterior, de manera independiente, de forma que es posible calcular
+ la probabilidad de $f_1(x)=f_1(y)$ y $f_2(x)=f_2(y)$, etc.
+ 3. Tienen que ser relativamente fácil de calcular (comparado con calcular todos los posibles pares y sus distancias directamente).
+ 
+ 
+## Funciones sensibles a la localidad
+
+Sean $d_1,d_2>0$ dos valores (que interpretamos como distancias).
+
+Una familia ${\cal F}$ es una familia $d_1,d_2,p_1,p_2$ sensible a localidad
+cuando para cualquier par de elementos$x,y$,
+
+1. Si $d(x,y)\leq d_1$, entonces la probabilidad  $P(f(x)=f(y))\geq p_1$.
+2. Si $d(x,y)\geq d_2$, entonces $P(f(x)=f(y))\leq p_2$
+
+Nótese que las probabilidades están dadas sobre la selección de $f$.
+
+```{r}
+x_1 <- seq(0, 1, 0.01)
+x_2 <- seq(2, 3, 0.01)
+y_1 <- -1*x_1 + 2.5
+y_2 <- 2/x_2
+
+dat_g <- data_frame(x=c(x_1,x_2),y=c(y_1,y_2))
+ggplot(dat_g, aes(x=x, y=y)) + geom_point(size=0.5) +
+  geom_vline(xintercept=c(1,2), linetype="dotted") +
+  geom_hline(yintercept=c(1,1.5), linetype="dotted") +
+  scale_x_continuous(breaks = c(1,2), labels = c('d_1','d_2')) +
+  scale_y_continuous(breaks = c(1,1.5), labels = c('p_1','p_2')) +
+  labs(x = 'Distancia', y ='Probabilidad de candidato')
+```
+
+### Distancia jaccard
+
+Supongamos que tenemos dos documentos $x,y$. Si ponemos por ejemplo
+$d_1=0.2$ y $d_2= 0.5$, tenemos que 
+si $d(x,y) = 1-sim(x,y) \leq 0.2$, entonces
+$sim(x,y)\geq 0.8$, y entonces
+$$P(f(x) = f(y)) = sim(x,y) \geq 0.8$$
+Igualmente, si $d(x,y)=1-sim(x,y) \geq 0.5$, entonces
+$$P(f(x) = f(y)) = sim(x,y) \leq 0.5$$
+de modo que la familia de minhashes es $(0.2,0.5,0.8,0.5)$ sensible a la
+localidad
+
+```{block2, type='resumen'}
+La familia de funciones minhash es una familia 
+$(d_1, d_2, 1-d_1, 1-d_2)$ sensible a la localidad para cualquier
+$d_1\leq d_2$.
+
+```
+
+## Amplificación de familias sensibles a la localidad
+
+
+
