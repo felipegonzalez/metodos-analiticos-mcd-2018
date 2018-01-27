@@ -1,0 +1,125 @@
+---
+title: "Análisis de instacart"
+output:
+  html_document:
+    df_print: paged
+---
+
+Aquí vemos un ejemplo con 3 millones de canastas y unos 16 mil productos, usando
+spark. Para correr este ejemplo de forma distribuida necesitas spark en un cluster
+([aquí](http://spark.rstudio.com/examples/) hay ejemplos de cómo hacerlo).
+Estos ejemplos todavía se pueden correr con *arules* y alrededor de 4G de memoria,
+
+Puedes bajar el archivo con 3 millones de transacciones de 
+ https://s3.amazonaws.com/ma-instacart/order_products__prior.csv
+ 
+Empieza primero con el archivo más chico:
+ https://s3.amazonaws.com/ma-instacart/order_products__train.csv
+
+Puedes correr esto en el contenedor de la clase, o directamente en tu 
+máquina haciendo una (instalación local de spark )[http://spark.rstudio.com]
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ggraph)
+library(tidygraph)
+library(readr)
+```
+
+```{r, engine = 'bash'}
+head -5 ../datos/instacart-kaggle/order_products__prior.csv
+```
+
+```{r}
+library(sparklyr)
+config <- spark_config()
+# configuración para modo local:
+config$`sparklyr.shell.driver-memory` <- "4G"
+sc <- spark_connect(master = "local", config = config)
+```
+
+```{r}
+instacart_df <- spark_read_csv(sc, 'instacart', 
+                path='../datos/instacart-kaggle/order_products__prior.csv',
+                memory = FALSE,
+                repartition = 10,
+                overwrite = TRUE) %>%
+                select(order_id, product_id)
+instacart_df %>% head(10)
+```
+
+Podemos calcular en spark los productos más frecuentes:
+
+```{r}
+productos_df <- read_csv('../datos/instacart-kaggle/products.csv')            
+prods_frec <- instacart_df %>% 
+              group_by(product_id) %>%
+              tally() %>% collect() %>%
+              left_join(productos_df) %>%
+              arrange(desc(n))
+DT::datatable(prods_frec %>% head(1000))
+```
+
+Procesamos las canastas en spark para ponerlas en forma de lista:
+
+
+```{r}
+canastas_df <- instacart_df %>% 
+            group_by(order_id) %>%
+            summarise(products = collect_list(product_id)) 
+
+num_transacciones <- canastas_df %>% tally
+num_transacciones
+```
+
+
+Podemos invocar el algoritmo FPGrowth implementado en spark (ver http://www.borgelt.net/doc/fpgrowth/fpgrowth.html, https://github.com/longhowlam/BitsAndPieces, )
+
+
+
+```{r}
+modelo <- ml_fpgrowth(canastas_df, 
+                      items_col='products', 
+                      min_confidence = 0.10,
+                      min_support = 0.005)
+itemsets <- modelo$freq_itemsets %>% collect()
+```
+
+Y preparamos código para poner las etiquetas a los ids de productos:
+
+```{r itemsets, collapse = TRUE}
+productos_list <- productos_df$product_name
+names(productos_list) <- productos_df$product_id
+
+get_names <- function(x){
+    productos_list[unlist(x)] %>%
+    paste(collapse = '-') 
+}
+```
+
+
+
+```{r}
+itemsets <- itemsets %>% 
+            mutate(items = map(items, get_names))
+DT::datatable(itemsets %>% arrange(desc(freq)))
+```
+
+Y hacemos lo mismo con las reglas:
+
+```{r rules}
+reglas <- modelo$association_rules %>% collect() 
+```
+
+
+
+```{r}
+reglas <- reglas %>%
+          mutate(antecedent = map_chr(antecedent, get_names)) %>%
+          mutate(consequent = map_chr(consequent, get_names))
+DT::datatable(reglas)
+```
+
+Ahora podemos hacer distintas uniones con estas tablas para calcular
+medidas como lift, graficar, etc.
+
