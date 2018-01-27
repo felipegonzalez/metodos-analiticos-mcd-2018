@@ -1,6 +1,8 @@
 ---
-title: "Sesión 1: 2018/01/15"
-output: html_notebook
+title: 'Sesión 1: 2018/01/15'
+output:
+  html_document:
+    df_print: paged
 ---
 
 _175904 - Jorge III Altamirano Astorga_

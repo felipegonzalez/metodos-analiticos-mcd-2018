@@ -1,0 +1,9 @@
+---
+title: "Sesión 2 2018/01/22"
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
