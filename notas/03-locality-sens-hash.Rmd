@@ -495,7 +495,7 @@ de cálculo:
 ```{r}
 df_1 <- data_frame(a = unlist(hash_categorias$articulo))
 wiki_candidatos_noid <- wiki_candidatos %>%
-                       n anti_join(df_1) %>%
+                        anti_join(df_1) %>%
                         anti_join(df_1 %>% rename(b=a)) 
 qplot(wiki_candidatos_noid$score)
 ```
