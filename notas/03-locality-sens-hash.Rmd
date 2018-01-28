@@ -416,7 +416,7 @@ wiki_candidatos %>% sample_n(20)
 
 ```{r}
 qplot(wiki_candidatos$score)
-candidatos_finales <- filter(wiki_candidatos, score > 0.3)
+candidatos_finales <- filter(wiki_candidatos, score > 0.4)
 nrow(candidatos_finales)
 ```
 
@@ -495,7 +495,7 @@ de cálculo:
 ```{r}
 df_1 <- data_frame(a = unlist(hash_categorias$articulo))
 wiki_candidatos_noid <- wiki_candidatos %>%
-                        anti_join(df_1) %>%
+                       n anti_join(df_1) %>%
                         anti_join(df_1 %>% rename(b=a)) 
 qplot(wiki_candidatos_noid$score)
 ```
@@ -571,15 +571,27 @@ lo mismo (hacer LSH), bajo otras medidas de distancia. Veamos las característic
  
 ## Funciones sensibles a la localidad
 
-Sean $d_1,d_2>0$ dos valores (que interpretamos como distancias).
 
-Una familia ${\cal F}$ es una familia $d_1,d_2,p_1,p_2$ sensible a localidad
-cuando para cualquier par de elementos$x,y$,
+```{block2, type='resumen'}
+Sean $d_1<d_2$ dos valores (que interpretamos como distancias).
+
+Una familia ${\cal F}$ es una familia $d_1,d_2,p_1,p_2$,  sensible a localidad
+(con $p_1>p_2$) cuando para cualquier par de elementos$x,y$,
 
 1. Si $d(x,y)\leq d_1$, entonces la probabilidad  $P(f(x)=f(y))\geq p_1$.
 2. Si $d(x,y)\geq d_2$, entonces $P(f(x)=f(y))\leq p_2$
 
 Nótese que las probabilidades están dadas sobre la selección de $f$.
+```
+  
+
+
+Estas condiciones se interpretan como sigue: cuando $x$ y $y$ están
+suficientemente cerca ($d_1$), la probabilidad de que sean mapeados al mismo valor
+por una función $f$ de la familia es alta.  Cuando $x$ y $y$ están lejos
+$d_2$, entonces, la probabilidad de que sean mapeados al mismo valor es baja.
+Podemos ver una gráfica:   
+
 
 ```{r}
 x_1 <- seq(0, 1, 0.01)
@@ -592,7 +604,7 @@ ggplot(dat_g, aes(x=x, y=y)) + geom_point(size=0.5) +
   geom_vline(xintercept=c(1,2), linetype="dotted") +
   geom_hline(yintercept=c(1,1.5), linetype="dotted") +
   scale_x_continuous(breaks = c(1,2), labels = c('d_1','d_2')) +
-  scale_y_continuous(breaks = c(1,1.5), labels = c('p_1','p_2')) +
+  scale_y_continuous(breaks = c(1,1.5), labels = c('p_2','p_1')) +
   labs(x = 'Distancia', y ='Probabilidad de candidato')
 ```
 
@@ -609,7 +621,8 @@ de modo que la familia de minhashes es $(0.2,0.5,0.8,0.5)$ sensible a la
 localidad
 
 ```{block2, type='resumen'}
-La familia de funciones minhash es una familia 
+Para cualquier $d_1 < d_2$,
+la familia de funciones minhash es una familia 
 $(d_1, d_2, 1-d_1, 1-d_2)$ sensible a la localidad para cualquier
 $d_1\leq d_2$.
 ```
@@ -631,7 +644,7 @@ corresponde a una banda de la técnica de LSH.
 
 La nueva familia ${\cal F}'$ es $(d_1,d_2,p_1^r,p_2^r)$ sensible a la localidad. Nótese que las probabilidades siempre se hacen más chicas
 cuando incrementamos $r$, lo que hace más fácil discriminar pares
-con similitudes en niveles bajos (por ejemplo, rechazar 0.1 y aceptar 0.3).
+con similitudes en niveles bajos.
 
 
 Podemos también hacer **disyunción** de una familia  ${\cal F}$. En este
@@ -654,8 +667,8 @@ la probabilidad $1-(1-p_1^r)^b$ permanece cercana a 1,
 pero $1-(1-p_2^r)^b$ está cerca de cero.
 
 - Combinando estas operaciones usando la técnica de bandas
-podemos construir una famlia que discrimine tan fuertemente como
-queramos entre distancias menores a $d_1$ y distancias mayores a $d_2$.
+podemos construir una famlia que discrimine de manera distinta
+entre distancias menores a $d_1$ y distancias mayores a $d_2$.
 
 - El costo incurrido es que tenemos que calcular más funciones para
 discriminar mejor.
@@ -687,8 +700,9 @@ print(df)
 ```
 
 Consideremos dos vectores, y supongamos que el ángulo entre ellos
-es chico. Entonces, si escogemos un hiperplano al azar, los más
-probable es que queden del mismo lado del hiperplano. Si los vectores
+es chico. Si escogemos un hiperplano al azar, lo más
+probable es que queden del mismo lado del hiperplano. En el caso extremo, 
+si los vectores
 apuntan exactamente en la misma dirección, entonces la probabilidad es 1.
 
 Sin embargo, si el ángulo entre estos vectores es grande, entonces lo más probable es que queden separados por un hiperplano escogido al azar. Si los vectores son ortogonales (máxima distancia coseno posible), entonces
@@ -711,18 +725,213 @@ y su signo es el mismo de $<x,v>$.
 
 
 ```{block2, type='resumen}
-La familia descrita arriba es $(d_1,d_2, (180-d_1)/180, d_2/180)$
+La familia descrita arriba (hiperplanos aleatorios) 
+es $(d_1,d_2, (180-d_1)/180, d_2/180)$
   sensible a la localidad para la distancia angular.
 ```
 
-Supongamos que el ángulo entre $x$ y $y$ es $d$, es decir,
-la distancia angular entre $x$ y $y$ es $d$. 
+Vamos a dar un argumento del cálculo: supongamos que el ángulo entre $x$ y $y$ es $d=\theta$, es decir,
+la distancia angular entre $x$ y $y$ es $\theta$.  
 
-Consideramos el plano que pasa por el origen por $x$ y $y$. Si escogemos
-el vector $v$ al azar, 
+Consideramos el plano $P$ que pasa por el origen por $x$ y $y$. 
+Si escogemos un vector al azar (cualquier dirección igualmente probable), el vector produce un hiperplano perpendicular (son
+los puntos $<$ talqes que $<z,v>=0$)
+que corta al plano $P$
+en dos partes.
+Todas las direcciones de corte son igualmente probables, así
+que la probabilidad de que la dirección de corte separe a $x$ y $y$
+es igual a $2\theta /360$ (que caiga en el cono generado por $x$ y $y$).
+Si la dirección de corte separa a $x$ y $y$, entonces sus valores
+$f_v(x)$ y $f_v(y)$ no coinciden, y coinciden si la dirección
+no separa a $x$ y $y$. Así que:
+
+1. $d(x,y)=d_1=\theta$, entonces $P(f(x)=f(y)) = d_1/180.$
+
+Por otra lado, 
+
+2. $d(x,y)=d_2$, entonces  $P(f(x)\neq f(y)) = 1-d_2/180.$
+
+---
+
+### Ejemplo: por fuerza bruta {-}
+
+Comenzamos con un ejemplo simulado.
+
+```{r}
+mat_1 <- matrix(rnorm(300 * 1000) + 3, ncol = 1000)
+mat_2 <- matrix(rnorm(600 * 1000) + 0.2, ncol = 1000)
+df <- rbind(mat_1, mat_2) %>% data.frame %>%
+           add_column(id_1 = 1:900, .before = 1)
+head(df)
+```
+
+Tenemos entonces 1000 variables distintas y 900 casos, y nos
+interesa filtrar aquellos pares de similitud alta.
+
+Definimos nuestra función de distancia
+
+```{r}
+norma <- function(x){
+  sqrt(sum(x ^ 2))
+}
+dist_coseno <- function(x, y){
+  1 - sum(x*y) / (norma(x) * norma(y))
+}
+```
+
+
+Y calculamos todas las posibles distancias (lo cual muchas
+veces no es posible hacer):
+
+```{r}
+df_agrup <- df %>% gather('variable', 'valor', -id_1) %>%
+                   group_by(id_1) %>%
+                   arrange(variable) %>%
+                   summarise(vec_1 = list(valor))
+df_pares <- df_agrup %>% 
+            crossing(df_agrup %>% 
+                       rename(id_2 = id_1, vec_2 = vec_1)) %>%
+            filter(id_1 < id_2) %>%
+            mutate(dist = map2_dbl(vec_1, vec_2, dist_coseno))
+df_pares
+```
+
+```{r, fig.width=5, fig.asp = 0.8}
+qplot(df_pares$dist, binwidth = 0.01)
+```
+
+Y supongamos que queremos encontrar vectores con distancia
+coseno menor a 0.2 (menos de unos 10 grados). El número de pares que satisfacen
+esta condicion son:
+
+
+```{r}
+sum(df_pares$dist < 0.20)
+```
+
+### Ejemplo: LSH planos aleatorios {-}
+
+Con 200 funciones hash:
+
+```{r}
+set.seed(101021)
+hashes <- lapply(1:200, function(i){
+    v <- rnorm(1000)
+    function(x){
+        ifelse(sum(v*x) >= 0, 1, -1) 
+    }
+})
+```
+
+Por ejemplo, la firma del primer elemento es:
+
+```{r}
+x <- as.numeric(df[1,-1])
+sapply(hashes, function(f) f(x))
+```
+
+
+Y ahora calcuamos la firma para cada elemento:
+
+```{r}
+df_hash <- df_agrup %>%
+           mutate(df = map(vec_1, function(x){
+              firma <-  sapply(hashes, function(f) f(x)) 
+              data_frame(id_hash = 1:length(firma),
+                         firma = firma) })) %>% 
+              select(-vec_1) %>% unnest
+df_hash
+```
+
+
+Ahora vamos a amplificar la famiia de hashes. En este caso,
+escogemos 20 bandas de 10 bandas cada una.
+
+```{r, fig.width=5, fig.asp=0.8}
+f_1 <- function(x){
+    1-(1-((180-x)/180)^10)^20
+}
+curve(f_1, 0, 180)
+abline(v=20)
+f_1 <- function(x){
+    1-(1-((180-x)/180)^10)^20
+}
+curve(f_1, 0, 180)
+abline(v=10)
+```
+
+
+### Ejemplo: agrupar por cubetas para LSH {-}
+
+Ahora agrupamos y construimos las cubetas:
+
+```{r}
+df_hash_1 <- df_hash %>% 
+           mutate(banda  = (id_hash - 1) %% 20 + 1) %>%
+           mutate(h = paste(id_hash,firma)) %>%
+           arrange(id_1)
+df_hash_1
+```
+
+
+```{r}
+
+cubetas <- df_hash_1 %>% 
+             group_by(id_1, banda) %>%
+             summarise(cubeta = paste(h, collapse = '/')) %>%
+             ungroup %>% rowwise %>%
+             mutate(cubeta = digest::digest(cubeta))
+cubetas
+```
+
+
+```{r}
+cubetas_agrup <- cubetas %>% group_by(cubeta) %>%
+                  summarise(ids = list(id_1)) %>%
+                  mutate(num_ids = map_dbl(ids, length)) %>%
+                  filter(num_ids > 1 )
+cubetas_agrup
+```
+
+Y ahora extraemos los pares similares
+
+```{r}
+pares_candidatos <- lapply(cubetas_agrup$ids, function(x){
+  combn(sort(x), 2, simplify = FALSE)}) %>% 
+  flatten %>% unique %>% 
+  transpose %>% lapply(as.integer) %>% as.data.frame
+names(pares_candidatos) <- c('id_1','id_2')
+pares_candidatos
+```
+
+
+### Ejemplo: filtrar y evaluar resultados {-}
+
+Y ahora evaluamos nuestros resultados. En primer lugar, el 
+número de pares reales y de candidatos es
+
+```{r}
+pares_reales <- filter(df_pares, dist < 0.15) %>%
+                select(id_1, id_2)
+nrow(pares_reales)
+nrow(pares_candidatos)
+```
+
+Así que debemos tener buen número de falsos positivos. Podemos calcularlos haciendo
+```{r}
+nrow(anti_join(pares_candidatos, pares_reales))
+```
+
+Y el número de falsos negativos es
+
+```{r}
+nrow(anti_join(pares_reales, pares_candidatos))
+```
+
+que es un porcentaje bajo del total de pares reales.
 
 
 
 
 
-
+---
