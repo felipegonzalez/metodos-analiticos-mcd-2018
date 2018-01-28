@@ -760,7 +760,7 @@ extraer_pares <- function(candidatos){
 cubetas_lista %>% extraer_pares()
 ```
 
-Y obtenemos `r length(cubetas_lista)` pares, que excluye a los
+Y obtenemos `r length(cubetas_lista %>% extraer_pares())` pares, que excluye a los
 que tienen similitud 0 o cercana a 0.
 
 **Observación**: Si la similitud de un par de documentos es $s$,
