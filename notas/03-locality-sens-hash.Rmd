@@ -51,7 +51,7 @@ es $1-s^r$
 4. Esto implica que la probabilidad de que los documentos no coincidan en ninguna banda es $(1-s^r)^b$.
 5. Finalmente, la probabilidad de que estos dos documentos sean un par candidato es $1-(1-s^r)^b$, que es la probabilidad de que coincidan en al menos una banda.
 
-```{block2, type='resumen'}
+```{block2, type="resumen"}
 Si la similitud de jaccard de dos documentos es $s$, la probabilidad
 de que sean un par candidato es igual a $$1-(1-s^r)^b$$.
 
@@ -572,7 +572,7 @@ lo mismo (hacer LSH), bajo otras medidas de distancia. Veamos las característic
 ## Funciones sensibles a la localidad
 
 
-```{block2, type='resumen'}
+```{block2, type="resumen"}
 Sean $d_1<d_2$ dos valores (que interpretamos como distancias).
 
 Una familia ${\cal F}$ es una familia $d_1,d_2,p_1,p_2$,  sensible a localidad
@@ -620,7 +620,7 @@ $$P(f(x) = f(y)) = sim(x,y) \leq 0.5$$
 de modo que la familia de minhashes es $(0.2,0.5,0.8,0.5)$ sensible a la
 localidad
 
-```{block2, type='resumen'}
+```{block2, type="resumen"}
 Para cualquier $d_1 < d_2$,
 la familia de funciones minhash es una familia 
 $(d_1, d_2, 1-d_1, 1-d_2)$ sensible a la localidad para cualquier
@@ -657,7 +657,7 @@ es equivalente a construir varias bandas.
 
 La idea general es ahora:
 
-```{block2, type='resumen'}
+```{block2, type="resumen"}
 - Usando **conjunción**, podemos construir una familia donde
 la probabilidad $p_2^r$ sea mucho más cercana a cero que
 $p_1^r$ (en términos relativos). 
@@ -724,7 +724,7 @@ $$\frac{1}{||v||}<x, v>,$$
 y su signo es el mismo de $<x,v>$.
 
 
-```{block2, type='resumen}
+```{block2, type="resumen"}
 La familia descrita arriba (hiperplanos aleatorios) 
 es $(d_1,d_2, (180-d_1)/180, d_2/180)$
   sensible a la localidad para la distancia angular.
