@@ -637,7 +637,7 @@ búsqueda eficiente de pares similares.
 Como discutimos arriba, calcular todas las posibles similitudes de una
 colección de un conjunto no tan grande de documentos es difícil. Sin
 embargo, muchas veces lo que nos interesa es simplemente agrupar
-colecciones de documentos que tienen alta similitad (por ejemplo para
+colecciones de documentos que tienen alta similitud (por ejemplo para
 deduplicar, hacer clusters de usuarios muy similares, etc.).
 
 Una técnica para encontrar vecinos cercanos de este tipo es LSH. Comenzamos
@@ -768,6 +768,7 @@ la probabilidad de que no coincidan en ningún hash es $(1-s)^8$, así
 que la probabilidad de coinciden en al menos un hash es $1-(1-s)^8$.
 Si $s$ es chico, entonces puede ser que esta probabilidad sea 
 considerable de todas formas, así que capturamos pares de similitud baja.
+
 ---
 
 ### Ejemplo {-}
