@@ -90,7 +90,7 @@ graficar_curvas <- function(df_br, colour = TRUE){
 }
 ```
 
-```{r}
+```{r, fig.width=4, fig.asp=0.6}
 r <- c(1,2,4,8)
 df_br <- data_frame(r = r, b = rev(r))
 graficar_curvas(df_br) + 
@@ -129,8 +129,8 @@ lsh_half <- function(h, b){
 lsh_half(20,5)
 ```
 
-En [@mmd], se utiliza la aproximación (de el nivel de similitud
-con máxima pendiente de la curva S):
+En [@mmd], se utiliza la aproximación (del nivel de similitud
+con máxima pendiente de la curva S, según la referencia):
 ```{r}
 textreuse::lsh_threshold
 ```
@@ -140,9 +140,8 @@ textreuse::lsh_threshold(20,5)
 ```
 ### Ejemplo {-}
 
-Supongamos que nos interesan documentos con similitud mayor a 0.5,
-con 50 o 120 hashes:
-Algunas combinaciones que podemos tratar son:
+Supongamos que nos interesan documentos con similitud mayor a 0.5.
+Intentamos con 50 o 120 hashes algunas combinaciones:
 
 ```{r, fig.width=5, fig.asp=0.6}
 params_umbral <- function(num_hashes, umbral_inf, umbral_sup){
@@ -157,22 +156,23 @@ params_umbral <- function(num_hashes, umbral_inf, umbral_sup){
   combinaciones_pr
 }
 
-combinaciones_50 <- params_umbral(50, 0.2, 0.6)
-combinaciones_120 <- params_umbral(120, 0.2, 0.5)
-
+combinaciones_50 <- params_umbral(50, 0.0, 1.0)
 graficar_curvas(combinaciones_50)
 ```
 
 Con 120 hashes podemos obtener curvas con mayor pendiente:
 
 ```{r, fig.width=5, fig.asp=0.6}
+combinaciones_120 <- params_umbral(120, 0.2, 0.6)
 graficar_curvas(combinaciones_120)
 ```
 
 **Observación**: La decisión de los valores para estos parámetros
 debe balancear qué tan importante es tener pares no detectados,
 y el cómputo necesario para calcular los hashes y filtrar los
-falsos positivos.
+falsos positivos. La ventaja computacional de LSH proviene
+de hacer *trade-offs* de lo que es más importante para nuestro
+problema.
 
 
 ## Resumen de LSH basado en minhashing
@@ -190,7 +190,9 @@ firmas minhash de todos los documentos.
 obtener un valor cercano al umbral. 
 Si es importante evitar falsos negativos, escoger valores de b y r que
 den un umbral más bajo, si la velocidad es importante entonces escoger
-para un umbral más alto y evitar falsos positivos.
+para un umbral más alto y evitar falsos positivos. Mayores valores
+de $b$ y $r$ pueden dar mejores resultados, pero también requieren
+más cómputo.
 5. Construir pares similares usando LSH
 6. Examinar las firmas de cada par candidato y determinar si 
 la fracción de coincidencias sobre todos los minhashes es satisfactorio.
@@ -198,19 +200,20 @@ Alternativamente (más preciso), calcular directamente la similitud
 de jaccard a partir de las tejas originales. 
 
 
-Alternativamente,
+Alternativamente, podemos:
 
-2a. Agrupar las tejas de cada documento
-3b. Escoger $n$, el número de minhashes. Calcular el minhash de cada
-documentos aplicando las funciones hash a cada conjunto de tejas y
-tomando el mínimo.
+2. Agrupar las tejas de cada documento
+3. Escoger $n$, el número de minhashes. Calcular el minhash de cada
+documento aplicando una función hash a las tejas del documento.
+Tomar el mínimo. Repetir para cada función hash.
 
 ## Ejemplo: artículos de wikipedia
 
 En este ejemplo intentamos encontrar artículos similares de [wikipedia](http://wiki.dbpedia.org/datasets/dbpedia-version-2016-10)
  usando las categorías a las que pertenecen. En lugar de usar tejas,
-usaremos categorías a las que pertenecen. Dos artículos tienen similitud 
-alta cuando los conjuntos de categorías a las que pertenecen es similar.
+usaremos categorías a las que pertenecen. Dos artículos tienen similitud alta cuando los conjuntos de categorías a las que pertenecen es similar.
+(este el [ejemplo original](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb)).
+
 
 ```{r, engine='bash'}
 head -20 ../datos/similitud/wiki-100000.txt
@@ -238,7 +241,10 @@ articulos_df <- filtrado %>% bind_rows %>%
 ```
 
 ```{r}
-articulos_df %>% sample_n(10)
+set.seed(99)
+muestra <- articulos_df %>% sample_n(10)
+muestra
+muestra$categorias[[10]]
 ```
 
 ### Selección de número de hashes y bandas {-}
@@ -249,8 +255,9 @@ de bandas, podemos seleccionar, por ejemplo:
 
 ```{r, collapse = TRUE, fig.width=5, fig.asp=0.6}
 b <- 20
-lsh_half(60, b = b)
-graficar_curvas(data_frame(b = b, r = 60/b)) +
+num_hashes <- 60
+lsh_half(num_hashes, b = b)
+graficar_curvas(data_frame(b = b, r = num_hashes/b)) +
                  geom_vline(xintercept = 0.4) 
 ```
 
@@ -258,11 +265,7 @@ graficar_curvas(data_frame(b = b, r = 60/b)) +
 
 ### Tejas y cálculo de minhashes {-}
 
-```{r}
-options("mc.cores" = 4L)
-# esta es la función que vamos a usar:
-tokenize_sp <- function(x) str_split(x, ' ', simplify = TRUE)
-# aunque otra opción es:
+```{r, echo=FALSE}
 shingle_chars <- function(string, lowercase = FALSE, k = 3){
     # produce shingles (con repeticiones)
     
@@ -273,12 +276,21 @@ shingle_chars <- function(string, lowercase = FALSE, k = 3){
         map_chr(function(x) substr(string, x, x + k - 1))
     shingles
 }
-minhashes <- minhash_generator(60, seed = 1223)
+```
+
+
+
+```{r}
+options("mc.cores" = 4L)
+# esta es la función que vamos a usar:
+tokenize_sp <- function(x) str_split(x, ' ', simplify = TRUE)
+# aunque otra opción es:
+minhashes <- minhash_generator(num_hashes, seed = 1223)
 # esta línea solo es necesaria porque TextReuseCorpus espera una
 # línea de texto, no un vector de tokens.
-textos <- articulos_df$categorias %>% lapply(function(x){
-  paste(x, collapse = ' ')
-}) %>% as.character
+textos <- articulos_df$categorias %>% 
+          lapply(function(x) paste(x, collapse = ' ')) %>%
+          as.character
 names(textos) <- articulos_df$articulo
 system.time(
 wiki_corpus <-  TextReuseCorpus(
@@ -355,8 +367,24 @@ cubetas_df$candidatos[[911]]
 lapply(cubetas_df$candidatos[[911]], function(articulo) 
   wiki_corpus[[articulo]]$content) %>% head
 ```
+---
 
-### Consulta de pares similares {-}
+## Consulta de pares candidatos.
+
+Si tenemos un documento dado (nuevo o de la colección) 
+y queremos encontrar candidatos
+similares, podemos hacerlo usando la estructura de
+LSH que acabamos de construir, sin tener que
+recorrer todos los documentos.  Podemos hacer:
+
+- Construimos la firma minhash del documento.
+- Calculamos las cubetas donde este documento cae, y buscamos
+estas cubetas que creamos para la colección
+- Extraemos los elementos que están en estas cubetas.
+
+
+
+### Ejempo: Consulta de pares candidatos {-}
 
 Podemos buscar más fácilmente candidatos similares:
 
@@ -554,6 +582,7 @@ sigue: para pasar de la primera cadena, necesitamos agregar f, g y h (3 adicione
 
 ## Teoría de funciones sensibles a la localidad
 
+
 Vimos como la familia de funciones minhash puede combinarse (usando 
 la técnica de bandas) para discriminar entre pares de baja similitud
 y de alta similitud.
@@ -563,10 +592,10 @@ lo mismo (hacer LSH), bajo otras medidas de distancia. Veamos las característic
 
  1. Cuando la distancia entre dos elementos $x,y$ es baja (similitud alta),
  entonces $f(x)=f(y)$ tiene probabilidad alta.
- 2. Podemos escoger varias funciones minhash $f_1,\ldots,f_k$ con la propiedad anterior, de manera independiente, de forma que es posible calcular
+ 2. Podemos escoger varias funciones  $f_1,\ldots,f_k$ con la propiedad anterior, de manera independiente, de forma que es posible calcular
  la probabilidad de $f_1(x)=f_1(y)$ y $f_2(x)=f_2(y)$, y eventos
  combinados de este tipo.
- 3. Tienen que ser relativamente fácil de calcular (comparado con calcular todos los posibles pares y sus distancias directamente).
+ 3. Las funciones tienen que ser relativamente fáciles de calcular (comparado con calcular todos los posibles pares y sus distancias directamente).
  
  
 ## Funciones sensibles a la localidad
@@ -612,7 +641,7 @@ ggplot(dat_g, aes(x=x, y=y)) + geom_point(size=0.5) +
 
 Supongamos que tenemos dos documentos $x,y$. Si ponemos por ejemplo
 $d_1=0.2$ y $d_2= 0.5$, tenemos que 
-si $d(x,y) = 1-sim(x,y) \leq 0.2$, entonces
+si $d(x,y) = 1-sim(x,y) \leq 0.2$, despejando tenemos
 $sim(x,y)\geq 0.8$, y entonces
 $$P(f(x) = f(y)) = sim(x,y) \geq 0.8$$
 Igualmente, si $d(x,y)=1-sim(x,y) \geq 0.5$, entonces
@@ -636,11 +665,11 @@ Supongamos que ${\cal F}$ es una familia $(d_1, d_2, p_1, p_2)$-sensible
 a la localidad. Podemos usar **conjunción** de ${\cal F}'$ para construir
 otra familia sensible a la localidad.
 
-Sea $r$ un número entero. Una función $f'\in {\cal F}$ se construye
+Sea $r$ un número entero. Una función $f\in {\cal F}'$ se construye
 tomando $f = (f_1,f_2,\ldots, f_r)$, con $f_i$ seleccionadas al
-azar de manera independiente, de forma
+azar de manera independiente de la familia original, de forma
 que $f(x)=f(y)$ si y sólo si $f_i(x)=f_i(y)$ para toda $i$. Esta construcción
-corresponde a una banda de la técnica de LSH.
+corresponde a lo que sucede dentro de una banda de la técnica de LSH.
 
 La nueva familia ${\cal F}'$ es $(d_1,d_2,p_1^r,p_2^r)$ sensible a la localidad. Nótese que las probabilidades siempre se hacen más chicas
 cuando incrementamos $r$, lo que hace más fácil discriminar pares
@@ -692,12 +721,9 @@ tener esta amplificación.
 
 ## Distancia coseno e hiperplanos aleatorios
 
-Construimos ahora LSH para datos numéricos. Consideremos la tabla:
-
-```{r, results = 'asis'}
-df <- data_frame(x_1 = rnorm(100,0,1), x_2 = rnorm(100,2,1))
-print(df)
-```
+Construimos ahora LSH para datos numéricos, y comenzaremos
+con la distancia coseno. Lo primero que necesitamos es
+una familia sensible a la localidad para la distancia coseno.
 
 Consideremos dos vectores, y supongamos que el ángulo entre ellos
 es chico. Si escogemos un hiperplano al azar, lo más
@@ -735,7 +761,7 @@ la distancia angular entre $x$ y $y$ es $\theta$.
 
 Consideramos el plano $P$ que pasa por el origen por $x$ y $y$. 
 Si escogemos un vector al azar (cualquier dirección igualmente probable), el vector produce un hiperplano perpendicular (son
-los puntos $<$ talqes que $<z,v>=0$)
+los puntos $z$ talqes que $<z,v>=0$)
 que corta al plano $P$
 en dos partes.
 Todas las direcciones de corte son igualmente probables, así
@@ -753,11 +779,12 @@ Por otra lado,
 
 ---
 
-### Ejemplo: por fuerza bruta {-}
+### Ejemplo: similitud coseno por fuerza bruta {-}
 
 Comenzamos con un ejemplo simulado.
 
 ```{r}
+set.seed(101)
 mat_1 <- matrix(rnorm(300 * 1000) + 3, ncol = 1000)
 mat_2 <- matrix(rnorm(600 * 1000) + 0.2, ncol = 1000)
 df <- rbind(mat_1, mat_2) %>% data.frame %>%
@@ -780,8 +807,9 @@ dist_coseno <- function(x, y){
 ```
 
 
-Y calculamos todas las posibles distancias (lo cual muchas
-veces no es posible hacer):
+Y calculamos todas las posibles distancias (normalmente
+ **no** queremos hacer esto, pero lo hacemos aquí para
+ comparar):
 
 ```{r}
 df_agrup <- df %>% gather('variable', 'valor', -id_1) %>%
@@ -796,12 +824,16 @@ df_pares <- df_agrup %>%
 df_pares
 ```
 
+La distribución de distancias sobre todos los pares es la siguiente:
+(¿por qué observamos este patrón? Recuerda que esta gráfica
+ representa pares):
+
 ```{r, fig.width=5, fig.asp = 0.8}
 qplot(df_pares$dist, binwidth = 0.01)
 ```
 
 Y supongamos que queremos encontrar vectores con distancia
-coseno menor a 0.2 (menos de unos 10 grados). El número de pares que satisfacen
+coseno menor a 0.2 (menos de unos 40 grados). El número de pares que satisfacen
 esta condicion son:
 
 
@@ -844,7 +876,7 @@ df_hash
 ```
 
 
-Ahora vamos a amplificar la famiia de hashes. En este caso,
+Vamos a amplificar la famiia de hashes. En este caso,
 escogemos 20 bandas de 10 bandas cada una.
 
 ```{r, fig.width=5, fig.asp=0.8}
@@ -853,11 +885,6 @@ f_1 <- function(x){
 }
 curve(f_1, 0, 180)
 abline(v=20)
-f_1 <- function(x){
-    1-(1-((180-x)/180)^10)^20
-}
-curve(f_1, 0, 180)
-abline(v=10)
 ```
 
 
@@ -875,18 +902,22 @@ df_hash_1
 
 
 ```{r}
-
 cubetas <- df_hash_1 %>% 
              group_by(id_1, banda) %>%
-             summarise(cubeta = paste(h, collapse = '/')) %>%
-             ungroup %>% rowwise %>%
-             mutate(cubeta = digest::digest(cubeta))
+             summarise(cubeta = paste(h, collapse = '/')) 
 cubetas
+```
+
+```{r}
+cubetas_hash <- cubetas %>%
+                ungroup %>% rowwise %>%
+                mutate(cubeta = digest::digest(cubeta))
+cubetas_hash
 ```
 
 
 ```{r}
-cubetas_agrup <- cubetas %>% group_by(cubeta) %>%
+cubetas_agrup <- cubetas_hash %>% group_by(cubeta) %>%
                   summarise(ids = list(id_1)) %>%
                   mutate(num_ids = map_dbl(ids, length)) %>%
                   filter(num_ids > 1 )
@@ -931,7 +962,55 @@ nrow(anti_join(pares_reales, pares_candidatos))
 que es un porcentaje bajo del total de pares reales.
 
 
-
-
-
 ---
+
+
+**Observación*: es posible, en lugar de usar vectores con dirección
+aleatoria $v$ escogidos al azar como arriba (con la distribución normal), hacer ménos cálculos escogiendo vectores $v$
+cuyas entradas son solamente 1 y -1. El cálculo del producto
+punto es simplemente multiplicar por menos si es necesario los
+valores de los vectores $x$ y sumar.
+
+## LSH para distancia euclideana.
+
+Para distancia euclideana usamos el enfoque de proyecciones
+aleatorias en cubetas.
+
+La idea general es que tomamos una línea al azar en el espacio
+de entradas, y la dividimos en cubetas de manera uniforme. El valor
+hash de un punto $x$ es el número de cubeta donde cae la proyección de $x$.
+
+```{block2, type='resumen'}
+Supogamos que tomamos como $a$ el ancho de las cubetas.
+La familia de proyecciones aleatorios por cubetas es
+una familia
+$(a/2, 2a, 1/2, 1/3)$-sensible a la localidad para la distancia 
+euclideana.
+```
+
+Supongamos que dos punto $x$ y $y$ tienen distancia euclideana
+$d = a/2$. Si proyectamos perpendicularmente sobre la línea
+escogida al azar, la distancia entre las proyecciones es menor
+a $a/2$, de modo la probabilidad de que caigan en la misma
+cubeta es al menos 1/2. Si la distancia es menor, entonces la probabilidad
+es más grande aún:
+
+1. Si $d(x,y)\leq a/2$ entonces $P(f(x)=f(y))\geq 1/2$.
+
+Por otro lado, si la distancia es mayor a $2a$, entonces la única
+manera de que los dos puntos caigan en una misma cubeta es
+que la distancia de sus proyecciones sea menor a $a$. Esto sólo
+puede pasar si el ángulo entre el vector que va de $x$ a $y$ y
+la línea escogida al azar es mayor de  60 a 90 grados. Como
+$\frac{90-60}{90-0} = 1/3$, entonces la probabilidad que que
+caigan en la misma cubeta no puede ser más de 1/3.
+
+1. Si $d(x,y)\geq 2a$ entonces $P(f(x)=f(y))\leq 1/3$.
+
+Escoger $a$ para discriminar las distancias que nos interesa,
+y luego amplificar la familia para obtener tasas de falsos
+positivos y negativos que sean aceptables.
+
+
+
+
