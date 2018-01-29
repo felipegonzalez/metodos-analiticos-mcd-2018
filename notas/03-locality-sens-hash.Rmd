@@ -789,7 +789,7 @@ mat_1 <- matrix(rnorm(300 * 1000) + 3, ncol = 1000)
 mat_2 <- matrix(rnorm(600 * 1000) + 0.2, ncol = 1000)
 df <- rbind(mat_1, mat_2) %>% data.frame %>%
            add_column(id_1 = 1:900, .before = 1)
-head(df)
+head(df[,1:5])
 ```
 
 Tenemos entonces 1000 variables distintas y 900 casos, y nos
@@ -932,7 +932,7 @@ pares_candidatos <- lapply(cubetas_agrup$ids, function(x){
   flatten %>% unique %>% 
   transpose %>% lapply(as.integer) %>% as.data.frame
 names(pares_candidatos) <- c('id_1','id_2')
-pares_candidatos
+head(pares_candidatos)
 ```
 
 
