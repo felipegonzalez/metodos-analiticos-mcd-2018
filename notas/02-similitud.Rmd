@@ -724,7 +724,7 @@ a $s$, la probabilidad de que caigan en la misma cubeta es $s^8$. Si
 $s$ es muy cercano a 1, esta probabilidad es alta, pero es baja en otro caso
 (solo encontramos pares muy similares).
 
-### Ejemplo: algún minhash igual
+### Ejemplo: algún minhash igual {-}
 
 Nótese que para que dos documentos caigan en la misma cubeta
 según el ejemplo anterior, la similitud realmente tiene que ser
@@ -771,7 +771,7 @@ considerable de todas formas, así que capturamos pares de similitud baja.
 
 ---
 
-### Ejemplo {-}
+### Ejemplo: bandas de minhashes {-}
 Para poder tener un resultado intermedio, por ejemplo, que capture
 simlitud mayor a 0.15, podríamos combinar los hashes en grupos. Si tenemos
 4 grupos de 4 hashes cada uno, podemos pedir que en al menos uno de los
@@ -801,8 +801,10 @@ cubetas_df <- cubetas_df %>%
 cubetas_df
 ```
 
-**Observación**: Nótese que cada cubeta está hecha de 4 hashes. A con
+**Observación**: Nótese que cada cubeta está hecha de 4 hashes.
 
+
+Ahora agrupamos por cubeta y vemos los pares resultantes:
 
 ```{r}
 docs_agrupados <- cubetas_df %>% 
