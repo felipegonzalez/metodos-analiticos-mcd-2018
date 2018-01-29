@@ -182,5 +182,82 @@ mean(firmas_2[,1]==firmas_2[,3])
 mean(firmas_2[,3]==firmas_2[,4])
 ```
 
-## 2. Calcula la similitud de jaccard de las cadenas “Este es el ejemplo 1” y “Este es el ejemplo 2”, usando tejas de tamaño 3.
+## 2. Calcula la similitud de jaccard de las cadenas "Este es el ejemplo 1" y "Este es el ejemplo 2", usando tejas de tamaño 3.
+
+```{r}
+str_ejemplo <- character(2)
+str_ejemplo[1] <- "Este es el ejemplo 1"
+str_ejemplo[2] <- "Este es el ejemplo 2"
+shingle_chars <- function(string, lowercase = FALSE, k = 3){
+  # produce shingles (con repeticiones)
+  if(lowercase) {
+    string <- str_to_lower(string)
+  }
+  shingles <- seq(1, nchar(string) - k + 1) %>%
+      map_chr(function(x) substr(string, x, x + k - 1))
+  shingles
+}
+tejas_doc <- lapply(str_ejemplo, shingle_chars, k = 3)
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+```
+
+## 3. Funciones hash. Como vimos en clase, podemos directamente hacer hash de las tejas (que son cadenas de texto), en lugar de usar hashes de números enteros (número de renglón). Para lo siguiente, puedes usar la función hash_string del paquete textreuse (o usar la función pyhash.murmur3_32 de la librería pyhash):
+
+#### Calcula valores hash de algunas cadenas como ‘a’, ‘Este es el ejemplo 1’, ‘Este es el ejemplo 2’.
+
+
+```{r}
+hash_string("a")
+hash_string(str_ejemplo[1])
+hash_string(str_ejemplo[2])
+```
+
+#### Calcula los valores hash para las tejas de tamaño 3 de ‘Este es el ejemplo 1’. ¿Cuántos valores obtienes?
+
+Dado que son `r tejas_doc[[1]] %>% length` tejas, obtendremos 18 (`r tejas_doc[[1]] %>% hash_string %>% length`) hashes :-)
+
+```{r}
+tejas_doc[[1]] %>% hash_string
+```
+
+#### Calcula el valor minhash de la cadena anterior. Repite para la cadena ‘Este es el ejemplo 2’, y usa este minhash para estimar la similitud de jaccard (en general usamos más funciones minhash para tener una buena estimación, no solo una!).
+
+```{r}
+set.seed(175904)
+minhash <- minhash_generator(50)
+options("mc.cores" = 14L)
+corpus <- TextReuseCorpus(text = str_ejemplo, 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F)
+minhashes_corpus <- list(
+  minhashes(corpus[[1]]),
+  minhashes(corpus[[2]])
+)
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+```
+
+
+#### Para hacer en clase: repite usando 10 funciones minhash (puedes usar minhash_generator de textreuse, o usar distintas semillas para pyhash.murmur3_32).
+
+```{r}
+set.seed(175904)
+minhash <- minhash_generator(50)
+options("mc.cores" = 14L)
+corpus <- list(
+  TextReuseCorpus(text = str_ejemplo[[1]], 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F),
+  TextReuseCorpus(text = str_ejemplo[[2]], 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F)
+  )
+
+```
 
