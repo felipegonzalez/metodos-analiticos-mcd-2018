@@ -1,0 +1,90 @@
+---
+title: "Artículos similares de wikipedia"
+output: html_notebook
+---
+
+Este ejemplo es tomado de un [curso anterior, versión de python](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb).
+
+El objetivo es encontrar artículos similares usando las categorías 
+a las que pertenecen. Vamos a usar las herramientas de spark para LSH.
+Nota: estas herramientas todavía [no están completas](https://spark.apache.org/docs/2.2.0/ml-features.html#locality-sensitive-hashing). En particular,
+por el momento solo es posible hacer construcciones de bandas
+de un solo hash (es decir, *disyunción*).
+
+```{r}
+library(sparklyr)
+library(dplyr)
+path <- '../../datos/similitud/wiki-100000.txt'
+config <- spark_config()
+config$`sparklyr.shell.driver-memory` <- "4G"
+sc <- spark_connect(master = 'local', config = config)
+archivo <- spark_read_csv(sc, 'wiki', path = path, delimiter = ' ',
+                         columns = c('article', 'category'),
+                         memory = FALSE, repartition = 10) 
+archivo %>% head(20)
+```
+
+Agrupamos las categorías en una lista, y luego las convertimos
+en vectores de 0's y 1's, que es lo que usa la función [LSH de spark](https://spark.apache.org/docs/2.1.0/ml-features.html#minhash-for-jaccard-distance):
+
+```{r}
+wiki <- archivo %>%
+        group_by(article) %>%
+        summarise(lista = collect_list(category)) %>%
+        ft_count_vectorizer('lista', 'vector', binary=TRUE) %>%
+        ft_string_indexer('article','id')
+```
+
+Aplicamos lsh basado en minhashes:
+
+```{r}
+lsh_wiki <- ft_minhash_lsh(sc, 'vector', 'hashes', 
+                           num_hash_tables = 5, #b
+                           dataset = wiki)
+```
+
+Calculamos similares al artículo "Submarine":
+
+```{r}
+library(tidyr)
+vec_1 <- wiki %>% filter(article =='Submarine') %>% pull(vector)
+similares <- ml_approx_nearest_neighbors(lsh_wiki, 
+            wiki, vec_1[[1]], num_nearest_neighbors = 10) %>% 
+  select(article, lista, distCol)
+similares
+```
+
+
+
+```{r}
+ejemplos <- wiki %>% filter(article =='Slide_rule') %>% 
+  collect() %>% select(article, lista) 
+ejemplos$lista[[1]]
+```
+```{r}
+library(tidyr)
+vec_1 <- wiki %>% filter(article =='David_Hilbert') %>% pull(vector)
+similares <- ml_approx_nearest_neighbors(lsh_wiki, 
+            wiki, vec_1[[1]], num_nearest_neighbors = 10) %>% 
+  select(article, lista, distCol)
+similares
+```
+
+```{r}
+#threshold es para la distancia
+pares_similares <- 
+      ml_approx_similarity_join(lsh_wiki, 
+                            wiki,  wiki, threshold = 0.05) %>%
+      collect()
+     # filter(id_a > id_b) %>% collect
+
+nrow(pares_similares)
+articulos <- wiki %>% select(id, article) %>% collect
+pares <- pares_similares %>% 
+         left_join(articulos %>% rename(id_b = id)) %>%
+         rename(article_b = article) %>%
+         left_join(articulos %>% rename(id_a = id)) %>%
+         rename(article_a = article) %>%
+         select(-id_a, -id_b)
+DT::datatable(pares %>% head(300))
+```

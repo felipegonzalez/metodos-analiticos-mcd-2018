@@ -637,131 +637,188 @@ búsqueda eficiente de pares similares.
 Como discutimos arriba, calcular todas las posibles similitudes de una
 colección de un conjunto no tan grande de documentos es difícil. Sin
 embargo, muchas veces lo que nos interesa es simplemente agrupar
-colecciones de documentos que tienen alta similitad (por ejemplo para
+colecciones de documentos que tienen alta similitud (por ejemplo para
 deduplicar, hacer clusters de usuarios muy similares, etc.).
 
 Una técnica para encontrar vecinos cercanos de este tipo es LSH. Comenzamos
 construyendo LSH basado en las firmas de minhash. La idea general
-es hacer agrupar los documentos en cubetas (no es exactamente clustering) usando
-que tan similares son sus firmas. Estos son los candidatos (que esperamos
-sean mucho menos que el número posible de pares), y podemos calcular
-la similitud exacta para estos candidatos y filtrar.
+es: 
 
-Supongamos que tenemos una lista de documentos con
-firmas de dimensión $k$, y queremos encontrar todos los pares
-similares de similitud mayor a $s_0=0.8$, por ejemplo. Veamos dos opciones:
-
-- Podemos agrupar los documentos en cubetas
-para cada una de estas firmas: si coinciden en al menos una dimensión, caen en la misma cubeta. La probabilidad de que dos documentos con similitud $s$ caigan en al menos una misma
-cubeta es es $1-(1-s)^k$. Las cubetas son combinaciones como "h1-3432", "h2-128", dependiendo la función hash y su valor.
-
-```{r, fig.width=4, fig.asp=1.0}
-sim_alguna <- function(s){
-  1-(1-s)^80
-}
-curve(sim_alguna, xlab = 'Prob ser candidato')
-abline(v=0.8, col='red')
-```
+- Recorremos la matriz de firmas documento por documento
+- Asignamos el documento a una cubeta dependiendo de sus valores minhash (su firma). 
+- Todos los pares de documentos que caen en una misma cubeta son candidatos a pares similares. Generalmente tenemos mucho menos candidatos que el total de posibles pares.
+- Checamos todos los candidatos calculando su similitud exacta para eliminar falsos positivos, para tener nuestra colección final de pares similares.
 
 
-Y vemos que con muy alta probabilidad documentos con similitud muy alta
-van a caer en la misma cubeta. El problema es que vamos a tener muchos falsos
-positivos: documentos con similitud tan chica como 0.2 tienen probabilidad muy alta de caer en al menos una misma cubeta juntos, y ahora tenemos
-que revisar muchos candidatos para descartar.
+Veremos formas de diseñar las cubetas para obtener candidatos con la
+similitud que busquemos (por ejemplo, mayor a 0.5, mayor a 0.9, etc.).
+Primero veamos algunas posibilidades construidas a mano para lograr
+nuestro objetivo.
 
 
-- Considerar como una cubeta la firma completa del documento, por
-ejemplo "123-345-388-9812", si tenemos 4 hashes. En este caso,
-la probabilidad de que dos documentos con similitud $s$ caigan en la misma
-cubeta es de $s^k$.
-
-
-```{r, fig.width=4, fig.asp=1.0}
-sim_todas <- function(s){
-  s^80
-}
-curve(sim_todas)
-abline(v=0.8, col='red')
-```
-
-Y ahora casi no tendremos falsos positivos, pero tendremos muchos
-falsos negativos.
-
-
-### Técnica de bandas
-
-Estas curvas no son muy útiles. Lo que realmente buscamos es una curva que sea cercana a 0 para valores menores
-a 0.8 y cercana a 1 para valores mayores a 0.8.
-
-Una buena solución es crear bandas de minhashes. Por ejemplo, podríamos
-hacer 10 bloques de 8 hashes cada uno . Una cubeta está definida por documentos en los que al menos uno de los 10 bloques tiene sus cinco hashes idénticos.
-
-Si dos documentos tienen similitud $s$, entonces la probabilidad de que
-un bloque particular sea idéntico es $s^10$. Así que la probabilidad de al menos
-algún bloque sea idéntico es igual a $1-(1-s^10)^8$
-
-```{r, fig.width=4, fig.asp=1.0}
-sim_bloques <- function(s){
-  1-(1-s^10)^8
-}
-curve(sim_bloques)
-abline(v=0.8, col='red')
-```
-
-Esta curva es más apropiada para nuestros propósitos: después de obtener los candidatos, podemos checar todos los pares y descartar los falsos positivos, sin
-haber perdido mucho por los falsos negativos. Nótese adicionalmente que los falsos negativos tenderán a ser de probabilidad relativamente cercana a 0.8 (y no cercana a 0.9 o más).
-
-
-### Ejemplo {-}
-Consideremos nuestro mini-ejemplo del principio, con la matriz de firmas que habíamos calculado:
+### Ejemplo: todos los minhashes son iguales {-}
+Consideremos la siguiente matriz de firmas, con un mini-ejemplo:
 
 ```{r}
-textos
-firmas_df
+textos <- c('el perro persigue al gato',
+            'el perro persigue al gato.',
+            'mi mascota es divertida',
+            'mi mascota es divertida, más mi perro',
+            'mi mascota preferida es divertida')
+set.seed(834)
+num_hashes <- 16
+minhash <- minhash_generator(num_hashes)
+corpus <- TextReuseCorpus(text = textos, 
+                          tokenizer = shingle_chars,
+                          k = 3, lowercase = TRUE,
+                          minhash_func = minhash,
+                          keep_tokens = TRUE)
+pairwise_compare(corpus, jaccard_similarity)
+mhashes <- minhashes(corpus) %>% 
+           lapply(function(x) x %% 97) # esto solo es para hacer el ejemplo 
+                                        # más simple
+df_firmas <- bind_rows(mhashes) %>% 
+             mutate(hash = paste0('h_',1:num_hashes)) %>%
+             gather(documento, minhash, -hash)
+df_firmas
 ```
 
-Construiremos 5 bandas de 2 hashes cada uno, lo que nos da las siguientes
-probabilidades de caer en la misma cubeta:
-
-```{r, fig.width=4, fig.asp=1.0}
-sim_bloques <- function(s){
-  1-(1-s^2)^5
-}
-curve(sim_bloques)
-```
-
-Agrupamos en cubetas:
+Primero calculamos cada cubeta usando toda la firma:
 
 ```{r}
-colapsar <- function(x){
-  paste(x, collapse = '-')
-}
-firmas_df
-firmas_bandas <- firmas_df %>% 
-          mutate(firma = as.integer(substr(firma, 3, 4))) %>%
-          mutate(banda = (firma - 1) %% 5 + 1) %>%
-          select(-firma) %>%
-          arrange(banda) %>%
-          group_by(banda) %>%
-          summarise_all(colapsar)
-firmas_bandas
+firmas_colapsadas <- 
+    df_firmas %>% 
+    group_by(documento) %>%
+    arrange(hash) %>%
+    summarise(cubeta  = paste(minhash, collapse = '-'))
+firmas_colapsadas
 ```
 
+**Observación**: veremos técnicas mejores (otra vez usando
+funciones hash) para evitar estos nombres de cubeta poco convenientes.
+
+
+Y ahora agrupamos los documentos por cubeta:
 
 ```{r}
-firmas_bandas <- firmas_bandas %>% gather(documento, valor, doc_1:doc_4) %>%
-                  mutate(cubeta = paste('b',banda, valor, sep='-'))
-firmas_bandas
+cubetas_df <- firmas_colapsadas %>% 
+    group_by(cubeta) %>%
+    summarise(docs = list(documento)) 
+cubetas_df
 ```
 
 ```{r}
-cubetas <- firmas_bandas %>% group_by(cubeta) %>%
-           summarise(documentos = as.character(list(documento)))
-cubetas        
+cubetas_lista <- cubetas_df$docs
+names(cubetas_lista) <- cubetas_df$cubeta
+cubetas_lista
 ```
 
-Y en este caso, correctamente concluimos que sólo hay un par similar
-(con similitud mínima 0.8)
+Y esto nos da un par de candidatos solamente, el documento 1 y 2
+que sabemos que son muy similares. Podemos calcular la similitud de
+este par (exacta) para verificar. **No tuvimos que hacer
+todas las posibles comparaciones**, solamente agrupar los documentos
+en cubetas según su firma completa.
+
+**Observación**: si la similitud de un par de documentos es igual
+a $s$, la probabilidad de que caigan en la misma cubeta es $s^8$. Si 
+$s$ es muy cercano a 1, esta probabilidad es alta, pero es baja en otro caso
+(solo encontramos pares muy similares).
+
+### Ejemplo: algún minhash igual {-}
+
+Nótese que para que dos documentos caigan en la misma cubeta
+según el ejemplo anterior, la similitud realmente tiene que ser
+muy alta, pues todos los minhashes deben coincidir. ¿Qué pasa si queremos encontrar documentos con similitud de 0.3 o más, por ejemplo? 
+
+Podríamos, por ejemplo, pedir que al menos un minhash coincida. Probamos:
+
+```{r}
+cubetas_df <- 
+    df_firmas %>% rowwise %>%
+    mutate(cubeta  = paste(hash, minhash, sep = '-'))
+cubetas_df
+```
+
+```{r}
+docs_agrupados <- cubetas_df %>% 
+    group_by(cubeta) %>%
+    summarise(docs = list(documento))
+docs_agrupados
+cubetas_lista <- docs_agrupados$docs
+names(cubetas_lista) <- docs_agrupados$cubeta
+cubetas_lista <- keep(cubetas_lista, function(x) length(x) > 1)
+```
+
+Y ahora podemos extraer candidatos:
+```{r}
+extraer_pares <- function(candidatos){
+  candidatos %>% 
+    map(function(x) combn(sort(x), 2, simplify = FALSE)) %>% 
+    flatten %>% 
+    unique
+}
+cubetas_lista %>% extraer_pares()
+```
+
+Y obtenemos `r length(cubetas_lista %>% extraer_pares())` pares, que excluye a los
+que tienen similitud 0 o cercana a 0.
+
+**Observación**: Si la similitud de un par de documentos es $s$,
+la probabilidad de que no coincidan en ningún hash es $(1-s)^8$, así
+que la probabilidad de coinciden en al menos un hash es $1-(1-s)^8$.
+Si $s$ es chico, entonces puede ser que esta probabilidad sea 
+considerable de todas formas, así que capturamos pares de similitud baja.
+
+---
+
+### Ejemplo: bandas de minhashes {-}
+Para poder tener un resultado intermedio, por ejemplo, que capture
+simlitud mayor a 0.15, podríamos combinar los hashes en grupos. Si tenemos
+4 grupos de 4 hashes cada uno, podemos pedir que en al menos uno de los
+4 grupos todos los hashes interiores coincidan. Esto no es tan exigente como pedir que *todos* los 16
+hashes coincidan, ni tan laxo como poder que *al menos uno* de los 16 hashes.
+
+Hacemos 4 grupos de 4 hashes. Primero construimos el grupo y nombres
+para las cubetas individuales:
+```{r}
+cubetas_df <- 
+    df_firmas %>%
+    mutate(grupo  = (as.integer(substring(hash, 3)) - 1) %/% 4) %>%
+    mutate(grupo = paste0('g_', grupo)) %>%
+    mutate(cubeta  = paste(hash, minhash, sep = '-'))  
+cubetas_df
+```
+
+Y ahora agrupamos los 4 hashes dentro de cada grupo para formar una
+nueva cubeta:
+
+```{r}
+cubetas_df <- cubetas_df %>%
+    group_by(documento, grupo) %>%
+    arrange(hash) %>%
+    summarise(cubeta  = paste(cubeta, collapse = '-')) %>%
+    mutate(cubeta = paste(grupo, cubeta))
+cubetas_df
+```
+
+**Observación**: Nótese que cada cubeta está hecha de 4 hashes.
+
+
+Ahora agrupamos por cubeta y vemos los pares resultantes:
+
+```{r}
+docs_agrupados <- cubetas_df %>% 
+    group_by(cubeta) %>%
+    summarise(docs = list(documento)) 
+docs_agrupados$docs %>% keep(function(x) length(x) > 1) %>% extraer_pares
+```
+
+Y vemos que de esta forma obtenemos los dos documentos con similitud más alta.
+En la siguiente sección veremos con detalle esta técnica de hacer bandas
+de minhashes para filtrar pares similares por encima de algún umbral predefinido.
+
+--- 
+
 
 
 ## Tarea {-}
