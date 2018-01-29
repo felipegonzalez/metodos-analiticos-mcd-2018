@@ -6,7 +6,10 @@ output: html_notebook
 Este ejemplo es tomado de un [curso anterior, versión de python](https://github.com/elmer-garduno/metodos-analiticos/blob/master/Lecture_2_Similarity_Spark.ipynb).
 
 El objetivo es encontrar artículos similares usando las categorías 
-a las que pertenecen. Vamos a usar las herramientas de spark para LSH:
+a las que pertenecen. Vamos a usar las herramientas de spark para LSH.
+Nota: estas herramientas todavía [no están completas](https://spark.apache.org/docs/2.2.0/ml-features.html#locality-sensitive-hashing). En particular,
+por el momento solo es posible hacer construcciones de bandas
+de un solo hash (es decir, *disyunción*).
 
 ```{r}
 library(sparklyr)
@@ -16,7 +19,8 @@ config <- spark_config()
 config$`sparklyr.shell.driver-memory` <- "4G"
 sc <- spark_connect(master = 'local', config = config)
 archivo <- spark_read_csv(sc, 'wiki', path = path, delimiter = ' ',
-                         columns = c('article', 'category')) 
+                         columns = c('article', 'category'),
+                         memory = FALSE, repartition = 10) 
 archivo %>% head(20)
 ```
 
@@ -35,7 +39,6 @@ Aplicamos lsh basado en minhashes:
 
 ```{r}
 lsh_wiki <- ft_minhash_lsh(sc, 'vector', 'hashes', 
-                           bucket_length = 10,   #r
                            num_hash_tables = 5, #b
                            dataset = wiki)
 ```
@@ -71,8 +74,9 @@ similares
 #threshold es para la distancia
 pares_similares <- 
       ml_approx_similarity_join(lsh_wiki, 
-                            wiki, wiki, threshold = 0.05) %>%
-      filter(id_a > id_b) %>% collect
+                            wiki,  wiki, threshold = 0.05) %>%
+      collect()
+     # filter(id_a > id_b) %>% collect
 
 nrow(pares_similares)
 articulos <- wiki %>% select(id, article) %>% collect
@@ -82,5 +86,5 @@ pares <- pares_similares %>%
          left_join(articulos %>% rename(id_a = id)) %>%
          rename(article_a = article) %>%
          select(-id_a, -id_b)
-DT::datatable(pares)
+DT::datatable(pares %>% head(300))
 ```
