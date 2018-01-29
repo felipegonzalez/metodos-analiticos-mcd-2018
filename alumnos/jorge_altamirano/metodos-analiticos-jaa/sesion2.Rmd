@@ -7,3 +7,276 @@ output:
 
 _175904 - Jorge III Altamirano Astorga_
 
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(textreuse)
+library(stringr)
+```
+
+```{r}
+textos <- character(4)
+textos[1] <- 'el perro persigue al gato.'
+textos[2] <- 'el gato persigue al perro'
+textos[3] <- 'este es el documento de ejemplo'
+textos[4] <- 'el documento con la historia del perro y el gato'
+tokenize_ngrams(textos[1], n = 2)
+```
+
+```{r}
+shingle_chars <- function(string, lowercase = FALSE, k = 4){
+    # produce shingles (con repeticiones)
+    if(lowercase) {
+      string <- str_to_lower(string)
+    }
+    shingles <- seq(1, nchar(string) - k + 1) %>%
+        map_chr(function(x) substr(string, x, x + k - 1))
+    shingles
+  }
+ejemplo <- shingle_chars('Este es un ejemplo', 4)
+ejemplo
+```
+
+```{r}
+sim_jaccard <- function(a, b){
+    length(intersect(a, b)) / length(union(a, b))
+}
+tejas_doc <- lapply(textos, shingle_chars, k = 4)
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
+sim_jaccard(tejas_doc[[4]], tejas_doc[[3]])
+```
+
+```{r}
+todas_tejas <- Reduce('c', tejas_doc) %>% unique %>% sort
+vector_1 <- as.numeric(todas_tejas %in% tejas_doc[[1]])
+vector_1
+```
+
+```{r}
+df <- data_frame(id_doc = paste0('doc_',
+                                 seq(1, length(tejas_doc))),
+           tejas = tejas_doc) %>% 
+           unnest %>%
+           unique %>%
+           mutate(val = 1) %>%
+           spread(id_doc, val, fill = 0)
+df
+```
+
+```{r}
+inter_12 <- sum(df$doc_1 & df$doc_2)
+union_12 <- sum(df$doc_1 | df$doc_2)
+similitud <- inter_12/union_12
+similitud # comparar con el número que obtuvimos arriba.
+```
+
+```{r}
+primer_uno <- function(col){
+  purrr::detect_index(col, function(x) x > 0)
+}
+set.seed(321)
+df_1 <- df %>% sample_n(nrow(df))
+df %>% summarise_if(is.numeric, primer_uno) 
+```
+```{r}
+set.seed(32)
+num_hashes <- 10
+permutaciones <- sapply(1:num_hashes, function(i){
+  sample(1:nrow(df), nrow(df))
+})
+firmas_mat <- lapply(1:num_hashes, function(i){
+    df_1 <- df[order(permutaciones[,i]), ]
+    df_1 %>% summarise_if(is.numeric, primer_uno) 
+}) %>% bind_rows()
+
+firmas_df <- firmas_df %>% add_column(firma = paste0('f_', 1:num_hashes),
+                                              .before = 1)
+firmas_df
+```
+
+```{r}
+mean(firmas_df$doc_1 == firmas_df$doc_2)
+mean(firmas_df$doc_1 == firmas_df$doc_3)
+mean(firmas_df$doc_3 == firmas_df$doc_4)
+```
+
+```{r}
+firmas_rep <- lapply(1:50, function(i){
+    firmas_df <- lapply(1:20, function(i){
+        df_1 <- df %>% sample_n(nrow(df))
+        df_1 %>% summarise_if(is.numeric, primer_uno) 
+    }) %>% bind_rows()
+    firmas_df$rep <- i
+    firmas_df
+})
+
+sapply(firmas_rep, function(mat){
+  mean(mat[, 1] == mat[,2])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
+##   10%   50%   90% 
+## 0.600 0.725 0.850
+sapply(firmas_rep, function(mat){
+  mean(mat[, 3] == mat[,4])
+}) %>% quantile(probs = c(0.1,0.5,0.9))
+```
+
+## 2.4 Optimización de firmas
+
+```{r}
+mat_df <- df %>% select(-tejas) %>% as.matrix
+calc_firmas <- function(mat_df, permutaciones){
+    firmas <- list()
+    num_hashes <- ncol(permutaciones)
+    firmas <- sapply(1:ncol(mat_df), function(r) rep(Inf, num_hashes))
+    for(r in 1:nrow(df)){
+        indices <- mat_df[r,] > 0
+        firmas[, indices] = pmin(firmas[, indices], permutaciones[r, ])
+    }
+    firmas
+}
+calc_firmas(mat_df, permutaciones)
+```
+
+## 2.5 Min-Hashing
+
+```{r}
+num_renglones <- nrow(mat_df)
+hash_simple <- function(...){
+  primo <- 113
+  a <- sample.int(primo - 1, 2)
+  out_fun <- function(x) {
+        ((a[1]*(x-1) + a[2]) %% primo) + 1
+    }
+  out_fun
+}
+set.seed(1323)
+hash_f <- lapply(1:20, hash_simple)
+hashes <- sapply(hash_f, function(f) f(1:num_renglones))
+dim(hashes)
+```
+
+```{r}
+hashes[1:10,1:5]
+```
+
+```{r}
+firmas_2 <- calc_firmas(mat_df, hashes)
+firmas_2
+```
+
+```{r}
+mean(firmas_2[,1]==firmas_2[,2])
+mean(firmas_2[,1]==firmas_2[,3])
+mean(firmas_2[,3]==firmas_2[,4])
+```
+
+```{r}
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])
+sim_jaccard(tejas_doc[[1]], tejas_doc[[3]])
+sim_jaccard(tejas_doc[[3]], tejas_doc[[4]])
+```
+
+_Usando funciones mejor construidas de hashing_
+
+```{r}
+hash_string('El perro persigue al gato') 
+```
+
+```{r}
+set.seed(253)
+options("mc.cores" = 4L)
+minhash <- minhash_generator(50)
+corpus <- TextReuseCorpus(text = textos, 
+                          tokenizer = shingle_chars, 
+                          minhash_func = minhash,
+                          keep_tokens = TRUE)
+# En este objeto:
+# hashes: los hashes de las tejas, con la función hash base - puede ser útil para # almacenar los documentos para postprocesar:
+# minhashes: contiene los valores minhash bajo las funciones hash
+# que escogimos al azar en minhash_generator.
+str(corpus[[1]])
+```
+
+```{r}
+set.seed(253)
+minhashes_corpus <- minhashes(corpus)
+minhashes_corpus
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])
+```
+
+```{r}
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])
+mean(minhashes_corpus[[1]]==minhashes_corpus[[3]])
+mean(minhashes_corpus[[4]]==minhashes_corpus[[3]])
+```
+
+## Ejemplo tweets
+
+```{r}
+minhash <- minhash_generator(50)
+x <- scan("../../../datos/similitud/gamergate_antigg.txt", what="", sep="\n")
+system.time(
+corpus_tweets <- TextReuseCorpus(text = x, 
+                          tokenizer = shingle_chars, 
+                          k = 5, 
+                          lowercase = TRUE,
+                          hash_func = minhash,
+                          keep_tokens = TRUE,
+                          keep_text = TRUE, skip_short = FALSE))
+```
+
+```{r}
+corpus_tweets[[16]]$content
+```
+
+```{r}
+mh <- hashes(corpus_tweets)
+similitud <- sapply(mh, function(x) mean(mh[[16]]==x))
+indices <- which(similitud > 0.5)
+names(indices)
+```
+
+```{r}
+corpus_tweets[['doc-11']]$content
+```
+
+```{r}
+similitud <- sapply(mh, function(x) mean(mh[[186]]==x))
+indices <- which(similitud > 0.35)
+names(indices)
+```
+
+```{r}
+lapply(names(indices), function(nom) corpus_tweets[[nom]]$content)
+```
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-1657"]]$content, lowercase=TRUE, k = 5)
+  )
+```
+
+```{r}
+jaccard_similarity(
+  shingle_chars(corpus_tweets[["doc-545"]]$content, lowercase=TRUE, k = 5),
+  shingle_chars(corpus_tweets[["doc-859"]]$content, lowercase=TRUE, k = 5)
+  )
+```
+
+```{r}
+system.time(
+pares  <- pairwise_compare(corpus_tweets[1:200], ratio_of_matches) %>%
+      pairwise_candidates())
+```
+
+```{r}
+pares <- pares %>% filter(score > 0.20) %>% arrange(desc(score)) 
+pares
+```
+
+```{r}
+corpus_tweets[['doc-107']]$content
+corpus_tweets[['doc-186']]$content
+```
+
