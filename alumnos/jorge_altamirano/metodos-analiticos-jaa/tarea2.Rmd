@@ -1,0 +1,106 @@
+---
+title: "Tarea 2: 2018/01/29"
+output: html_notebook
+---
+
+_Jorge III Altamirano Astorga 175904_
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(textreuse)
+library(stringr)
+```
+
+```{r}
+mat <- matrix(c(0,1,0,1,0,1,0,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,0,0),
+              nrow = 6, byrow = TRUE)
+colnames(mat) <- c('d_1','d_2','d_3','d_4')
+rownames(mat) <- c(0,1,2,3,4,5)
+mat
+```
+
+```{r}
+num_hashes_mat <- 1
+primer_uno <- function(col){
+  purrr::detect_index(col, function(x) x > 0)
+}
+permutaciones_mat <- sapply(1:num_hashes_mat, function(i){
+  (1:nrow(mat))
+})
+firmas_df_mat <- lapply(1:num_hashes_mat, function(i){
+  df_mat <- mat %>% as.data.frame()
+  df_2 <- df_mat[order(permutaciones_mat[,i]), ]
+  df_2 %>% summarise_if(is.numeric, primer_uno) 
+}) %>% bind_rows()
+
+firmas_df_mat <- firmas_df_mat %>% add_column(firma = paste0('f_', 1:num_hashes_mat),
+                                              .before = 1)
+firmas_df_mat
+```
+
+## Hashes 1
+
+$$
+h_1(x) = 2x + 1\ mod\ 6
+$$
+```{r}
+hash_1 <- function(...){
+  primo <- 7
+  a <- sample.int(primo - 1, 2)
+  out_fun <- function(x) {
+        # ((a[1]*(x-1) + a[2]) %% primo) + 1
+      ((2*x)+1) %% 6
+    }
+  out_fun
+}
+set.seed(175904)
+hash_f1 <- lapply(1:20, hash_1)
+hashes_1 <- sapply(hash_f1, function(f) f(1:nrow(mat)))
+dim(hashes_1)
+hashes[1:10, 1:10]
+```
+
+## Hashes 2
+
+$$
+h_2(x) = 3x + 2\ mod\ 6
+$$
+```{r}
+hash_2 <- function(...){
+  primo <- 7
+  a <- sample.int(primo - 1, 2)
+  out_fun <- function(x) {
+        # ((a[1]*(x-1) + a[2]) %% primo) + 1
+      ((3*x)+2) %% 6
+    }
+  out_fun
+}
+set.seed(175904)
+hash_f2 <- lapply(1:20, hash_2)
+hashes_2 <- sapply(hash_f2, function(f) f(1:nrow(mat)))
+dim(hashes_2)
+hashes[1:10, 1:10]
+```
+
+## Hashes 3
+
+$$
+h_3(x) = 5x + 2\ mod\ 6
+$$
+```{r}
+hash_3 <- function(...){
+  primo <- 7
+  a <- sample.int(primo - 1, 2)
+  out_fun <- function(x) {
+        # ((a[1]*(x-1) + a[2]) %% primo) + 1
+      ((5*x)+2) %% 6
+    }
+  out_fun
+}
+set.seed(175904)
+hash_f3 <- lapply(1:20, hash_3)
+hashes_3 <- sapply(hash_f3, function(f) f(1:nrow(mat)))
+dim(hashes_3)
+hashes[1:10, 1:10]
+```
+
