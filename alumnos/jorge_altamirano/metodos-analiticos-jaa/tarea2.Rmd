@@ -1,15 +1,20 @@
 ---
-title: "Tarea 2: 2018/01/29"
-output: html_notebook
+title: 'Tarea 2: 2018/01/29'
+output:
+  html_document:
+    df_print: paged
 ---
 
 _Jorge III Altamirano Astorga 175904_
+
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 library(tidyverse)
 library(textreuse)
 library(stringr)
 ```
+
+## Ejercicio de (Leskovec, Rajaraman, and Ullman 2014) Considera una matriz y responder las preguntas:
 
 ```{r}
 mat <- matrix(c(0,1,0,1,0,1,0,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,0,0),
@@ -19,48 +24,97 @@ rownames(mat) <- c(0,1,2,3,4,5)
 mat
 ```
 
+#### Sin permutar esta matriz, calcula la matriz de firmas minhash usando las siguientes funciones hash
+
 ```{r}
 num_hashes_mat <- 1
+firmas_df_mat <- data_frame()
 primer_uno <- function(col){
   purrr::detect_index(col, function(x) x > 0)
 }
 permutaciones_mat <- sapply(1:num_hashes_mat, function(i){
   (1:nrow(mat))
 })
-firmas_df_mat <- lapply(1:num_hashes_mat, function(i){
+
+
+### original
+firmas_df_mat_ <- lapply(1:num_hashes_mat, function(i){
   df_mat <- mat %>% as.data.frame()
   df_2 <- df_mat[order(permutaciones_mat[,i]), ]
   df_2 %>% summarise_if(is.numeric, primer_uno) 
 }) %>% bind_rows()
-
-firmas_df_mat <- firmas_df_mat %>% add_column(firma = paste0('f_', 1:num_hashes_mat),
+firmas_df_mat_ <- firmas_df_mat_ %>% add_column(firma = paste0('f_', "original"),
                                               .before = 1)
+firmas_df_mat <- firmas_df_mat_ %>% bind_rows()
+
+## h_1
+firmas_df_mat_ <- lapply(1:num_hashes_mat, function(i){
+  df_mat <- ((mat*2+1)%%6) %>% as.data.frame()
+  df_2 <- df_mat[order(permutaciones_mat[,i]), ]
+  df_2 %>% summarise_if(is.numeric, primer_uno)
+}) %>% bind_rows()
+firmas_df_mat_ <- firmas_df_mat_ %>% add_column(firma = paste0('f_', "h_1"),
+                                              .before = 1)
+firmas_df_mat <- firmas_df_mat_ %>% bind_rows(firmas_df_mat)
+
+## h_2
+firmas_df_mat_ <- lapply(1:num_hashes_mat, function(i){
+  df_mat <- ((mat*3+2)%%6) %>% as.data.frame()
+  df_2 <- df_mat[order(permutaciones_mat[,i]), ]
+  df_2 %>% summarise_if(is.numeric, primer_uno)
+}) %>% bind_rows()
+firmas_df_mat_ <- firmas_df_mat_ %>% add_column(firma = paste0('f_', "h_2"),
+                                              .before = 1)
+firmas_df_mat <- firmas_df_mat_ %>% bind_rows(firmas_df_mat)
+
+## h_3
+firmas_df_mat_ <- lapply(1:num_hashes_mat, function(i){
+  df_mat <- ((mat*5+2)%%6) %>% as.data.frame()
+  df_2 <- df_mat[order(permutaciones_mat[,i]), ]
+  df_2 %>% summarise_if(is.numeric, primer_uno)
+}) %>% bind_rows()
+firmas_df_mat_ <- firmas_df_mat_ %>% add_column(firma = paste0('f_', "h_3"),
+                                              .before = 1)
+firmas_df_mat <- firmas_df_mat_ %>% bind_rows(firmas_df_mat)
+
+rm(firmas_df_mat_)
 firmas_df_mat
+
 ```
 
-## Hashes 1
+#### ¿Cuál de estas funciones hash son verdaderas permutaciones?
+
+_Pienso que ninguna, pues el módulo es 6: factorizable, por lo que vemos muchas colisiones._
+
+#### ¿Qué tan cerca están las similitudes de Jaccard estimadas por minhash de las verdaderas similitudes?
+
+_Similar, aunque no idéntica. Pues las colisiones provocadas por los números y matrices que fueron dadas, son sub-óptimas._
+
+##### Hashes 1
 
 $$
 h_1(x) = 2x + 1\ mod\ 6
 $$
+
 ```{r}
 hash_1 <- function(...){
   primo <- 7
   a <- sample.int(primo - 1, 2)
   out_fun <- function(x) {
-        # ((a[1]*(x-1) + a[2]) %% primo) + 1
-      ((2*x)+1) %% 6
+         ((a[1]*(x-1) + a[2]) %% primo) + 1
+      # ((2*x)+1) %% 6
     }
   out_fun
 }
+
 set.seed(175904)
 hash_f1 <- lapply(1:20, hash_1)
 hashes_1 <- sapply(hash_f1, function(f) f(1:nrow(mat)))
 dim(hashes_1)
-hashes[1:10, 1:10]
+hashes_1[1:6, 1:10]
 ```
 
-## Hashes 2
+##### Hashes 2
 
 $$
 h_2(x) = 3x + 2\ mod\ 6
@@ -79,10 +133,10 @@ set.seed(175904)
 hash_f2 <- lapply(1:20, hash_2)
 hashes_2 <- sapply(hash_f2, function(f) f(1:nrow(mat)))
 dim(hashes_2)
-hashes[1:10, 1:10]
+hashes_2[1:6, 1:10]
 ```
 
-## Hashes 3
+##### Hashes 3
 
 $$
 h_3(x) = 5x + 2\ mod\ 6
@@ -101,6 +155,32 @@ set.seed(175904)
 hash_f3 <- lapply(1:20, hash_3)
 hashes_3 <- sapply(hash_f3, function(f) f(1:nrow(mat)))
 dim(hashes_3)
-hashes[1:10, 1:10]
+hashes_3[1:6, 1:10]
 ```
+```{r}
+calc_firmas <- function(mat_df2, permutaciones){
+    firmas <- list()
+    num_hashes <- ncol(permutaciones)
+    firmas <- sapply(1:ncol(mat_df2), function(r) rep(Inf, num_hashes))
+    for(r in 1:nrow(mat_df2)){
+        indices <- mat_df2[r,] > 0
+        firmas[, indices] = pmin(firmas[, indices], permutaciones[r, 1])
+    }
+    firmas
+}
+sim_jaccard <- function(a, b){
+    length(intersect(a, b)) / length(union(a, b))
+}
+firmas_1 <- calc_firmas(mat %>% as.matrix, hashes_1)
+firmas_2 <- calc_firmas(mat %>% as.matrix, hashes_2)
+firmas_3 <- calc_firmas(mat %>% as.matrix, hashes_3)
+sim_jaccard(mat[,1], mat[,2])
+sim_jaccard(mat[,1], mat[,3])
+sim_jaccard(mat[,3], mat[,4])
+mean(firmas_2[,1]==firmas_2[,2])
+mean(firmas_2[,1]==firmas_2[,3])
+mean(firmas_2[,3]==firmas_2[,4])
+```
+
+## 2. Calcula la similitud de jaccard de las cadenas “Este es el ejemplo 1” y “Este es el ejemplo 2”, usando tejas de tamaño 3.
 
