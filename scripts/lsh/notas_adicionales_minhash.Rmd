@@ -1,0 +1,219 @@
+---
+title: "Aproximación de minhashing"
+output: html_notebook
+---
+
+En esta parte discutimos qué tan buena es la aproximación de minhashing
+que vimos en clase. Usaremos un enfoque de simulación, con un generador
+de documentos aleatorio.
+
+## 1. Generador de documentos
+
+Primero usaremos un generador simple de documentos:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+set.seed(234)
+generar_docs <- function(n = 2, caracteres = c(rep(" ", 3), letters[1:10])){
+  comun <- paste(sample(caracteres, 400, replace = TRUE), collapse = "")
+  lapply(1:n, function(i) {
+    r <- as.integer(runif(1, 50, 200))
+    aleatorio <- paste(sample(caracteres, r, replace = TRUE), collapse = "")
+    paste(comun, aleatorio)
+  })
+}
+textos <- generar_docs(n=2)
+textos
+```
+
+```{r}
+shingle_chars <- function(string, lowercase = FALSE, k = 4){
+  # produce shingles (con repeticiones)
+  if(lowercase) {
+    string <- str_to_lower(string)
+  }
+  shingles <- seq(1, nchar(string) - k + 1) %>%
+    map_chr(function(x) substr(string, x, x + k - 1))
+  shingles
+}
+```
+
+Con estos parámetros, las similitudes de los documentos producidos tienden
+a ser altas. Puedes cambiar los parámetros del generador para probar otros casos:
+
+```{r}
+a <- shingle_chars(textos[[1]], k = 4)
+b <- shingle_chars(textos[[2]], k = 4)
+textreuse::jaccard_similarity(a, b)
+```
+
+## 2. Método de permutaciones
+
+Hacemos un ejercicio de simulación, usando el método de permutaciones
+para estimar la similitud de jaccard.
+
+```{r}
+generar_minhash_perms <- function(tejas, n=100){
+  tejas_indice <- as.list(1:length(tejas))
+  names(tejas_indice) <- tejas
+  perms <- lapply(1:n, function(i){
+    sample(1:length(tejas), length(tejas))
+  })
+  f <- function(doc_tejas){
+      sapply(perms, function(p){
+        indices <- p[as.integer(tejas_indice[doc_tejas])]
+        min(indices)
+      })
+  }
+  f
+} 
+
+minhash <- generar_minhash_perms(union(a,b), 200)
+mean(minhash(a)==minhash(b))
+```
+
+Y ahora hacemos un ejercicio de simulación
+
+```{r}
+calc_sim <- function(num_minhashes = 50, generador) {
+  textos <- generador(n=2)
+  a <- shingle_chars(textos[[1]], k = 4) %>% unique
+  b <- shingle_chars(textos[[2]], k = 4) %>% unique
+  minhash <- generar_minhash_perms(union(a,b), num_minhashes)
+  error <- textreuse::jaccard_similarity(a, b) - mean(minhash(a)==minhash(b))
+  error
+}
+calc_sim(50, generador = generar_docs)
+```
+
+```{r}
+df_sims <- expand.grid(rep = 1:100, num_minhashes = c(20, 100, 500,1000))
+system.time(
+df_sims <- df_sims %>% mutate(error = map_dbl(num_minhashes, 
+                                              calc_sim, generar_docs))
+)
+```
+
+```{r}
+ggplot(df_sims, aes(x = num_minhashes, y=error)) +
+  geom_hline(yintercept = 0) + 
+  geom_hline(yintercept = c(-0.03,0.03), colour="red") + 
+  geom_jitter(alpha=0.2, height = 0) + ylim(c(-0.5,0.5))
+```
+
+
+
+
+## 2. Método de funciones hash
+
+Hacemos un ejercicio de simulación, usando el método de permutaciones
+para estimar la similitud de jaccard.
+
+```{r}
+calc_sim_hash <- function(num_minhashes = 50, generador) {
+  textos <- generador(n=2)
+  a <- shingle_chars(textos[[1]], k = 4) %>% unique
+  b <- shingle_chars(textos[[2]], k = 4) %>% unique
+  minhash <- textreuse::minhash_generator(num_minhashes)
+  error <- textreuse::jaccard_similarity(a, b) - mean(minhash(a)==minhash(b))
+  error
+}
+calc_sim_hash(50, generador = generar_docs)
+```
+
+```{r}
+df_sims_hash <- expand.grid(rep = 1:100, num_minhashes = c(20, 100, 500, 1000))
+system.time(
+df_sims_hash <- df_sims_hash %>% mutate(error = map_dbl(num_minhashes, 
+                                              calc_sim_hash, generar_docs))
+)
+```
+
+```{r}
+ggplot(df_sims_hash, aes(x = num_minhashes, y=error)) +
+  geom_hline(yintercept = 0) + 
+  geom_hline(yintercept = c(-0.03,0.03), colour="red") + 
+  geom_jitter(alpha=0.2, height = 0) + ylim(c(-0.5,0.5))
+```
+
+Puedes ver la comparación directa en esta gráfica:
+
+```{r}
+df_sims$tipo ='permutaciones'
+df_sims_hash$tipo ='hashes'
+df <- bind_rows(df_sims, df_sims_hash)
+ggplot(df, aes(x = num_minhashes, y=error)) +
+  geom_hline(yintercept = 0) + 
+  geom_hline(yintercept = c(-0.03,0.03), colour="red") + 
+  geom_jitter(alpha=0.2, height = 0) + ylim(c(-0.5,0.5)) +
+  facet_wrap(~tipo, nrow=1)
+```
+
+## 4. Discusión
+
+Como vemos arriba, el error al estimar usando funciones hash es ligeramente
+mayor que el de métodos de permutaciones. 
+
+La razón es que para el método de permutaciones, el estimador de la similitud
+es insesgado (y error estándar se reduce $O(1\sqrt{n})$ cuando aumenta
+el número de minhashes), pero para el método de hashes, *para algunos documentos*
+el estimador de similitud por minhashes tiene sesgo (que se reduce también con $n$ cuando tomamos más minhashes). Esto es consecuencia de la implementación, y
+a fin de cuentas, del hecho de que solo estamos **simulando** permutaciones.
+
+En el paquete **textreuse**, usamos una función *hash_string* fija
+que mapea cadenas a enteros. Este es el primer paso. Entonces para las
+tejas de un documento tenemos ahora una colección de números enteros.
+
+Algunas de las funciones hash que escojamos posteriormente puede ser
+que por azar mapeen en un orden similar (o con algún otro patrón) a estos números enteros. Esto
+sucede rara vez on las permutaciones, pero es más común con la estrategia
+de textreuse (que se detalla abajo)
+
+Para fines prácticos, compara:
+
+- El tamaño del error posible con permutaciones y hashes
+- El tiempo de cómputo para cada uno de los métodos.
+
+### Funciones hash de textreuse
+
+Para crear varias funciones hash diferentes,
+hacemos bitwise or exclusivo que mapean enteros a enteros. 
+En **textreuse** se usan enteros grandes, aquí veremos un miniejemplo
+con los primero 64 enteros solamente.
+
+El bitwise or exclusivo
+funciona como sigue. Supongamos que una cadena tiene hash original 53. En bits (solo vemos los primeros seis), esto es
+
+
+```{r}
+intToBits(53)[1:6]
+```
+
+Estos son seis bits, q
+
+Ahora escogemos un número al azar de 6 bits y lo convertimos a bits:
+
+```{r}
+r <- sample.int(64, 1) -1
+r
+intToBits(r)[1:6]
+bitwXor(r, 53)
+intToBits(bitwXor(r, 53))[1:6]
+```
+
+
+
+```{r}
+x <- (as.numeric(intToBits(r)[1:6]))
+y <- (as.numeric(intToBits(53)[1:6]))
+x
+y
+```
+
+Checa que este último resultado es igual a el o exclusivo de estos dos vectores
+
+```{r}
+ifelse(x!=y, 1,0)
+as.numeric(intToBits(bitwXor(r, 53))[1:6])
+
+```
