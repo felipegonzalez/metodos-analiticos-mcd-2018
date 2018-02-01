@@ -135,6 +135,8 @@ con máxima pendiente de la curva S, según la referencia):
 textreuse::lsh_threshold
 ```
 
+Que está también implementada en el paquete textreuse [@R-textreuse].
+
 ```{r}
 textreuse::lsh_threshold(20,5)
 ```
@@ -1012,5 +1014,13 @@ y luego amplificar la familia para obtener tasas de falsos
 positivos y negativos que sean aceptables.
 
 
+## Tarea {-}
+
+1. La tarea está en *scripts/lsh/entity-matching.Rmd*
+
+2. Si quieres hacer experimentos con el error en el cálculo de similitud
+por minhashing (y la diferencia entre permutaciones y hashes), puedes
+ver el script *scripts/lsh/notas_adicionales_minhash.nb.html* (o correr el Rmd
+asociado).
 
 
