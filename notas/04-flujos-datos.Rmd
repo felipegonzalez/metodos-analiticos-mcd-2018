@@ -1,0 +1,23 @@
+# Procesamiento de flujos
+
+En esta parte supondremos que los datos se pueden representar como un flujo de tal velocidad y volumen que típicamente no es posible almacenar todo el flujo, o que no es posible hacer queries a la base de datos resultante.
+
+Veremos técnicas simples para obtener resúmenes simples de los flujos, y también veremos cómo aplicar métodos probabilísticos para filtrar o resumir ciertos aspectos de estos flujos.
+
+Ejemplos de flujos son datos de sitios de internet, datos de redes grandes de sensores, datos de transacciones.
+
+## Muestreo y restricción temporal
+
+Para analizar flujos con estas propiedades podemos hacer:
+
+- Restricción temporal: considerar ventanas de tiempo, y hacer análisis sobre los últimos datos en la ventana. Datos nuevos van reemplazando a datos anteriores, y puede ser que los datos anteriores no se respaldan (o es costoso acceder a ellos).
+
+- Resúmenes acumulados: guardamos resúmenes de los datos que podemos actualizar y utilizar para calcular características de interés en el sistema, por ejemplo conteos simples, promedios.
+
+- Muestreo y filtrado: filtros y muestreo probabilístico. Podemos diseñar muestras apropiadas para estimar cantidades que nos interesen, y sólo guardar los datos que corresponden a la muestra.
+
+Nos interesan principalmente las técnicas de este último punto. Consideraremos dos problemas:
+
+Filtrar un flujo: En general, ¿cómo retener para análisis elementos del flujo que satisfagan una propiedad?
+Muestreo de flujo: ¿Cómo diseñar un esquema de muestreo apropiado?
+Ventanas resumen.
