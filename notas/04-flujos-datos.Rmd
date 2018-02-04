@@ -33,8 +33,13 @@ Si queremos estimar el promedio del tamaño de las transacciones en una ventana 
 lo incluimos en la muestra o no, y luego hacer nuestro análisis
 con las unidades seleccionadas.
 
+```{r, }
+install.packages('itertools')
+```
+
 ```{r, message = FALSE, warning = FALSE}
 library(iterators)
+library(itertools)
 library(tidyverse)
 ```
 
@@ -148,10 +153,10 @@ en una whitelist (o blacklist)
 En estos ejemplo, 
 tenemos que checar contra la lista $S$ si seleccionamos un elemento o no, a
 diferencia de los ejemplos de arriba.
-Cuando la lista es muy grande, esta operación puede ser costosa. Podemos usar 
-una estructura indexada (por ejemplo en una base de datos), pero
-hay buenas alternativas con desempeño excelente en tiempo y memoria
-de tipo probabilístico.
+Cuando la lista es muy grande, esta operación puede ser costosa. Hay
+varias opciones para aproximarnos a este problema, aquí veremos
+un método probabilístico (Bloom filters) que tiene ventajas en cuanto
+a memoria usada.
 
 ### Ejemplos {-}
 
@@ -159,6 +164,9 @@ de tipo probabilístico.
 aplicación que cuenta el número de usuarios únicos que bajan paquetes de CRAN. Cada
 vez que hay una nueva descarga (transacción) debemos decidir si se trata
 de usuarios nuevos o no y actualizar correctamente el conteo de usuarios únicos.
+
+- En este ejemplo de [Medium](https://blog.medium.com/what-are-bloom-filters-1ec2a50c68ff) se usan filtros de Bloom para evitar volver a recomendar artículos ya
+vistos o recomendados.
 
 - Supongamos que tenemos un diccionario de palabras $S$ del español.
 Cuando observamos una nueva "palabra" que alguien escribió,
@@ -191,9 +199,171 @@ Queremos decidir si un elemento nuevo $\omega\in \Omega$ está o no en el
 conjunto $S.
 
 
-### Ejemplos {-}
-
-- [Medium](https://blog.medium.com/what-are-bloom-filters-1ec2a50c68ff) usa 
+### Ejemplo {-}
 
 
+#### Paso 1: inicialización y selección de hashes {-}
 
+Usaremos un vector de tamaño $n=11$ (longitud de vector de bits), y suponemos
+que los valores posibles ($\Omega$) son los enteros de uno a mil. Queremos
+detectar cuando observamos algún elemento de $S=\{15,523,922\}$. Para este
+ejemplo usamos $k=2$ funciones hash. Estas funciones deben mapear
+los enteros del uno al mil a las cubetas 1 a 11 (el número de entradas del
+ vector e bits). 
+
+```{r}
+S <- c(15, 523, 922)
+hash_lista <- list(h_1 = function(x) x %% 11 + 1,
+                   h_2 = function(x) (5*x + 3) %% 11 + 1)
+```
+
+Inicializamos el vector de bits:
+
+```{r}
+v <- rep(0, 11)
+```
+
+
+#### Paso 2: insertar elementos en filtro {-}
+
+```{r}
+for(i in 1:length(S)){
+  indices <- sapply(hash_lista, function(h) h(S[i]))
+  indices
+  print(indices)
+  v[indices] <- 1 
+  print(v)
+}
+```
+
+Y tenemos el vector del filtro listo:
+```{r}
+v
+```
+
+#### Paso 3: filtrar elementos {-}
+
+Ahora veamos cómo decidimos cuáles elementos están o no en el conjunto $S$. Si
+observamos un nuevo número $x$, calculamos sus hashes, y vemos si esas
+posiciones están prendidas en el vector $v$. Si no lo están, entonces el
+elemento necesariamente no está en el conjunto $S$:
+
+```{r}
+x <- 219
+h_x <- sapply(hash_lista, function(h) h(x))
+h_x
+```
+
+No está en la lista, pues por lo menos uno de los bits es igual a cero:
+
+```{r, warning=FALSE}
+v[h_x]
+all(v[h_x])
+```
+
+Nunca descartamos un número en la colección:
+
+```{r, warning=FALSE}
+x <- 523
+h_x <- sapply(hash_lista, function(h) h(x))
+all(v[h_x])
+```
+
+Sin embargo, puede haber falsos positivos:
+
+```{r, warning=FALSE}
+x <- 413
+h_x <- sapply(hash_lista, function(h) h(x))
+all(v[h_x])
+```
+
+**Observación**: nótese que solo es neceario almacenar el vector de bits
+y las funciones hash, y esto generalmente resulta en una representación 
+compacta. Por otra parte, tendremos algunos falsos positivos, que tenemos
+que controlar.
+
+## Análisis de filtro de Bloom
+
+Para construir este filtro, tenemos que escoger el tamaño del vector de bits ($n$),
+y el número de funciones hash $k$, dependiendo
+del número de elementos que tenemos que almacenar.
+
+Supongamos como aproximación que una función hash en particular selecciona
+una de las entradas del bit la misma probabilidad. La probabilidad de que un
+bit dado no se encienda cuando insertamos un elemento es
+$$1-\frac{1}{n}$$.
+Si $k$ es el número de funciones hash, entonces la probabilidad de que ese bit
+dado no se encienda es
+$$\left (1-\frac{1}{n}\right )^k$$.
+Si insertamos $s$ elementos de $S$, entonces la probabilidad de que ese bit dado
+no se encienda es entonces
+$$\left (1-\frac{1}{n}\right  )^{ks}$$.
+La probabilidad de que se encienda es
+$$1-\left (1-\frac{1}{n}\right )^{ks}$$.
+
+
+Finalmente podemos calcular la probabilidad de un falso positivo. Para un elemento
+que no está en $S$, la probabilidad de que todos sus hashes caigan en bits encendidos
+es
+
+$$ \left ( 1-\left (1-\frac{1}{n}\right )^{ks}\right )^k$$
+
+**Observaciones**:
+
+1. Si usamos un vector más grande ($n$ más grande), la probabildad de falsos
+positivos baja (el vector de bits tiene relativamente más ceros).
+2. Si el conjunto $S$ es más grandes ($s$ más grande), la probabilidad de
+falsos positivos sube (el vector de bits está más lleno).
+3. El número de hashes tiene dos efectos: por un lado, más hashes llenan más
+el vector de bits de unos. Por otro lado, es más difícil que un nuevo elemento
+"atine" a más posiciones que tienen un bit encendido.
+4. Esta fórmula es una aproximación, pues usamos funciones hash y no aleatorización.
+
+
+Podemos hacer una gráfica para ver cómo se comporta la tasa de falsos positivos:
+
+
+```{r, fig.width = 8}
+tasa_fp <- function(n, s, k) {
+    (1 - (1 - (1 / n)) ^ (k * s)) ^ k
+}
+df <- expand.grid(list(s = c(1e5, 1e6, 1e7, 1e8),
+                  k = seq(1, 20),
+                  n = 2^seq(20,30,1)
+                  )) %>%
+      mutate(millones_bits = round(n/1e6)) %>%
+      mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
+      mutate(s_str = paste0(s, ' insertados'))
+
+
+ggplot(df, aes(x = k, y = tasa_falsos_p, 
+               colour=log(millones_bits), group=millones_bits)) + 
+               geom_line(size=1.2) +
+               facet_wrap(~s_str) +
+               labs(x="k = número de hashes", 
+                    colour = "Mill bits \n en vector") +
+               scale_y_sqrt()
+  
+```
+
+
+Haciendo algunas aproximaciones, se puede demostrar que el número de hashes
+óptimo es aproximadamente
+$$k  = \frac{n}{s}\log(2)$$
+
+```{r}
+df_opt <- df %>% select(n, s) %>%  
+  mutate(k = ceiling((n/s)*log(2))) %>% unique %>%
+  mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
+  mutate(s_str = paste0(s, ' insertados'))
+ggplot(df, aes(x = k, y = tasa_falsos_p)) +
+               geom_line(aes(colour=log(millones_bits), group=millones_bits),
+                 size=1.2) +
+               facet_wrap(~s_str) +
+               labs(x="k = número de hashes", 
+                    colour = "Mill bits \n en vector") +
+               scale_y_sqrt() +
+               geom_point(data = df_opt) +
+               xlim(0,20)
+  
+```
