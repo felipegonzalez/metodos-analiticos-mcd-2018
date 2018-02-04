@@ -33,6 +33,47 @@ Si queremos estimar el promedio del tamaño de las transacciones en una ventana 
 lo incluimos en la muestra o no, y luego hacer nuestro análisis
 con las unidades seleccionadas.
 
+```{r, message = FALSE, warning = FALSE}
+library(iterators)
+library(tidyverse)
+```
+
+```{r}
+generar_trans <- function(){
+  id_num <- sample.int(500, 1)
+  monto <- runif(1, 100,10000) + id_num*10
+  trans <- list(id = id_num, monto = monto)
+}
+```
+
+Podemos estimar la mediana con toda la muestra. Primero generamos
+durante 2 segundos, y calculamos la mediana de las transacciones:
+
+```{r}
+set.seed(32)
+a <- timeout(generar_trans, 2) %>% as.list
+length(a)
+sapply(a, function(elem) elem$monto) %>% median
+```
+
+
+Si queremos seleccionar un 1\% de las transacciones, 
+
+
+```{r}
+seleccionar_rng <- function(trans){
+   runif(1) < 0.01
+}
+trans_filtradas <- iter(generar_trans, seleccionar_rng)
+b <- timeout(trans_filtradas, 2) %>% as.list
+length(b)
+sapply(b, function(elem) elem$monto) %>% median
+```
+
+---
+
+
+
 ### Ejemplo {-}
 Ahora supongamos que queremos estimar el promedio (por cliente) de la transacción máxima de los clientes en una ventana de tiempo. En este caso, la unidad de muestreo más simple es el cliente, y el método del ejemplo anterior es menos apropiado. Quisiéramos en lugar de eso tomar una muestra de
 clientes en la ventana, tomar el máximo de todas sus transacciones,
@@ -40,10 +81,12 @@ y luego promediar.
 
 - En este caso, el análisis es más complicado si seleccionamos cada transacción según un número aleatorio (tenderíamos a seleccionar más clientes con muchas transacciones).
 
-En lugar de eso, podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\to 10$.
+```{block2, type ='resumen'}
+Podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\to B$.
 Los clientes de la meustra son los que caen en una cubeta (por ejemplo la cubeta 1), y así 
 obtendríamos una muestra que consiste de $1/B$ de los clientes
 totales que tuvieron actividad en la ventana de interés-
+```
 
 - Todos los clientes que tuvieron actividad en la ventana tienen la misma probabilidad de ser seleccionados.
 - No es necesario buscar en una lista si el cliente está en la muestra seleccionada o no (lo cual puede ser tardado, o puede ser que terminemos con muestras muy grandes o chicas).
@@ -51,7 +94,45 @@ totales que tuvieron actividad en la ventana de interés-
 entonces el número de clientes muestreados crecerá de manera correspondiente.
 
 
----
+
+```{r}
+a <- timeout(generar_trans, 2) %>% as.list
+length(a)
+df <- bind_rows(a)
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+```{r}
+seleccionar <- function(trans){
+  (21*trans$id %% 23 %% 10) == 0
+}
+trans_filtradas_cliente <- iter(generar_trans, seleccionar)
+b <- timeout(trans_filtradas_cliente, 2) %>% as.list
+length(b)
+df <- bind_rows(b)
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+
+Sin emgargo, esto no funciona con el método de seleccion de arriba:
+
+```{r}
+trans_filtradas_cliente <- iter(generar_trans, seleccionar_rng)
+b <- timeout(trans_filtradas_cliente, 2) %>% as.list
+length(b)
+df <- bind_rows(b)
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+**Observación**: en este último ejemplo, para cada usuario sólo
+muestreamos una fracción de sus transacciones. En algunos casos, 
+no muestreamos el máximo, y esto produce que la estimación 
+esté sesgada hacia abajo.
+
+
 
 ## Selección de muestra bajo identificadores fijos.
 
