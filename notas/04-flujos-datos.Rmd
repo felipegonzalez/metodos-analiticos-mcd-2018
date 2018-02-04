@@ -18,6 +18,101 @@ Para analizar flujos con estas propiedades podemos hacer:
 
 Nos interesan principalmente las técnicas de este último punto. Consideraremos dos problemas:
 
-Filtrar un flujo: En general, ¿cómo retener para análisis elementos del flujo que satisfagan una propiedad?
-Muestreo de flujo: ¿Cómo diseñar un esquema de muestreo apropiado?
-Ventanas resumen.
+- *Filtrar un flujo*: En general, ¿cómo retener para análisis elementos del flujo que satisfagan una propiedad?
+- *Muestreo de un flujo*: ¿Cómo diseñar un esquema de muestreo apropiado?
+- *Ventanas resumen*
+
+## Selección de muestra y funciones hash.
+
+Dependiendo de las unidades de muestreo apropiadas que nos
+interesen (por ejemplo, clientes o usuarios, transacciones, etc.)
+podemos diseñar distintas estrateginas
+
+### Ejemplo {-}
+Si queremos estimar el promedio del tamaño de las transacciones en una ventana de tiempo dada, podemos muestrar esa ventana. Cada vez que llega una transacción, usamos un número aleatorio para decidir si
+lo incluimos en la muestra o no, y luego hacer nuestro análisis
+con las unidades seleccionadas.
+
+### Ejemplo {-}
+Ahora supongamos que queremos estimar el promedio (por cliente) de la transacción máxima de los clientes en una ventana de tiempo. En este caso, la unidad de muestreo más simple es el cliente, y el método del ejemplo anterior es menos apropiado. Quisiéramos en lugar de eso tomar una muestra de
+clientes en la ventana, tomar el máximo de todas sus transacciones,
+y luego promediar. 
+
+- En este caso, el análisis es más complicado si seleccionamos cada transacción según un número aleatorio (tenderíamos a seleccionar más clientes con muchas transacciones).
+
+En lugar de eso, podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\to 10$.
+Los clientes de la meustra son los que caen en una cubeta (por ejemplo la cubeta 1), y así 
+obtendríamos una muestra que consiste de $1/B$ de los clientes
+totales que tuvieron actividad en la ventana de interés-
+
+- Todos los clientes que tuvieron actividad en la ventana tienen la misma probabilidad de ser seleccionados.
+- No es necesario buscar en una lista si el cliente está en la muestra seleccionada o no (lo cual puede ser tardado, o puede ser que terminemos con muestras muy grandes o chicas).
+- Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
+entonces el número de clientes muestreados crecerá de manera correspondiente.
+
+
+---
+
+## Selección de muestra bajo identificadores fijos.
+
+En algunos casos, podemos tener un conjunto $S$ de unidades
+que seleccionamos con anterioridad, y quisiéramos seleccionar
+en la muestra los datos relacionados con elementos en ese conjunto.
+
+Por ejemplo, quizá nos interesaría muestrar las transacciones
+que se hacen en comercios donde han existido fraudes anterioremente,
+o quizá checar si un correo proviene de una dirección que está 
+en una whitelist (o blacklist)
+
+En estos ejemplo, 
+tenemos que checar contra la lista $S$ si seleccionamos un elemento o no, a
+diferencia de los ejemplos de arriba.
+Cuando la lista es muy grande, esta operación puede ser costosa. Podemos usar 
+una estructura indexada (por ejemplo en una base de datos), pero
+hay buenas alternativas con desempeño excelente en tiempo y memoria
+de tipo probabilístico.
+
+### Ejemplos {-}
+
+- [Este es un ejemplo](https://gallery.shinyapps.io/087-crandash/) de una
+aplicación que cuenta el número de usuarios únicos que bajan paquetes de CRAN. Cada
+vez que hay una nueva descarga (transacción) debemos decidir si se trata
+de usuarios nuevos o no y actualizar correctamente el conteo de usuarios únicos.
+
+- Supongamos que tenemos un diccionario de palabras $S$ del español.
+Cuando observamos una nueva "palabra" que alguien escribió,
+queremos saber si la palabra está en el diccionario. Por ejemplo,
+para decidir si es un posible error de ortografía o proponer algún sustituto.
+
+- Decidir si una dirección web está en una lista negra, para dar una advertencia
+inmediata (*safe browsing*).
+
+---
+
+Una solución a este problema es el filtro de bloom, que es
+un esquema probabilístico para filtrar elementos de un flujo
+que pertenecen a una colección fija $S$.
+
+## Filtro de Bloom
+
+Consideremos entonces el problema de filtrar de un flujo solamente los elementos que pertenezcan a un conjunto S.
+
+Un filtro de Bloom consiste de:
+
+- Un conjunto $\Omega$ de posibles valores (el universo) que puede aprecer en el flujo
+- Un subconjunto $S\subset \Omega$
+ de valores que están en la muestra.
+- Un vector $v$ de $n$ bits, originalmente igual a 0.
+- Una colección de funciones hash $h_1,h_2,\ldots, h_k$ escogidos al azar,
+que mapean elementos de $\Omega$ a $n$ cubetas.
+ 
+Queremos decidir si un elemento nuevo $\omega\in \Omega$ está o no en el
+conjunto $S.
+
+
+### Ejemplos {-}
+
+- [Medium](https://blog.medium.com/what-are-bloom-filters-1ec2a50c68ff) usa 
+
+
+
