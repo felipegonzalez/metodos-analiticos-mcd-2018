@@ -369,7 +369,7 @@ ggplot(df, aes(x = k, y = tasa_falsos_p)) +
 ```
 
 
-### Ejemplo: un corrector de ortografía basado en filtro de Bloom
+## Ejemplo: un corrector de ortografía basado en filtro de Bloom
 
 ```{r}
 diccionario <- read.csv("../datos/diccionario/es_dic.txt", header = FALSE, stringsAsFactors =FALSE)
@@ -413,6 +413,7 @@ usar el algoritmo murmur32, por ejemplo:
 
 ```{r}
 library(digest)
+set.seed(123)
 hash_generator <- function(k = 10, n){
   seeds <- sample.int(652346, k)
   hasher <- function(x){
@@ -424,6 +425,7 @@ hash_generator <- function(k = 10, n){
   hasher
 }
 hashes <- hash_generator(10, n)  
+saveRDS(hashes, file = 'salidas/hash_diccionario.rds')
 ```
 
 ```{r}
@@ -444,12 +446,13 @@ for(i in seq_along(diccionario)){
   v[hashes_palabra] <- TRUE
 }
 )
-saveRDS(v, file = 'salidas/vector_diccinario.rds')
+saveRDS(v, file = 'salidas/vector_diccionario.rds')
 sum(v)
 ```
 
 ```{r}
-v <- readRDS(file = 'salidas/vector_diccinario.rds')
+v <- readRDS(file = 'salidas/vector_diccionario.rds')
+hashes <- readRDS(file = 'salidas/hash_diccionario.rds')
 ```
 
 Creamos una función para filtrar:
@@ -469,16 +472,48 @@ pertenece('árbol')
 ```
 
 ```{r}
-palabras_prueba <- c('árbol','arbol','explicásemos','xexplicasemos',
+palabras_prueba <- c('árbol', 'arbol', 'explicásemos', 'xexplicasemos',
                      'gato', 'perror', 'perro', 'alluda','ayuda')
 df_palabras <- data_frame(palabra = palabras_prueba) %>%
                    mutate(pertenece = map_lgl(palabra, pertenece))
 df_palabras
 ```
 
+En el siguiente paso tendríamos que producir sugerencias de corrección.
+En caso de encontrar una palabra que no está en el diccionario,
+podemos producir palabras similares (a cierta distancia de edición),
+y filtrar aquellas que pasen el filtro de bloom (ver [How to write a spelling corrector](http://norvig.com/spell-correct.html)).
 
 ```{r}
-system.time(df_diccionario <- data_frame(palabra = diccionario) %>%
-                   mutate(pertenece = map_lgl(palabra, pertenece)))
-df_diccionario
+generar_dist_1 <- function(palabra){
+  caracteres <- c(letters, 'á', 'é', 'í', 'ó', 'ú', 'ñ')
+  pares <- lapply(0:(nchar(palabra)), function(i){
+    c(str_sub(palabra, 1, i), str_sub(palabra, i+1, nchar(palabra)))
+  })
+  eliminaciones <- pares %>% map(function(x){ paste0(x[1], str_sub(x[2],2,-1))})
+  sustituciones <- pares %>% map(function(x)
+      map(caracteres, function(car){
+    paste0(x[1], car, str_sub(x[2], 2 ,-1))
+  })) %>% flatten 
+  inserciones <- pares %>% map(function(x){
+    map(caracteres, function(car) paste0(x[1], car, x[2]))
+  }) %>% flatten
+  transposiciones <- pares %>% map(function(x){
+    paste0(x[1], str_sub(x[2],2,2), str_sub(x[2],1,1), str_sub(x[2],3,-1))
+  })
+  c(eliminaciones, sustituciones, transposiciones, inserciones)
+}
+```
+
+```{r}
+generar_dist_1('perror') %>% keep(pertenece)
+```
+
+```{r}
+generar_dist_1('explicasemos') %>% keep(pertenece)
+```
+
+
+```{r}
+generar_dist_1('hayuda') %>% keep(pertenece)
 ```
