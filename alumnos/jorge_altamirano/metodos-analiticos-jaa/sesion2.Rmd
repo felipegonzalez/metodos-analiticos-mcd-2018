@@ -84,7 +84,7 @@ num_hashes <- 10
 permutaciones <- sapply(1:num_hashes, function(i){
   sample(1:nrow(df), nrow(df))
 })
-firmas_mat <- lapply(1:num_hashes, function(i){
+firmas_df <- lapply(1:num_hashes, function(i){
     df_1 <- df[order(permutaciones[,i]), ]
     df_1 %>% summarise_if(is.numeric, primer_uno) 
 }) %>% bind_rows()
