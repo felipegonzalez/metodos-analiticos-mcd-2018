@@ -125,6 +125,8 @@ $(document).ready(function () {
 
 
 <p><em>Jorge III Altamirano Astorga 175904</em></p>
+<div id="ejercicio-de-leskovec-rajaraman-and-ullman-2014-considera-una-matriz-y-responder-las-preguntas" class="section level2">
+<h2>Ejercicio de (Leskovec, Rajaraman, and Ullman 2014) Considera una matriz y responder las preguntas:</h2>
 <pre class="r"><code>mat &lt;- matrix(c(0,1,0,1,0,1,0,0,1,0,0,1,0,0,1,0,0,0,1,1,1,0,0,0),
               nrow = 6, byrow = TRUE)
 colnames(mat) &lt;- c('d_1','d_2','d_3','d_4')
@@ -137,6 +139,8 @@ mat</code></pre>
 ## 3   0   0   1   0
 ## 4   0   0   1   1
 ## 5   1   0   0   0</code></pre>
+<div id="sin-permutar-esta-matriz-calcula-la-matriz-de-firmas-minhash-usando-las-siguientes-funciones-hash" class="section level4">
+<h4>Sin permutar esta matriz, calcula la matriz de firmas minhash usando las siguientes funciones hash</h4>
 <pre class="r"><code>num_hashes_mat &lt;- 1
 firmas_df_mat &lt;- data_frame()
 primer_uno &lt;- function(col){
@@ -194,8 +198,16 @@ firmas_df_mat</code></pre>
 {"columns":[{"label":["firma"],"name":[1],"type":["chr"],"align":["left"]},{"label":["d_1"],"name":[2],"type":["int"],"align":["right"]},{"label":["d_2"],"name":[3],"type":["int"],"align":["right"]},{"label":["d_3"],"name":[4],"type":["int"],"align":["right"]},{"label":["d_4"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"f_h_3","2":"1","3":"1","4":"1","5":"1"},{"1":"f_h_2","2":"1","3":"1","4":"1","5":"1"},{"1":"f_h_1","2":"1","3":"1","4":"1","5":"1"},{"1":"f_original","2":"3","3":"1","4":"4","5":"1"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
-<div id="hashes-1" class="section level2">
-<h2>Hashes 1</h2>
+</div>
+<div id="cual-de-estas-funciones-hash-son-verdaderas-permutaciones" class="section level4">
+<h4>¿Cuál de estas funciones hash son verdaderas permutaciones?</h4>
+<p><em>Pienso que ninguna, pues el módulo es 6: factorizable, por lo que vemos muchas colisiones.</em></p>
+</div>
+<div id="que-tan-cerca-estan-las-similitudes-de-jaccard-estimadas-por-minhash-de-las-verdaderas-similitudes" class="section level4">
+<h4>¿Qué tan cerca están las similitudes de Jaccard estimadas por minhash de las verdaderas similitudes?</h4>
+<p><em>Similar, aunque no idéntica. Pues las colisiones provocadas por los números y matrices que fueron dadas, son sub-óptimas.</em></p>
+<div id="hashes-1" class="section level5">
+<h5>Hashes 1</h5>
 <p><span class="math display">\[
 h_1(x) = 2x + 1\ mod\ 6
 \]</span></p>
@@ -223,8 +235,8 @@ dim(hashes_1)</code></pre>
 ## [5,]    3    1    7    3    5    3    3    3    4     4
 ## [6,]    6    2    2    5    2    4    5    5    5     1</code></pre>
 </div>
-<div id="hashes-2" class="section level2">
-<h2>Hashes 2</h2>
+<div id="hashes-2" class="section level5">
+<h5>Hashes 2</h5>
 <p><span class="math display">\[
 h_2(x) = 3x + 2\ mod\ 6
 \]</span></p>
@@ -251,8 +263,8 @@ dim(hashes_2)</code></pre>
 ## [5,]    5    5    5    5    5    5    5    5    5     5
 ## [6,]    2    2    2    2    2    2    2    2    2     2</code></pre>
 </div>
-<div id="hashes-3" class="section level2">
-<h2>Hashes 3</h2>
+<div id="hashes-3" class="section level5">
+<h5>Hashes 3</h5>
 <p><span class="math display">\[
 h_3(x) = 5x + 2\ mod\ 6
 \]</span></p>
@@ -278,6 +290,112 @@ dim(hashes_3)</code></pre>
 ## [4,]    4    4    4    4    4    4    4    4    4     4
 ## [5,]    3    3    3    3    3    3    3    3    3     3
 ## [6,]    2    2    2    2    2    2    2    2    2     2</code></pre>
+<pre class="r"><code>calc_firmas &lt;- function(mat_df2, permutaciones){
+    firmas &lt;- list()
+    num_hashes &lt;- ncol(permutaciones)
+    firmas &lt;- sapply(1:ncol(mat_df2), function(r) rep(Inf, num_hashes))
+    for(r in 1:nrow(mat_df2)){
+        indices &lt;- mat_df2[r,] &gt; 0
+        firmas[, indices] = pmin(firmas[, indices], permutaciones[r, 1])
+    }
+    firmas
+}
+sim_jaccard &lt;- function(a, b){
+    length(intersect(a, b)) / length(union(a, b))
+}
+firmas_1 &lt;- calc_firmas(mat %&gt;% as.matrix, hashes_1)
+firmas_2 &lt;- calc_firmas(mat %&gt;% as.matrix, hashes_2)
+firmas_3 &lt;- calc_firmas(mat %&gt;% as.matrix, hashes_3)
+sim_jaccard(mat[,1], mat[,2])</code></pre>
+<pre><code>## [1] 1</code></pre>
+<pre class="r"><code>sim_jaccard(mat[,1], mat[,3])</code></pre>
+<pre><code>## [1] 1</code></pre>
+<pre class="r"><code>sim_jaccard(mat[,3], mat[,4])</code></pre>
+<pre><code>## [1] 1</code></pre>
+<pre class="r"><code>mean(firmas_2[,1]==firmas_2[,2])</code></pre>
+<pre><code>## [1] 1</code></pre>
+<pre class="r"><code>mean(firmas_2[,1]==firmas_2[,3])</code></pre>
+<pre><code>## [1] 1</code></pre>
+<pre class="r"><code>mean(firmas_2[,3]==firmas_2[,4])</code></pre>
+<pre><code>## [1] 0</code></pre>
+</div>
+</div>
+</div>
+<div id="calcula-la-similitud-de-jaccard-de-las-cadenas-este-es-el-ejemplo-1-y-este-es-el-ejemplo-2-usando-tejas-de-tamano-3." class="section level2">
+<h2>2. Calcula la similitud de jaccard de las cadenas “Este es el ejemplo 1” y “Este es el ejemplo 2”, usando tejas de tamaño 3.</h2>
+<pre class="r"><code>str_ejemplo &lt;- character(2)
+str_ejemplo[1] &lt;- &quot;Este es el ejemplo 1&quot;
+str_ejemplo[2] &lt;- &quot;Este es el ejemplo 2&quot;
+shingle_chars &lt;- function(string, lowercase = FALSE, k = 3){
+  # produce shingles (con repeticiones)
+  if(lowercase) {
+    string &lt;- str_to_lower(string)
+  }
+  shingles &lt;- seq(1, nchar(string) - k + 1) %&gt;%
+      map_chr(function(x) substr(string, x, x + k - 1))
+  shingles
+}
+tejas_doc &lt;- lapply(str_ejemplo, shingle_chars, k = 3)
+sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])</code></pre>
+<pre><code>## [1] 0.8947368</code></pre>
+</div>
+<div id="funciones-hash.-como-vimos-en-clase-podemos-directamente-hacer-hash-de-las-tejas-que-son-cadenas-de-texto-en-lugar-de-usar-hashes-de-numeros-enteros-numero-de-renglon.-para-lo-siguiente-puedes-usar-la-funcion-hash_string-del-paquete-textreuse-o-usar-la-funcion-pyhash.murmur3_32-de-la-libreria-pyhash" class="section level2">
+<h2>3. Funciones hash. Como vimos en clase, podemos directamente hacer hash de las tejas (que son cadenas de texto), en lugar de usar hashes de números enteros (número de renglón). Para lo siguiente, puedes usar la función hash_string del paquete textreuse (o usar la función pyhash.murmur3_32 de la librería pyhash):</h2>
+<div id="calcula-valores-hash-de-algunas-cadenas-como-a-este-es-el-ejemplo-1-este-es-el-ejemplo-2." class="section level4">
+<h4>Calcula valores hash de algunas cadenas como ‘a’, ‘Este es el ejemplo 1’, ‘Este es el ejemplo 2’.</h4>
+<pre class="r"><code>hash_string(&quot;a&quot;)</code></pre>
+<pre><code>## [1] 1424956863</code></pre>
+<pre class="r"><code>hash_string(str_ejemplo[1])</code></pre>
+<pre><code>## [1] 487152643</code></pre>
+<pre class="r"><code>hash_string(str_ejemplo[2])</code></pre>
+<pre><code>## [1] -1235446691</code></pre>
+</div>
+<div id="calcula-los-valores-hash-para-las-tejas-de-tamano-3-de-este-es-el-ejemplo-1.-cuantos-valores-obtienes" class="section level4">
+<h4>Calcula los valores hash para las tejas de tamaño 3 de ‘Este es el ejemplo 1’. ¿Cuántos valores obtienes?</h4>
+<p>Dado que son 18 tejas, obtendremos 18 (18) hashes :-)</p>
+<pre class="r"><code>tejas_doc[[1]] %&gt;% hash_string</code></pre>
+<pre><code>##  [1]  1550142585  -594328793  -472720385   226856209 -1378532387
+##  [6]  -523380963  1813038325  1575353485  1228092205 -1851510203
+## [11]  -979493172 -1792124468  1750435930  1855520744  -351755448
+## [16]  1944186881  1914456198  -477559242</code></pre>
+</div>
+<div id="calcula-el-valor-minhash-de-la-cadena-anterior.-repite-para-la-cadena-este-es-el-ejemplo-2-y-usa-este-minhash-para-estimar-la-similitud-de-jaccard-en-general-usamos-mas-funciones-minhash-para-tener-una-buena-estimacion-no-solo-una." class="section level4">
+<h4>Calcula el valor minhash de la cadena anterior. Repite para la cadena ‘Este es el ejemplo 2’, y usa este minhash para estimar la similitud de jaccard (en general usamos más funciones minhash para tener una buena estimación, no solo una!).</h4>
+<pre class="r"><code>set.seed(175904)
+minhash &lt;- minhash_generator(50)
+options(&quot;mc.cores&quot; = 14L)
+corpus &lt;- TextReuseCorpus(text = str_ejemplo, 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F)
+minhashes_corpus &lt;- list(
+  minhashes(corpus[[1]]),
+  minhashes(corpus[[2]])
+)
+mean(minhashes_corpus[[1]]==minhashes_corpus[[2]])</code></pre>
+<pre><code>## [1] 0.84</code></pre>
+<pre class="r"><code>sim_jaccard(tejas_doc[[1]], tejas_doc[[2]])</code></pre>
+<pre><code>## [1] 0.8947368</code></pre>
+</div>
+<div id="para-hacer-en-clase-repite-usando-10-funciones-minhash-puedes-usar-minhash_generator-de-textreuse-o-usar-distintas-semillas-para-pyhash.murmur3_32." class="section level4">
+<h4>Para hacer en clase: repite usando 10 funciones minhash (puedes usar minhash_generator de textreuse, o usar distintas semillas para pyhash.murmur3_32).</h4>
+<pre class="r"><code>set.seed(175904)
+minhash &lt;- minhash_generator(50)
+options(&quot;mc.cores&quot; = 14L)
+corpus &lt;- list(
+  TextReuseCorpus(text = str_ejemplo[[1]], 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F),
+  TextReuseCorpus(text = str_ejemplo[[2]], 
+                  tokenizer = shingle_chars, 
+                  minhash_func = minhash,
+                  keep_tokens = TRUE,
+                  progress = F)
+  )</code></pre>
+</div>
 </div>
 
 

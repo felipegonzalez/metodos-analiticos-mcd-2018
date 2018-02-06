@@ -224,7 +224,7 @@ tejas_doc[[1]] %>% hash_string
 
 ```{r}
 set.seed(175904)
-minhash <- minhash_generator(50)
+minhash <- minhash_generator(100)
 options("mc.cores" = 14L)
 corpus <- TextReuseCorpus(text = str_ejemplo, 
                   tokenizer = shingle_chars, 
