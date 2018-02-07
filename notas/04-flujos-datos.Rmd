@@ -669,27 +669,31 @@ similar todos los objetos.
 
 ### Ejemplos {#ejemplo}
 ```{r}
-media.exp <- rep(NA, 5000)
-media.exp[1] <- datos$obs[1]
-c <- 0.2
-for(i in 2:5000){
-  media.exp[i] <- c*datos$obs[i]  + (1-c)*media.exp[i-1]
+prom_exponencial <- function(init, c){
+  actual <- init
+  function(x){
+    actual <<- c*x + (1-c)*actual
+    actual
+  }
 }
-plot(datos$obs[51:5000], col='gray')
-lines(media.exp, type="l", col='red', lwd=2)
+prom_c <- prom_exponencial(datos$obs[1], 0.2)
+datos_pexp <- datos %>% 
+              mutate(prom_exp = map_dbl(obs, prom_c))
+ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
+  geom_point(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = prom_exp), colour = 'red')
 ```
 
 
 ```{r}
-media.exp <- rep(NA, 5000)
-media.exp[1] <- datos$obs[1]
-c <- 0.001
-for(i in 2:5000){
-  media.exp[i] <- c*datos$obs[i]  + (1-c)*media.exp[i-1]
-}
-plot(datos$obs[51:5000], col='gray')
-lines(media.exp, type="l", col='red', lwd=2)
+prom_c <- prom_exponencial(datos$obs[1], 0.001)
+datos_pexp <- datos %>% 
+              mutate(prom_exp = map_dbl(obs, prom_c))
+ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
+  geom_point(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = prom_exp), colour = 'red')
 ```
+
 
 
 Otra manera de ver los promedios exponenciales es notando que
