@@ -448,6 +448,7 @@ toma tiempo si queremos insertar muchos elementos, pero solamente
 hay que hacerlo una vez (puede paralelizarse):
 
 ```{r}
+library(R6)
 BloomFilter <- R6Class("BloomFilter",
   public = list(
     v = NULL,
@@ -503,7 +504,6 @@ for(i in seq_along(diccionario)){
 }
 )
 sum(as.logical(bloom_filter$v))
-saveRDS(bloom_filter, file = 'salidas/bloom_filter_diccionario.rds')
 ```
 
 Y vemos unos ejemplos:
@@ -558,3 +558,92 @@ generar_dist_1('explicasemos') %>% keep(bloom_filter$in_filter)
 ```{r}
 generar_dist_1('hayuda') %>% keep(bloom_filter$in_filter)
 ```
+
+
+
+# Muestra distribuida uniformemente en el flujo.
+
+Supongamos que tenemos un histórico de tamaño $n_0$ del flujo de datos. Podemos tomar una muestra
+para resumir el flujo. El problema es que cuando llegan nuevos datos, si los incluimos desplazando datos anteriores entonces tendremos sesgo hacia actividad reciente. Una solución es hacer una especie de muestreo de rechazo.
+
+Supongamos entonces que queremos trabajar con una muestra de tamaño aproximado $k$, y que incialmente
+tenemos una muestra uniforme del flujo de tamaño $n_0$.
+
+1. Tomamos una muestra uniforme de tamaño $k$ de los $n_0$ casos.
+2. Ahora suponamos que el tamaño total del flujo actual es de $n_0$. Si observamos un nuevo caso al tiempo $n > n_0$,
+lo seleccionamos con probabilidad $\frac{k}{n}$. 
+3. Si el nuevo caso resulta seleccionado, escogemos al azar uno de los $k$ elementos anteriores y lo eliminamos.
+4. Si no, repetimos para $n+1$.
+
+Como ejercicio, demostrar:
+
+###  {#importante}
+Al tiempo $n$, la probabilidad de que un elemento del flujo completo 
+esté en la muestra es uniforme $k/n$
+
+### Ejemplo {#ejemplo}
+Consideramos $k=100$, y observamos un flujo sintético dado como sigue:
+
+```{r}
+N <- 100000
+n_0 <- 1000
+lambda <- 10*abs(sin(1:N/200)) 
+datos <- data_frame(n = 1:N, obs = rpois(N, lambda))
+ggplot(datos %>% filter(n < n_0), aes(x = n, y = obs)) +
+  geom_line()
+```
+
+Si utilizamos una ventana reciente de tamaño 50, nuestras estimaciones del estado del sistema serían:
+
+```{r}
+library(RcppRoll)
+resumenes_50 <- datos %>% 
+                mutate(prom_50 = roll_mean(obs, n = 50, 
+                                           align = 'right', fill = NA))
+ggplot(resumenes_50 %>% filter(n < 2000), aes(x = n)) +
+  geom_line(aes(y = obs), alpha = 0.5) + 
+  geom_line(aes(y=prom_50), colour= 'red')
+  
+```
+
+Y vemos que el promedio está sesgado, en cada momento, a valores recientes.
+ Sin embargo, si utilizamos el esquema mostrado arriba (en este caso
+ implementamos con una cerradura):
+
+
+```{r}
+muestra_unif <- function(data_vec, sample_size){
+  n <- length(data_vec)
+  sampled <- sample(data_vec, sample_size)
+  fun_out <- function(dato){
+    n <<- n + 1
+    if(runif(1) < sample_size/n) {
+      sampled[sample.int(sample_size, 1)] <<- dato
+    }
+    mean(sampled)
+  }
+  attr(fun_out, "class") <- "muestra_uniforme"
+  fun_out
+}
+muestra_1 <- muestra_unif(data_vec = datos$obs[1:100], sample_size = 50)
+mean.muestra_uniforme <- function(f){
+  mean(get('sampled', envir = environment(f)))
+}
+mean(muestra_1)
+muestra_1(343434)
+muestra_1(343434)
+mean(muestra_1)
+```
+
+```{r}
+muestra_u <- muestra_unif(data_vec = datos$obs[1:100], sample_size = 50)
+datos_p <- datos %>% filter(n >= 101, n < 5000) %>%
+  mutate(promedio = map_dbl(obs, muestra_u))
+ggplot(datos_p, aes(x = n)) + geom_line(aes(y = obs), alpha=0.5) +
+  geom_line(aes(y = promedio), colour = 'red')
+```
+
+
+
+
+
