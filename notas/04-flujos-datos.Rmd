@@ -33,8 +33,9 @@ Si queremos estimar el promedio del tamaño de las transacciones en una ventana 
 lo incluimos en la muestra o no, y luego hacer nuestro análisis
 con las unidades seleccionadas.
 
-```{r, }
+```{r, message=FALSE}
 install.packages('itertools')
+install.packages('RcppRoll')
 ```
 
 ```{r, message = FALSE, warning = FALSE}
@@ -367,12 +368,18 @@ ggplot(df, aes(x = k, y = tasa_falsos_p)) +
                xlim(0,20)
   
 ```
+```{block2, type='resumen'}
+Un filtro de bloom nunca da falsos negativos, pero puede dar falsos positivos.
+La tasa de falsos positivos se puede controlar escogiendo el tamaño del vector
+y el número adecuado de hashes dependiendo del tamaño esperado del conjunto
+que vamos a insertar.
+```
 
-
-## Ejemplo: un corrector de ortografía basado en filtro de Bloom
+## Ejemplo: un corrector de ortografía simple basado en filtro de Bloom
 
 ```{r}
-diccionario <- read.csv("../datos/diccionario/es_dic.txt", header = FALSE, stringsAsFactors =FALSE)
+diccionario <- read.csv("../datos/diccionario/es_dic.txt", 
+               header = FALSE, stringsAsFactors =FALSE)
 diccionario <- iconv(diccionario[, 1], to = 'utf-8')
 m <- length(diccionario)
 m
@@ -384,7 +391,7 @@ que quizá queramos insertar otras palabras más adelante.
 ```{r}
 df <- expand.grid(list(s = 300000,
                   k = seq(4, 10),
-                  n = c(1e6, 2e6, 4e6, 8e6)
+                  n = c(1e6, 2e6, 4e6, 9e6)
                   )) %>%
       mutate(millones_bits = (n/1e6)) %>%
       mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
@@ -405,27 +412,29 @@ estimación de falsos positivos es de
 
 ```{r}
 n <- 8e6
-tasa_fp(n, 3e5, 10)
+tasa_fp(n, 3e5, 6)
 ```
 
 Ahora necesitamos nuestras funciones hash escogidas al azar. Podemos
-usar el algoritmo murmur32, por ejemplo:
+usar el algoritmo [xxhash32](https://github.com/Cyan4973/xxHash), por ejemplo:
 
 ```{r}
 library(digest)
 set.seed(123)
-hash_generator <- function(k = 10, n){
+hash_generator <- function(k = 6, n){
   seeds <- sample.int(652346, k)
   hasher <- function(x){
     sapply(seeds, function(seed){
-      sub_str <- substr(digest::digest(x, "xxhash32", seed = seed), 1, 7)
+      # en digest, serialize puede ser false, pues trabajamos con cadenas
+      # la salida de xxhash32 son 8 caracteres hexadecimales, pero 
+      # solo tomamos 7 para poder convertir a un entero
+      sub_str <- substr(digest::digest(x, "xxhash32", serialize = FALSE, seed = seed), 1, 7)
       strtoi(sub_str, base = 16L) %% n + 1
     })
   }
   hasher
 }
-hashes <- hash_generator(10, n)  
-saveRDS(hashes, file = 'salidas/hash_diccionario.rds')
+hashes <- hash_generator(6, n)  
 ```
 
 ```{r}
@@ -438,44 +447,76 @@ Ahora insertamos las palabras del diccionario en el filtro. Esta operación
 toma tiempo si queremos insertar muchos elementos, pero solamente
 hay que hacerlo una vez (puede paralelizarse):
 
-```{r, eval = FALSE}
-v <- rep(FALSE, n)
+```{r}
+BloomFilter <- R6Class("BloomFilter",
+  public = list(
+    v = NULL,
+    n = NULL,
+    hasher = NULL,
+    seeds = NULL,
+    initialize = function(num_hashes, n){
+      self$n <- n
+      self$seeds <- sample.int(883123, num_hashes)
+      self$hasher <- function(x){
+        sapply(seeds, function(seed){
+          sub_str <- substr(digest::digest(x, "xxhash32", 
+                            serialize = FALSE, seed = seed), 1, 7)
+          strtoi(sub_str, base = 16L) %% n + 1
+        })
+      }
+      self$v <- rep(F, self$n)
+    },
+    add = function(x){
+      x <- iconv(x, to = 'utf-8')
+      self$v[self$hasher(x)] <- T
+    },
+    in_filter = function(x){
+      x <- iconv(x, to = 'utf-8')
+      all(self$v[self$hasher(x)])
+    }
+  ))
+bloom_filter <- BloomFilter$new(num_hashes = 6, n = 8e6)
+
+```
+
+**Observaciones**: 
+
+1. No tienes que usar clases para hacer el filtro. Puedes
+tomar la función que crea los hashes, guardarla, poblar el filtro con los
+elementos de $S$ y guardarlo también. AL momento de hacer pruebas puedes
+tener en memoria el vector y los hashes. 
+
+2. En este caso, el vector $v$ es de alrededor de la mitad del tamaño
+que el diccionario original. Checar pertenencia al filtro también es más rápido
+que una búsqueda simple en el diccionario original.
+
+---
+
+Ahora insertamos en el filtro los elementos del diccionario:
+
+
+```{r}
+set.seed(3434)
 system.time(
 for(i in seq_along(diccionario)){
-  hashes_palabra <- hashes(diccionario[i])
-  v[hashes_palabra] <- TRUE
+  bloom_filter$add(diccionario[i])
 }
 )
-saveRDS(v, file = 'salidas/vector_diccionario.rds')
-sum(v)
+sum(as.logical(bloom_filter$v))
+saveRDS(bloom_filter, file = 'salidas/bloom_filter_diccionario.rds')
 ```
 
-```{r}
-v <- readRDS(file = 'salidas/vector_diccionario.rds')
-hashes <- readRDS(file = 'salidas/hash_diccionario.rds')
-```
-
-Creamos una función para filtrar:
+Y vemos unos ejemplos:
 
 ```{r}
-pertenece <- function(palabra){
-  hashes_palabra <- hashes(iconv(palabra, to = 'utf-8'))
-  all(v[hashes_palabra])
-}
-```
-
-
-Ahora veamos unos ejemplos
-
-```{r}
-pertenece('árbol')
+bloom_filter$in_filter('árbol')
 ```
 
 ```{r}
 palabras_prueba <- c('árbol', 'arbol', 'explicásemos', 'xexplicasemos',
                      'gato', 'perror', 'perro', 'alluda','ayuda')
 df_palabras <- data_frame(palabra = palabras_prueba) %>%
-                   mutate(pertenece = map_lgl(palabra, pertenece))
+                   mutate(pertenece = map_lgl(palabra, bloom_filter$in_filter))
 df_palabras
 ```
 
@@ -506,14 +547,14 @@ generar_dist_1 <- function(palabra){
 ```
 
 ```{r}
-generar_dist_1('perror') %>% keep(pertenece)
+generar_dist_1('perror') %>% keep(bloom_filter$in_filter)
 ```
 
 ```{r}
-generar_dist_1('explicasemos') %>% keep(pertenece)
+generar_dist_1('explicasemos') %>% keep(bloom_filter$in_filter)
 ```
 
 
 ```{r}
-generar_dist_1('hayuda') %>% keep(pertenece)
+generar_dist_1('hayuda') %>% keep(bloom_filter$in_filter)
 ```
