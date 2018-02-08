@@ -709,25 +709,16 @@ tamaño fijo de los artículos, películas, posts más populares.  La idea
 es que si la popularidad de una película es $s_t$, entonces cada vez
 que observamos un evento:
 
-- Si es de esta película, actualizamos a $s_{t+1} = (1-c)*s_t + c*1$ (1 vista).
-- Si es de otra película, actualizamos a $s_{t+1} = (1-c)*s_t + c*0= (1-c)*s_t$.
+- Si es de esta película, actualizamos a $s_{t+1} = (1-c)s_t + c\times 1$ (1 vista).
+- Si es de otra película, actualizamos a $s_{t+1} = (1-c)*s_t + 0\times c= (1-c)*s_t$.
 
-Una nueva película empieza con $s_0=0$, y en su primera vista, actualizamos a $s_t=c$.
+Una película empieza con $s_0=0$, y en su primer evento, actualizamos a $s_t=c$.
 
-Para mantener una lista de tamaño fijo, lo cual es importante si el número
+Para mantener una lista de tamaño fijo, lo cual puede ser importante si el número
 de artículos, películas, etc. es muy grande, dejamos de contabilizar
 las películas que caen por debajo de un umbral (por ejemplo $c/2$).
 
-
-
-
-
-Supongamos que queremos mantener una lista de tamaño fijo de los películas más vistas en netflix en cada momento (o los usuarios, posts, etc. más populares).
-
-Si el número de películas es relativamente chico, podríamos llevar cuenta de todos los promedios exponenciales para todas las películas, y 
-filtrar, por ejemplo, los que tengan promedio más alto.
-
-Sin embargo, si la lista total es muy grande, y no queremos monitorear las películas poco populares, podemos hacer los siguiente cada vez que observamos un reporte
+Si la lista total es muy grande, y no queremos monitorear las películas poco populares, podemos hacer los siguiente cada vez que observamos un reporte
 de que una película fue vista:
 
 1. Para cada película que tengamos actualmente en la lista, actualizamos su score multiplicándolo por $(1-c)$ (decaemos exponencialmente su popularidad)
@@ -744,10 +735,12 @@ scores mayores a $c/2$ como mostramos arriba,  nunca habrá más de $2/c$ pelíc
 aunque puede ser que tengamos considerablemente menos. Si hacemos $c$ más chica, podemos tener
 una lista corriente más grande. 
 
+- Valores más grandes de $c$ producen decaimiento más rápido, y una lista más dinámica.
+
 
 ### Ejemplo: películas de netflix {-}
 
-
+Consideramos los eventos de vistas de películas ordenados en el tiempo:
 
 ```{r}
 system.time(vistas <- readRDS('../datos/flujos/peliculas_fecha.rds'))
@@ -764,10 +757,13 @@ head(pelis_nombres)
 ```
 
 
+En el siguiente código, mantenemos en *lista_pop* nuestro monitor de artículos
+populares. Utilizamos environments en lugar de listas para mejorar el desempeño
+(ver por ejemplo [aquí](https://blog.dominodatalab.com/a-quick-benchmark-of-hashtable-implementations-in-r/)). La implementación con listas es similar:
+
 ```{r hashenv}
-lista_pop <- list()
-c <- 0.001
 lista_pop <- new.env(hash=TRUE)
+c <- 0.005
 system.time(
 for(i in 1:2000){
   peli_id <- as.character(vistas$peli_id[i])
@@ -789,12 +785,20 @@ for(i in 1:2000){
 ```
 
 
+Y ahora escogemos un punto de corte para ver las películas más populares 
+En este caso obtenemos (ordenadas por score). Las películas que acaban de
+aparecer tienen score $c$ (o más bajo si no han tenido más vistas), así
+que $c$ es un valor mínimo para cortar. En este ejemplo tomamos las 30
+con score más alto:
+
 ```{r}
 scores <- map_dbl(names(lista_pop), function(x){ as.numeric(lista_pop[[x]])})
 df_pop <- data_frame(score=scores, peli_id = as.integer(names(lista_pop)))
 df_pop %>% arrange(desc(score)) %>% left_join(pelis_nombres) %>% head(30)
 nrow(df_pop)
 ```
+
+Podemos también implementar en una clase.
 
 ```{r}
 PopCounter <- R6Class("PopCounter",
@@ -835,7 +839,7 @@ PopCounter <- R6Class("PopCounter",
 ))
 ```
 
-
+Repetimos el ejemplo de arriba:
 
 ```{r}
 pop_counter <- PopCounter$new(0.005)
@@ -843,9 +847,10 @@ pop_counter$update(vistas$peli_id[1:2000])
 pop_counter$get_items(30, pelis_nombres)
 ```
 
+Y ahora agregamos unas 500 mil películas más
 
 ```{r}
-pop_counter$update(vistas$peli_id[2001:200000])
+pop_counter$update(vistas$peli_id[2001:500000])
 pop_counter$get_items(30, pelis_nombres)
 ```
 ```
