@@ -568,7 +568,11 @@ generar_dist_1('explicasemos') %>% keep(bloom_filter$in_filter)
 generar_dist_1('hayuda') %>% keep(bloom_filter$in_filter)
 ```
 
-
+### Ejercicio {-}
+Encuentra alguna palabra del español que no esté en el filtro (por ejemplo una
+de español en México). Agrégala al filtro y verifica que es detectada como
+positiva. Busca una posible manera incorrecta de escribirla y prueba la
+función de arriba de sugerencias.
 
 ## Muestra distribuida uniformemente en el flujo.
 
@@ -586,7 +590,7 @@ lo seleccionamos con probabilidad $\frac{k}{n}$.
 
 Como ejercicio, demostrar:
 
-###  {#importante}
+###  Ejercicio {-}
 Al tiempo $n$, la probabilidad de que un elemento del flujo completo 
 esté en la muestra es uniforme $k/n$
 
@@ -710,6 +714,10 @@ Otra manera de ver los promedios exponenciales es notando que
 $$s_{t+1} = s_{t} - c(s_{t} - a_{t}),$$
 es decir, el promedio exponencial actual es una corrección del promedio anterior hacia el nuevo dato observado.
 
+### Ejercicio {-}
+Repite los distintos tipos de resúmenes y suavizamientos que vimos arriba
+con una serie de tiempo simulada de distinta manera.
+
 
 ## Listas de elementos más populares
 
@@ -719,7 +727,7 @@ es que si la popularidad de una película es $s_t$, entonces cada vez
 que observamos un evento:
 
 - Si es de esta película, actualizamos a $s_{t+1} = (1-c)s_t + c\times 1$ (1 vista).
-- Si es de otra película, actualizamos a $s_{t+1} = (1-c)*s_t + 0\times c= (1-c)*s_t$.
+- Si es de otra película, actualizamos a $s_{t+1} = (1-c)s_t + 0\times c= (1-c)s_t$.
 
 Una película empieza con $s_0=0$, y en su primer evento, actualizamos a $s_t=c$.
 
@@ -863,4 +871,10 @@ Y ahora agregamos unas 500 mil películas más
 pop_counter$update(vistas$peli_id[2001:200000])
 pop_counter$get_items(30, pelis_nombres)
 ```
-```
+
+### Ejercicio {-}
+
+Modifica el código de arriba para que también reporte la fecha de actualización
+(de todas las películas que actualizaste, cuál es la última fecha). Prueba
+también comenzando más adelante en la lista de vistas (por ejemplo, después del
+año 2000. Ojo: no confundas con el año de la película que está reportado arriba).
