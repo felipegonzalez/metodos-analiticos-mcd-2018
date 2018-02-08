@@ -1,6 +1,7 @@
 # Procesamiento de flujos
 
-En esta parte supondremos que los datos se pueden representar como un flujo de tal velocidad y volumen que típicamente no es posible almacenar todo el flujo, o que no es posible hacer queries a la base de datos resultante.
+En esta parte supondremos que los datos se pueden representar como un flujo de tal velocidad y volumen que típicamente no es posible almacenar todo el flujo, o que para
+nuestros propósticos sería lento hacer queries a la base de datos resultante.
 
 Veremos técnicas simples para obtener resúmenes simples de los flujos, y también veremos cómo aplicar métodos probabilísticos para filtrar o resumir ciertos aspectos de estos flujos.
 
@@ -14,13 +15,10 @@ Para analizar flujos con estas propiedades podemos hacer:
 
 - Resúmenes acumulados: guardamos resúmenes de los datos que podemos actualizar y utilizar para calcular características de interés en el sistema, por ejemplo conteos simples, promedios.
 
-- Muestreo y filtrado: filtros y muestreo probabilístico. Podemos diseñar muestras apropiadas para estimar cantidades que nos interesen, y sólo guardar los datos que corresponden a la muestra.
+- Muestreo probabilístico: Podemos diseñar muestras apropiadas para estimar cantidades que nos interesen, y sólo guardar los datos que corresponden a la muestra.
 
-Nos interesan principalmente las técnicas de este último punto. Consideraremos dos problemas:
+- Filtrado: cómo retener para análisis elementos del flujo que satisfagan una propiedad.
 
-- *Filtrar un flujo*: En general, ¿cómo retener para análisis elementos del flujo que satisfagan una propiedad?
-- *Muestreo de un flujo*: ¿Cómo diseñar un esquema de muestreo apropiado?
-- *Ventanas resumen*
 
 ## Selección de muestra y funciones hash.
 
@@ -46,8 +44,8 @@ library(tidyverse)
 
 ```{r}
 generar_trans <- function(){
-  id_num <- sample.int(500, 1)
-  monto <- runif(1, 100,10000) + id_num*10
+  id_num <- sample.int(10000, 1)
+  monto <- runif(1, 100,10000) 
   trans <- list(id = id_num, monto = monto)
 }
 ```
@@ -56,10 +54,10 @@ Podemos estimar la mediana con toda la muestra. Primero generamos
 durante 2 segundos, y calculamos la mediana de las transacciones:
 
 ```{r}
-set.seed(32)
-a <- timeout(generar_trans, 2) %>% as.list
-length(a)
-sapply(a, function(elem) elem$monto) %>% median
+set.seed(312)
+trans <- itertools::timeout(generar_trans, 2) %>% as.list
+length(trans)
+sapply(trans, function(elem) elem$monto) %>% median
 ```
 
 
@@ -67,13 +65,12 @@ Si queremos seleccionar un 1\% de las transacciones,
 
 
 ```{r}
-seleccionar_rng <- function(trans){
-   runif(1) < 0.01
+seleccionar_rng <- function(trans, prop = 0.01){
+   runif(1) < prop
 }
-trans_filtradas <- iter(generar_trans, seleccionar_rng)
-b <- timeout(trans_filtradas, 2) %>% as.list
-length(b)
-sapply(b, function(elem) elem$monto) %>% median
+trans_filtradas <- keep(trans, seleccionar_rng)
+length(trans_filtradas)
+sapply(trans_filtradas, function(elem) elem$monto) %>% median
 ```
 
 ---
@@ -81,63 +78,75 @@ sapply(b, function(elem) elem$monto) %>% median
 
 
 ### Ejemplo {-}
-Ahora supongamos que queremos estimar el promedio (por cliente) de la transacción máxima de los clientes en una ventana de tiempo. En este caso, la unidad de muestreo más simple es el cliente, y el método del ejemplo anterior es menos apropiado. Quisiéramos en lugar de eso tomar una muestra de
+Ahora supongamos que queremos estimar el promedio de la transacción máxima *por cliente*  en una ventana de tiempo. En este caso, la unidad de muestreo más simple es el cliente, y el método del ejemplo anterior es menos apropiado. Quisiéramos en lugar de eso tomar una muestra de
 clientes en la ventana, tomar el máximo de todas sus transacciones,
 y luego promediar. 
 
 - En este caso, el análisis es más complicado si seleccionamos cada transacción según un número aleatorio (tenderíamos a seleccionar más clientes con muchas transacciones).
 
 ```{block2, type ='resumen'}
-Podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\to B$.
-Los clientes de la meustra son los que caen en una cubeta (por ejemplo la cubeta 1), y así 
+Podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\ldots, B$.
+Los clientes de la meustra son los que caen en una cubeta (por ejemplo la cubeta 1), y así
 obtendríamos una muestra que consiste de $1/B$ de los clientes
-totales que tuvieron actividad en la ventana de interés-
+totales que tuvieron actividad en la ventana de interés. Almacenamos todas
+las transacciones en la ventana de interés para los clientes seleccionados.
 ```
 
 - Todos los clientes que tuvieron actividad en la ventana tienen la misma probabilidad de ser seleccionados.
 - No es necesario buscar en una lista si el cliente está en la muestra seleccionada o no (lo cual puede ser tardado, o puede ser que terminemos con muestras muy grandes o chicas).
 - Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
-entonces el número de clientes muestreados crecerá de manera correspondiente.
+entonces el número de clientes muestreados crecerá de manera correspondiente (veremos
+más adelante qué hacer si queremos evitar esto).
 
-
+Primero veamos el resultado cuando utilizamos todos los clientes de
+la ventana de tiempo:
 
 ```{r}
-a <- timeout(generar_trans, 2) %>% as.list
-length(a)
-df <- bind_rows(a)
+trans <- itertools::timeout(generar_trans, 2) %>% as.list
+length(trans)
+df <- bind_rows(trans)
+length(unique(df$id))
 df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
   pull(monto_max) %>% median
 ```
 
+Ahora usamos una función hash y repartimos en 10 cubetas (deberíamos
+obtener alrededor del 10\% de los clientes)
+
 ```{r}
+#seleccionar <- function(trans){
+#  (5*trans$id + 7) %% 11  == 0
+#}
 seleccionar <- function(trans){
-  (21*trans$id %% 23 %% 10) == 0
+  hash_xx <- digest::digest(as.character(trans$id), 'xxhash32', serialize = FALSE)
+  strtoi(substr(hash_xx, 1, 7) , 16L) %% 10 == 0
 }
-trans_filtradas_cliente <- iter(generar_trans, seleccionar)
-b <- timeout(trans_filtradas_cliente, 2) %>% as.list
-length(b)
-df <- bind_rows(b)
+trans_filtradas_c <- keep(trans, seleccionar)
+df <- bind_rows(trans_filtradas_c)
+length(unique(df$id))
 df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
   pull(monto_max) %>% median
 ```
 
 
-Sin emgargo, esto no funciona con el método de seleccion de arriba:
+Sin embargo, esto no funciona con el método de seleccion de arriba:
 
 ```{r}
-trans_filtradas_cliente <- iter(generar_trans, seleccionar_rng)
-b <- timeout(trans_filtradas_cliente, 2) %>% as.list
-length(b)
-df <- bind_rows(b)
+trans_filtradas <- keep(trans, function(x) seleccionar_rng(x, prop = 0.10))
+length(trans_filtradas)
+df <- bind_rows(trans_filtradas)
 df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
   pull(monto_max) %>% median
 ```
 
-**Observación**: en este último ejemplo, para cada usuario sólo
+**Observación**: 
+
+1. En este último ejemplo, para cada usuario sólo
 muestreamos una fracción de sus transacciones. En algunos casos, 
 no muestreamos el máximo, y esto produce que la estimación 
 esté sesgada hacia abajo.
-
+2. Para un enfoque más general (por ejemplo id's que son cadenas), podemos
+usar alguna función hash de digest (ver ejemplos más abajo).
 
 
 ## Selección de muestra bajo identificadores fijos.
@@ -850,7 +859,7 @@ pop_counter$get_items(30, pelis_nombres)
 Y ahora agregamos unas 500 mil películas más
 
 ```{r}
-pop_counter$update(vistas$peli_id[2001:500000])
+pop_counter$update(vistas$peli_id[2001:200000])
 pop_counter$get_items(30, pelis_nombres)
 ```
 ```
