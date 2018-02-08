@@ -702,4 +702,150 @@ $$s_{t+1} = s_{t} - c(s_{t} - a_{t}),$$
 es decir, el promedio exponencial actual es una corrección del promedio anterior hacia el nuevo dato observado.
 
 
+## Listas de elementos más populares
 
+Podemos aplicar las ideas de suavizamiento exponencial para mantener una lista
+tamaño fijo de los artículos, películas, posts más populares.  La idea 
+es que si la popularidad de una película es $s_t$, entonces cada vez
+que observamos un evento:
+
+- Si es de esta película, actualizamos a $s_{t+1} = (1-c)*s_t + c*1$ (1 vista).
+- Si es de otra película, actualizamos a $s_{t+1} = (1-c)*s_t + c*0= (1-c)*s_t$.
+
+Una nueva película empieza con $s_0=0$, y en su primera vista, actualizamos a $s_t=c$.
+
+Para mantener una lista de tamaño fijo, lo cual es importante si el número
+de artículos, películas, etc. es muy grande, dejamos de contabilizar
+las películas que caen por debajo de un umbral (por ejemplo $c/2$).
+
+
+
+
+
+Supongamos que queremos mantener una lista de tamaño fijo de los películas más vistas en netflix en cada momento (o los usuarios, posts, etc. más populares).
+
+Si el número de películas es relativamente chico, podríamos llevar cuenta de todos los promedios exponenciales para todas las películas, y 
+filtrar, por ejemplo, los que tengan promedio más alto.
+
+Sin embargo, si la lista total es muy grande, y no queremos monitorear las películas poco populares, podemos hacer los siguiente cada vez que observamos un reporte
+de que una película fue vista:
+
+1. Para cada película que tengamos actualmente en la lista, actualizamos su score multiplicándolo por $(1-c)$ (decaemos exponencialmente su popularidad)
+2. Si el nuevo dato es de una película que mantenemos en la lista, entonces le agregamos $c$ a su score.
+3. Si es de una película que no está en nuestra lista, le asignamos un score de $c$ y la incluímos en la lista.
+4. Eliminamos las películas cuyo score esté por abajo de $c/2$.
+
+Ahora notemos que si la suma de los scores actual es $S_t$, la nueva suma es
+$$S_{t+1}=(1-c)S_{t}+c-a$$
+donde $a$ es el score de los elementos que eliminamos.
+
+Si $S_t \leq 1$, entonces claramente $S_{t+1}\leq 1-a\leq 1$, lo que implica que esta suma de scores siempre es menor que 1. Por lo tanto, si sólo mantenemos los
+scores mayores a $c/2$ como mostramos arriba,  nunca habrá más de $2/c$ películas en la lista,
+aunque puede ser que tengamos considerablemente menos. Si hacemos $c$ más chica, podemos tener
+una lista corriente más grande. 
+
+
+### Ejemplo: películas de netflix {-}
+
+
+
+```{r}
+system.time(vistas <- readRDS('../datos/flujos/peliculas_fecha.rds'))
+nrow(vistas)
+head(vistas) # están ordenados por fecha
+```
+
+Leemos los nombres de las películas:
+
+```{r}
+pelis_nombres <- read_csv('../datos/flujos/movies_title_fix.csv', col_names = FALSE)
+names(pelis_nombres) <- c('peli_id','año','nombre')
+head(pelis_nombres)
+```
+
+
+```{r hashenv}
+lista_pop <- list()
+c <- 0.001
+lista_pop <- new.env(hash=TRUE)
+system.time(
+for(i in 1:2000){
+  peli_id <- as.character(vistas$peli_id[i])
+  peli_valor <- lista_pop[[peli_id]]
+  if(is.null(peli_valor)){
+    lista_pop[[peli_id]] <- c
+  } else {
+    lista_pop[[peli_id]] <- (peli_valor*(1-c) + c)/(1-c)
+  }  
+  
+  for(j in names(lista_pop)){
+    lista_pop[[j]] <- lista_pop[[j]]*(1-c)
+    if(lista_pop[[j]] <= c/2){
+      remove(list=j, envir = lista_pop)
+    }
+  }
+}
+)
+```
+
+
+```{r}
+scores <- map_dbl(names(lista_pop), function(x){ as.numeric(lista_pop[[x]])})
+df_pop <- data_frame(score=scores, peli_id = as.integer(names(lista_pop)))
+df_pop %>% arrange(desc(score)) %>% left_join(pelis_nombres) %>% head(30)
+nrow(df_pop)
+```
+
+```{r}
+PopCounter <- R6Class("PopCounter",
+    public = list(
+      c = NULL,
+      num_eventos = 0,
+      lista_pop = NULL,
+      initialize = function(c){
+        self$c <- c
+        self$lista_pop <- new.env(hash=TRUE)
+      },
+      update = function(items){
+        self$num_eventos = self$num_eventos + 1
+        for(item in items){
+            c <- self$c
+            peli_id <- as.character(item)
+            peli_valor <- self$lista_pop[[peli_id]]
+            if(is.null(peli_valor)){
+              self$lista_pop[[peli_id]] <- c
+            } else {
+              self$lista_pop[[peli_id]] <- (peli_valor*(1-c) + c)/(1-c)
+            }  
+            for(j in names(self$lista_pop)){
+              self$lista_pop[[j]] <- self$lista_pop[[j]]*(1-c)
+              if(self$lista_pop[[j]] <= c/2){
+                remove(list=j, envir = self$lista_pop)
+              }
+            }
+        }
+        invisible(self)
+      },
+      get_items = function(top_n = 30, etiquetas){
+          scores <- map_dbl(names(self$lista_pop), 
+                            function(x){ as.numeric(self$lista_pop[[x]])})
+          df_pop <- data_frame(score=scores, peli_id = as.integer(names(self$lista_pop)))
+          df_pop %>% arrange(desc(score)) %>% left_join(etiquetas) %>% head(top_n)
+        }
+))
+```
+
+
+
+```{r}
+pop_counter <- PopCounter$new(0.005)
+pop_counter$update(vistas$peli_id[1:2000])
+pop_counter$get_items(30, pelis_nombres)
+```
+
+
+```{r}
+pop_counter$update(vistas$peli_id[2001:200000])
+pop_counter$get_items(30, pelis_nombres)
+```
+```
