@@ -203,9 +203,11 @@ Un filtro de Bloom consiste de:
  de valores que están en la muestra.
 - Un vector $v$ de $n$ bits, originalmente igual a 0.
 - Una colección de funciones hash $h_1,h_2,\ldots, h_k$ escogidos al azar,
-que mapean elementos de $\Omega$ a $n$ cubetas.
+que mapean elementos de $\Omega$ a $n$ cubetas de $1$ a $n$ (posiciones
+en el vector de bits)
  
-Queremos decidir si un elemento nuevo $\omega\in \Omega$ está o no en el
+Y el problema que queremos decidir si un elemento 
+nuevo $\omega\in \Omega$ está o no en el
 conjunto $S.
 
 
@@ -416,7 +418,7 @@ ggplot(df, aes(x = k, y = tasa_falsos_p,
                scale_y_log10(breaks= c(0.0001, 0.001, 0.01, 0.1))
 ```
 
-Pdemos intentar usar un vector de 8 millones de bits con 10 hashes. Nuestra
+Pdemos intentar usar un vector de 8 millones de bits con 6 hashes. Nuestra
 estimación de falsos positivos es de
 
 ```{r}
@@ -452,9 +454,7 @@ hashes('el')
 hashes('árbol')
 ```
 
-Ahora insertamos las palabras del diccionario en el filtro. Esta operación
-toma tiempo si queremos insertar muchos elementos, pero solamente
-hay que hacerlo una vez (puede paralelizarse):
+Vamos a interpretar el bloom filter como una clase R6:
 
 ```{r}
 library(R6)
@@ -759,8 +759,9 @@ head(vistas) # están ordenados por fecha
 
 Leemos los nombres de las películas:
 
-```{r}
-pelis_nombres <- read_csv('../datos/flujos/movies_title_fix.csv', col_names = FALSE)
+```{r, message = FALSE}
+pelis_nombres <- read_csv('../datos/flujos/movies_title_fix.csv', 
+                          col_names = FALSE, na = c("", "NA", "NULL"))
 names(pelis_nombres) <- c('peli_id','año','nombre')
 head(pelis_nombres)
 ```
