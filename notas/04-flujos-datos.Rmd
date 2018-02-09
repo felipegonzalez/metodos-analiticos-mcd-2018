@@ -94,10 +94,11 @@ las transacciones en la ventana de interés para los clientes seleccionados.
 
 - Todos los clientes que tuvieron actividad en la ventana tienen la misma probabilidad de ser seleccionados.
 - No es necesario buscar en una lista si el cliente está en la muestra seleccionada o no (lo cual puede ser tardado, o puede ser que terminemos con muestras muy grandes o chicas).
-- Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
-entonces el número de clientes muestreados crecerá de manera correspondiente (veremos
-más adelante qué hacer si queremos evitar esto).
 - Podemos escoger $A$ cubetas de las $B$ para afinar el tamaño de muestra que buscamos.
+- Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
+entonces el número de clientes muestreados crecerá de manera correspondiente. Podemos
+empezar escogiendo $A$ de $B$ cubetas (con $B$ grande), y si la muestra de cientes
+excede el tamaño planeado, reducir a $A-1$ cubetas, y así sucesivamente.
 
 Primero veamos el resultado cuando utilizamos todos los clientes de
 la ventana de tiempo:
@@ -456,7 +457,7 @@ hashes('el')
 hashes('árbol')
 ```
 
-Vamos a interpretar el bloom filter como una clase R6:
+Vamos a implementar el bloom filter como una clase R6:
 
 ```{r}
 library(R6)
