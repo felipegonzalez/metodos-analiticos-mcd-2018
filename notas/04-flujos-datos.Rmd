@@ -474,15 +474,16 @@ BloomFilter <- R6Class("BloomFilter",
           strtoi(sub_str, base = 16L) %% n + 1
         })
       }
-      self$v <- rep(F, self$n)
+      # usamos representación en bits para ahorrar espacio
+      self$v <- raw(self$n) 
     },
     add = function(x){
       x <- iconv(x, to = 'utf-8')
-      self$v[self$hasher(x)] <- T
+      self$v[self$hasher(x)] <- as.raw(1)
     },
     in_filter = function(x){
       x <- iconv(x, to = 'utf-8')
-      all(self$v[self$hasher(x)])
+      all(as.logical(self$v[self$hasher(x)]))
     }
   ))
 bloom_filter <- BloomFilter$new(num_hashes = 6, n = 8e6)
@@ -497,8 +498,8 @@ elementos de $S$ y guardarlo también. AL momento de hacer pruebas puedes
 tener en memoria el vector y los hashes. 
 
 2. En este caso, el vector $v$ es de alrededor de la mitad del tamaño
-que el diccionario original. Checar pertenencia al filtro también es más rápido
-que una búsqueda simple en el diccionario original.
+que el diccionario original. Checar pertenencia al filtro también es una 
+operación rápida.
 
 ---
 
@@ -512,6 +513,7 @@ for(i in seq_along(diccionario)){
   bloom_filter$add(diccionario[i])
 }
 )
+format(object.size(bloom_filter$v), units = 'Mb')
 sum(as.logical(bloom_filter$v))
 ```
 
