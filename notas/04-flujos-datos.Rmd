@@ -97,6 +97,7 @@ las transacciones en la ventana de interés para los clientes seleccionados.
 - Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
 entonces el número de clientes muestreados crecerá de manera correspondiente (veremos
 más adelante qué hacer si queremos evitar esto).
+- Podemos escoger $A$ cubetas de las $B$ para afinar el tamaño de muestra que buscamos.
 
 Primero veamos el resultado cuando utilizamos todos los clientes de
 la ventana de tiempo:
@@ -166,7 +167,8 @@ diferencia de los ejemplos de arriba.
 Cuando la lista es muy grande, esta operación puede ser costosa. Hay
 varias opciones para aproximarnos a este problema, aquí veremos
 un método probabilístico (Bloom filters) que tiene ventajas en cuanto
-a memoria usada.
+a memoria usada y velocidad de búsqueda, con la penalización de posibles
+falsos positivos.
 
 ### Ejemplos {-}
 
@@ -602,8 +604,9 @@ Consideramos $k=100$, y observamos un flujo sintético dado como sigue:
 ```{r}
 N <- 100000
 n_0 <- 1000
+set.seed(103)
 lambda <- 10*abs(sin(1:N/200)) 
-datos <- data_frame(n = 1:N, obs = rpois(N, lambda))
+datos <- data_frame(n = 1:N, res = rnorm(N)) %>% mutate(obs = cumsum(res))
 ggplot(datos %>% filter(n < n_0), aes(x = n, y = obs)) +
   geom_line()
 ```
@@ -691,21 +694,21 @@ prom_exponencial <- function(init, c){
     actual
   }
 }
-prom_c <- prom_exponencial(datos$obs[1], 0.2)
+prom_c <- prom_exponencial(datos$obs[1], 0.01)
 datos_pexp <- datos %>% 
               mutate(prom_exp = map_dbl(obs, prom_c))
 ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
-  geom_point(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = obs), alpha =0.5) +
   geom_line(aes(y = prom_exp), colour = 'red')
 ```
 
 
 ```{r}
-prom_c <- prom_exponencial(datos$obs[1], 0.001)
+prom_c <- prom_exponencial(datos$obs[1], 0.005)
 datos_pexp <- datos %>% 
               mutate(prom_exp = map_dbl(obs, prom_c))
 ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
-  geom_point(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = obs), alpha =0.5) +
   geom_line(aes(y = prom_exp), colour = 'red')
 ```
 
