@@ -1,0 +1,886 @@
+# Procesamiento de flujos
+
+En esta parte supondremos que los datos se pueden representar como un flujo de tal velocidad y volumen que típicamente no es posible almacenar todo el flujo, o que para
+nuestros propósticos sería lento hacer queries a la base de datos resultante.
+
+Veremos técnicas simples para obtener resúmenes simples de los flujos, y también veremos cómo aplicar métodos probabilísticos para filtrar o resumir ciertos aspectos de estos flujos.
+
+Ejemplos de flujos son datos de sitios de internet, datos de redes grandes de sensores, datos de transacciones.
+
+## Muestreo y restricción temporal
+
+Para analizar flujos con estas propiedades podemos hacer:
+
+- Restricción temporal: considerar ventanas de tiempo, y hacer análisis sobre los últimos datos en la ventana. Datos nuevos van reemplazando a datos anteriores, y puede ser que los datos anteriores no se respaldan (o es costoso acceder a ellos).
+
+- Resúmenes acumulados: guardamos resúmenes de los datos que podemos actualizar y utilizar para calcular características de interés en el sistema, por ejemplo conteos simples, promedios.
+
+- Muestreo probabilístico: Podemos diseñar muestras apropiadas para estimar cantidades que nos interesen, y sólo guardar los datos que corresponden a la muestra.
+
+- Filtrado: cómo retener para análisis elementos del flujo que satisfagan una propiedad.
+
+
+## Selección de muestra y funciones hash.
+
+Dependiendo de las unidades de muestreo apropiadas que nos
+interesen (por ejemplo, clientes o usuarios, transacciones, etc.)
+podemos diseñar distintas estrateginas
+
+### Ejemplo {-}
+Si queremos estimar el promedio del tamaño de las transacciones en una ventana de tiempo dada, podemos muestrar esa ventana. Cada vez que llega una transacción, usamos un número aleatorio para decidir si
+lo incluimos en la muestra o no, y luego hacer nuestro análisis
+con las unidades seleccionadas.
+
+```{r, message=FALSE}
+install.packages('itertools')
+install.packages('RcppRoll')
+```
+
+```{r, message = FALSE, warning = FALSE}
+library(iterators)
+library(itertools)
+library(tidyverse)
+```
+
+```{r}
+generar_trans <- function(){
+  id_num <- sample.int(10000, 1)
+  monto <- runif(1, 100,10000) 
+  trans <- list(id = id_num, monto = monto)
+}
+```
+
+Podemos estimar la mediana con toda la muestra. Primero generamos
+durante 2 segundos, y calculamos la mediana de las transacciones:
+
+```{r}
+set.seed(312)
+trans <- itertools::timeout(generar_trans, 2) %>% as.list
+length(trans)
+sapply(trans, function(elem) elem$monto) %>% median
+```
+
+
+Si queremos seleccionar un 1\% de las transacciones, 
+
+
+```{r}
+seleccionar_rng <- function(trans, prop = 0.01){
+   runif(1) < prop
+}
+trans_filtradas <- keep(trans, seleccionar_rng)
+length(trans_filtradas)
+sapply(trans_filtradas, function(elem) elem$monto) %>% median
+```
+
+---
+
+
+
+### Ejemplo {-}
+Ahora supongamos que queremos estimar el promedio de la transacción máxima *por cliente*  en una ventana de tiempo. En este caso, la unidad de muestreo más simple es el cliente, y el método del ejemplo anterior es menos apropiado. Quisiéramos en lugar de eso tomar una muestra de
+clientes en la ventana, tomar el máximo de todas sus transacciones,
+y luego promediar. 
+
+- En este caso, el análisis es más complicado si seleccionamos cada transacción según un número aleatorio (tenderíamos a seleccionar más clientes con muchas transacciones).
+
+```{block2, type ='resumen'}
+Podemos usar una función hash del **identificador único de cliente**, y mapear a un cierto número de cubetas $1,\ldots, B$.
+Los clientes de la meustra son los que caen en una cubeta (por ejemplo la cubeta 1), y así
+obtendríamos una muestra que consiste de $1/B$ de los clientes
+totales que tuvieron actividad en la ventana de interés. Almacenamos todas
+las transacciones en la ventana de interés para los clientes seleccionados.
+```
+
+- Todos los clientes que tuvieron actividad en la ventana tienen la misma probabilidad de ser seleccionados.
+- No es necesario buscar en una lista si el cliente está en la muestra seleccionada o no (lo cual puede ser tardado, o puede ser que terminemos con muestras muy grandes o chicas).
+- Podemos escoger $A$ cubetas de las $B$ para afinar el tamaño de muestra que buscamos.
+- Este método incorpora progresivamente nuevos clientes a la lista muestreada. Por ejemplo, si la cantidad de clientes está creciendo,
+entonces el número de clientes muestreados crecerá de manera correspondiente. Podemos
+empezar escogiendo $A$ de $B$ cubetas (con $B$ grande), y si la muestra de cientes
+excede el tamaño planeado, reducir a $A-1$ cubetas, y así sucesivamente.
+
+Primero veamos el resultado cuando utilizamos todos los clientes de
+la ventana de tiempo:
+
+```{r}
+trans <- itertools::timeout(generar_trans, 2) %>% as.list
+length(trans)
+df <- bind_rows(trans)
+length(unique(df$id))
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+Ahora usamos una función hash y repartimos en 10 cubetas (deberíamos
+obtener alrededor del 10\% de los clientes)
+
+```{r}
+#seleccionar <- function(trans){
+#  (5*trans$id + 7) %% 11  == 0
+#}
+seleccionar <- function(trans){
+  hash_xx <- digest::digest(as.character(trans$id), 'xxhash32', serialize = FALSE)
+  strtoi(substr(hash_xx, 1, 7) , 16L) %% 10 == 0
+}
+trans_filtradas_c <- keep(trans, seleccionar)
+df <- bind_rows(trans_filtradas_c)
+length(unique(df$id))
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+
+Sin embargo, esto no funciona con el método de seleccion de arriba:
+
+```{r}
+trans_filtradas <- keep(trans, function(x) seleccionar_rng(x, prop = 0.10))
+length(trans_filtradas)
+df <- bind_rows(trans_filtradas)
+df %>% group_by(id) %>% summarise(monto_max = max(monto)) %>%
+  pull(monto_max) %>% median
+```
+
+**Observación**: 
+
+1. En este último ejemplo, para cada usuario sólo
+muestreamos una fracción de sus transacciones. En algunos casos, 
+no muestreamos el máximo, y esto produce que la estimación 
+esté sesgada hacia abajo.
+2. Para un enfoque más general (por ejemplo id's que son cadenas), podemos
+usar alguna función hash de digest (ver ejemplos más abajo).
+
+
+## Selección de muestra bajo identificadores fijos.
+
+En algunos casos, podemos tener un conjunto $S$ de unidades
+que seleccionamos con anterioridad, y quisiéramos seleccionar
+en la muestra los datos relacionados con elementos en ese conjunto.
+
+Por ejemplo, quizá nos interesaría muestrar las transacciones
+que se hacen en comercios donde han existido fraudes anterioremente,
+o quizá checar si un correo proviene de una dirección que está 
+en una whitelist (o blacklist)
+
+En estos ejemplo, 
+tenemos que checar contra la lista $S$ si seleccionamos un elemento o no, a
+diferencia de los ejemplos de arriba.
+Cuando la lista es muy grande, esta operación puede ser costosa. Hay
+varias opciones para aproximarnos a este problema, aquí veremos
+un método probabilístico (Bloom filters) que tiene ventajas en cuanto
+a memoria usada y velocidad de búsqueda, con la penalización de posibles
+falsos positivos.
+
+### Ejemplos {-}
+
+- [Este es un ejemplo](https://gallery.shinyapps.io/087-crandash/) de una
+aplicación que cuenta el número de usuarios únicos que bajan paquetes de CRAN. Cada
+vez que hay una nueva descarga (transacción) debemos decidir si se trata
+de usuarios nuevos o no y actualizar correctamente el conteo de usuarios únicos.
+
+- En este ejemplo de [Medium](https://blog.medium.com/what-are-bloom-filters-1ec2a50c68ff) se usan filtros de Bloom para evitar volver a recomendar artículos ya
+vistos o recomendados.
+
+- Supongamos que tenemos un diccionario de palabras $S$ del español.
+Cuando observamos una nueva "palabra" que alguien escribió,
+queremos saber si la palabra está en el diccionario. Por ejemplo,
+para decidir si es un posible error de ortografía o proponer algún sustituto.
+
+- Decidir si una dirección web está en una lista negra, para dar una advertencia
+inmediata (*safe browsing*).
+
+---
+
+Una solución a este problema es el filtro de bloom, que es
+un esquema probabilístico para filtrar elementos de un flujo
+que pertenecen a una colección fija $S$.
+
+## Filtro de Bloom
+
+Consideremos entonces el problema de filtrar de un flujo solamente los elementos que pertenezcan a un conjunto S.
+
+Un filtro de Bloom consiste de:
+
+- Un conjunto $\Omega$ de posibles valores (el universo) que puede aprecer en el flujo
+- Un subconjunto $S\subset \Omega$
+ de valores que están en la muestra.
+- Un vector $v$ de $n$ bits, originalmente igual a 0.
+- Una colección de funciones hash $h_1,h_2,\ldots, h_k$ escogidos al azar,
+que mapean elementos de $\Omega$ a $n$ cubetas de $1$ a $n$ (posiciones
+en el vector de bits)
+ 
+Y el problema que queremos decidir si un elemento 
+nuevo $\omega\in \Omega$ está o no en el
+conjunto $S.
+
+
+### Ejemplo {-}
+
+
+#### Paso 1: inicialización y selección de hashes {-}
+
+Usaremos un vector de tamaño $n=11$ (longitud de vector de bits), y suponemos
+que los valores posibles ($\Omega$) son los enteros de uno a mil. Queremos
+detectar cuando observamos algún elemento de $S=\{15,523,922\}$. Para este
+ejemplo usamos $k=2$ funciones hash. Estas funciones deben mapear
+los enteros del uno al mil a las cubetas 1 a 11 (el número de entradas del
+ vector e bits). 
+
+```{r}
+S <- c(15, 523, 922)
+hash_lista <- list(h_1 = function(x) x %% 11 + 1,
+                   h_2 = function(x) (5*x + 3) %% 11 + 1)
+```
+
+Inicializamos el vector de bits:
+
+```{r}
+v <- rep(0, 11)
+```
+
+
+#### Paso 2: insertar elementos en filtro {-}
+
+```{r}
+for(i in 1:length(S)){
+  indices <- sapply(hash_lista, function(h) h(S[i]))
+  indices
+  print(indices)
+  v[indices] <- 1 
+  print(v)
+}
+```
+
+Y tenemos el vector del filtro listo:
+```{r}
+v
+```
+
+#### Paso 3: filtrar elementos {-}
+
+Ahora veamos cómo decidimos cuáles elementos están o no en el conjunto $S$. Si
+observamos un nuevo número $x$, calculamos sus hashes, y vemos si esas
+posiciones están prendidas en el vector $v$. Si no lo están, entonces el
+elemento necesariamente no está en el conjunto $S$:
+
+```{r}
+x <- 219
+h_x <- sapply(hash_lista, function(h) h(x))
+h_x
+```
+
+No está en la lista, pues por lo menos uno de los bits es igual a cero:
+
+```{r, warning=FALSE}
+v[h_x]
+all(v[h_x])
+```
+
+Nunca descartamos un número en la colección:
+
+```{r, warning=FALSE}
+x <- 523
+h_x <- sapply(hash_lista, function(h) h(x))
+all(v[h_x])
+```
+
+Sin embargo, puede haber falsos positivos:
+
+```{r, warning=FALSE}
+x <- 413
+h_x <- sapply(hash_lista, function(h) h(x))
+all(v[h_x])
+```
+
+**Observación**: nótese que solo es neceario almacenar el vector de bits
+y las funciones hash, y esto generalmente resulta en una representación 
+compacta. Por otra parte, tendremos algunos falsos positivos, que tenemos
+que controlar.
+
+## Análisis de filtro de Bloom
+
+Para construir este filtro, tenemos que escoger el tamaño del vector de bits ($n$),
+y el número de funciones hash $k$, dependiendo
+del número de elementos que tenemos que almacenar.
+
+Supongamos como aproximación que una función hash en particular selecciona
+una de las entradas del bit la misma probabilidad. La probabilidad de que un
+bit dado no se encienda cuando insertamos un elemento es
+$$1-\frac{1}{n}$$.
+Si $k$ es el número de funciones hash, entonces la probabilidad de que ese bit
+dado no se encienda es
+$$\left (1-\frac{1}{n}\right )^k$$.
+Si insertamos $s$ elementos de $S$, entonces la probabilidad de que ese bit dado
+no se encienda es entonces
+$$\left (1-\frac{1}{n}\right  )^{ks}$$.
+La probabilidad de que se encienda es
+$$1-\left (1-\frac{1}{n}\right )^{ks}$$.
+
+
+Finalmente podemos calcular la probabilidad de un falso positivo. Para un elemento
+que no está en $S$, la probabilidad de que todos sus hashes caigan en bits encendidos
+es
+
+$$ \left ( 1-\left (1-\frac{1}{n}\right )^{ks}\right )^k$$
+
+**Observaciones**:
+
+1. Si usamos un vector más grande ($n$ más grande), la probabildad de falsos
+positivos baja (el vector de bits tiene relativamente más ceros).
+2. Si el conjunto $S$ es más grandes ($s$ más grande), la probabilidad de
+falsos positivos sube (el vector de bits está más lleno).
+3. El número de hashes tiene dos efectos: por un lado, más hashes llenan más
+el vector de bits de unos. Por otro lado, es más difícil que un nuevo elemento
+"atine" a más posiciones que tienen un bit encendido.
+4. Esta fórmula es una aproximación, pues usamos funciones hash y no aleatorización.
+
+
+Podemos hacer una gráfica para ver cómo se comporta la tasa de falsos positivos:
+
+
+```{r, fig.width = 8}
+tasa_fp <- function(n, s, k) {
+    (1 - (1 - (1 / n)) ^ (k * s)) ^ k
+}
+df <- expand.grid(list(s = c(1e5, 1e6, 1e7, 1e8),
+                  k = seq(1, 20),
+                  n = 2^seq(20,30,1)
+                  )) %>%
+      mutate(millones_bits = round(n/1e6)) %>%
+      mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
+      mutate(s_str = paste0(s, ' insertados'))
+
+
+ggplot(df, aes(x = k, y = tasa_falsos_p, 
+               colour=(millones_bits), group=millones_bits)) + 
+               geom_line(size=1.2) +
+               facet_wrap(~s_str) +
+               labs(x="k = número de hashes", 
+                    colour = "Mill bits \n en vector") +
+               scale_y_sqrt()
+  
+```
+
+
+Haciendo algunas aproximaciones, se puede demostrar que el número de hashes
+óptimo es aproximadamente
+$$k  = \frac{n}{s}\log(2)$$
+
+```{r}
+df_opt <- df %>% select(n, s) %>%  
+  mutate(k = ceiling((n/s)*log(2))) %>% unique %>%
+  mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
+  mutate(s_str = paste0(s, ' insertados'))
+ggplot(df, aes(x = k, y = tasa_falsos_p)) +
+               geom_line(aes(colour=(millones_bits), group=millones_bits),
+                 size=1.2) +
+               facet_wrap(~s_str) +
+               labs(x="k = número de hashes", 
+                    colour = "Mill bits \n en vector") +
+               scale_y_sqrt() +
+               geom_point(data = df_opt, col='red') +
+               xlim(0,20)
+  
+```
+```{block2, type='resumen'}
+Un filtro de bloom nunca da falsos negativos, pero puede dar falsos positivos.
+La tasa de falsos positivos se puede controlar escogiendo el tamaño del vector
+y el número adecuado de hashes dependiendo del tamaño esperado del conjunto
+que vamos a insertar.
+```
+
+## Ejemplo: un corrector de ortografía simple basado en filtro de Bloom
+
+```{r}
+diccionario <- read.csv("../datos/diccionario/es_dic.txt", 
+               header = FALSE, stringsAsFactors =FALSE)
+diccionario <- iconv(diccionario[, 1], to = 'utf-8')
+m <- length(diccionario)
+m
+```
+
+Queremos insertar entonces unos 250 mil elementos, aunque puede ser posible
+que quizá queramos insertar otras palabras más adelante.
+
+```{r}
+df <- expand.grid(list(s = 300000,
+                  k = seq(4, 10),
+                  n = c(1e6, 2e6, 4e6, 9e6)
+                  )) %>%
+      mutate(millones_bits = (n/1e6)) %>%
+      mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
+      mutate(s_str = paste0(s, ' insertados'))
+
+
+ggplot(df, aes(x = k, y = tasa_falsos_p, 
+               colour=(millones_bits), group=millones_bits)) + 
+               geom_line(size=1.2) +
+               facet_wrap(~s_str) +
+               labs(x="k = número de hashes", 
+                    colour = "Mill bits \n en vector") +
+               scale_y_log10(breaks= c(0.0001, 0.001, 0.01, 0.1))
+```
+
+Pdemos intentar usar un vector de 8 millones de bits con 6 hashes. Nuestra
+estimación de falsos positivos es de
+
+```{r}
+n <- 8e6
+tasa_fp(n, 3e5, 6)
+```
+
+Ahora necesitamos nuestras funciones hash escogidas al azar. Podemos
+usar el algoritmo [xxhash32](https://github.com/Cyan4973/xxHash), por ejemplo:
+
+```{r}
+library(digest)
+set.seed(123)
+hash_generator <- function(k = 6, n){
+  seeds <- sample.int(652346, k)
+  hasher <- function(x){
+    sapply(seeds, function(seed){
+      # en digest, serialize puede ser false, pues trabajamos con cadenas
+      # la salida de xxhash32 son 8 caracteres hexadecimales, pero 
+      # solo tomamos 7 para poder convertir a un entero
+      sub_str <- substr(digest::digest(x, "xxhash32", serialize = FALSE, seed = seed), 1, 7)
+      strtoi(sub_str, base = 16L) %% n + 1
+    })
+  }
+  hasher
+}
+hashes <- hash_generator(6, n)  
+```
+
+```{r}
+hashes('él')
+hashes('el')
+hashes('árbol')
+```
+
+Vamos a implementar el bloom filter como una clase R6:
+
+```{r}
+library(R6)
+BloomFilter <- R6Class("BloomFilter",
+  public = list(
+    v = NULL,
+    n = NULL,
+    hasher = NULL,
+    seeds = NULL,
+    initialize = function(num_hashes, n){
+      self$n <- n
+      self$seeds <- sample.int(883123, num_hashes)
+      self$hasher <- function(x){
+        sapply(self$seeds, function(seed){
+          sub_str <- substr(digest::digest(x, "xxhash32", 
+                            serialize = FALSE, seed = seed), 1, 7)
+          strtoi(sub_str, base = 16L) %% n + 1
+        })
+      }
+      # usamos representación en bits para ahorrar espacio
+      self$v <- raw(self$n) 
+    },
+    add = function(x){
+      x <- iconv(x, to = 'utf-8')
+      self$v[self$hasher(x)] <- as.raw(1)
+    },
+    in_filter = function(x){
+      x <- iconv(x, to = 'utf-8')
+      all(as.logical(self$v[self$hasher(x)]))
+    }
+  ))
+bloom_filter <- BloomFilter$new(num_hashes = 6, n = 8e6)
+
+```
+
+**Observaciones**: 
+
+1. No tienes que usar clases para hacer el filtro. Puedes
+tomar la función que crea los hashes, guardarla, poblar el filtro con los
+elementos de $S$ y guardarlo también. AL momento de hacer pruebas puedes
+tener en memoria el vector y los hashes. 
+
+2. En este caso, el vector $v$ es de alrededor de la mitad del tamaño
+que el diccionario original. Checar pertenencia al filtro también es una 
+operación rápida.
+
+---
+
+Ahora insertamos en el filtro los elementos del diccionario:
+
+
+```{r}
+set.seed(3434)
+system.time(
+for(i in seq_along(diccionario)){
+  bloom_filter$add(diccionario[i])
+}
+)
+format(object.size(bloom_filter$v), units = 'Mb')
+sum(as.logical(bloom_filter$v))
+```
+
+Y vemos unos ejemplos:
+
+```{r}
+bloom_filter$in_filter('árbol')
+```
+
+```{r}
+palabras_prueba <- c('árbol', 'arbol', 'explicásemos', 'xexplicasemos',
+                     'gato', 'perror', 'perro', 'alluda','ayuda')
+df_palabras <- data_frame(palabra = palabras_prueba) %>%
+                   mutate(pertenece = map_lgl(palabra, bloom_filter$in_filter))
+df_palabras
+```
+
+En el siguiente paso tendríamos que producir sugerencias de corrección.
+En caso de encontrar una palabra que no está en el diccionario,
+podemos producir palabras similares (a cierta distancia de edición),
+y filtrar aquellas que pasen el filtro de bloom (ver [How to write a spelling corrector](http://norvig.com/spell-correct.html)).
+
+```{r}
+generar_dist_1 <- function(palabra){
+  caracteres <- c(letters, 'á', 'é', 'í', 'ó', 'ú', 'ñ')
+  pares <- lapply(0:(nchar(palabra)), function(i){
+    c(str_sub(palabra, 1, i), str_sub(palabra, i+1, nchar(palabra)))
+  })
+  eliminaciones <- pares %>% map(function(x){ paste0(x[1], str_sub(x[2],2,-1))})
+  sustituciones <- pares %>% map(function(x)
+      map(caracteres, function(car){
+    paste0(x[1], car, str_sub(x[2], 2 ,-1))
+  })) %>% flatten 
+  inserciones <- pares %>% map(function(x){
+    map(caracteres, function(car) paste0(x[1], car, x[2]))
+  }) %>% flatten
+  transposiciones <- pares %>% map(function(x){
+    paste0(x[1], str_sub(x[2],2,2), str_sub(x[2],1,1), str_sub(x[2],3,-1))
+  })
+  c(eliminaciones, sustituciones, transposiciones, inserciones)
+}
+```
+
+```{r}
+generar_dist_1('perror') %>% keep(bloom_filter$in_filter)
+```
+
+```{r}
+generar_dist_1('explicasemos') %>% keep(bloom_filter$in_filter)
+```
+
+
+```{r}
+generar_dist_1('hayuda') %>% keep(bloom_filter$in_filter)
+```
+
+### Ejercicio {-}
+Encuentra alguna palabra del español que no esté en el filtro (por ejemplo una
+de español en México). Agrégala al filtro y verifica que es detectada como
+positiva. Busca una posible manera incorrecta de escribirla y prueba la
+función de arriba de sugerencias.
+
+## Muestra distribuida uniformemente en el flujo.
+
+Supongamos que tenemos un histórico de tamaño $n_0$ del flujo de datos. Podemos tomar una muestra
+para resumir el flujo. El problema es que cuando llegan nuevos datos, si los incluimos desplazando datos anteriores entonces tendremos sesgo hacia actividad reciente. Una solución es hacer una especie de muestreo de rechazo.
+
+Supongamos entonces que queremos trabajar con una muestra de tamaño aproximado $k$, y que incialmente
+tenemos una muestra uniforme del flujo de tamaño $n_0$.
+
+1. Tomamos una muestra uniforme de tamaño $k$ de los $n_0$ casos.
+2. Ahora suponamos que el tamaño total del flujo actual es de $n_0$. Si observamos un nuevo caso al tiempo $n > n_0$,
+lo seleccionamos con probabilidad $\frac{k}{n}$. 
+3. Si el nuevo caso resulta seleccionado, escogemos al azar uno de los $k$ elementos anteriores y lo eliminamos.
+4. Si no, repetimos para $n+1$.
+
+Como ejercicio, demostrar:
+
+###  Ejercicio {-}
+Al tiempo $n$, la probabilidad de que un elemento del flujo completo 
+esté en la muestra es uniforme $k/n$
+
+### Ejemplo {#ejemplo}
+Consideramos $k=100$, y observamos un flujo sintético dado como sigue:
+
+```{r}
+N <- 100000
+n_0 <- 1000
+set.seed(103)
+lambda <- 10*abs(sin(1:N/200)) 
+datos <- data_frame(n = 1:N, res = rnorm(N)) %>% mutate(obs = cumsum(res))
+ggplot(datos %>% filter(n < n_0), aes(x = n, y = obs)) +
+  geom_line()
+```
+
+Si utilizamos una ventana reciente de tamaño 50, nuestras estimaciones del estado del sistema serían:
+
+```{r}
+library(RcppRoll)
+resumenes_50 <- datos %>% 
+                mutate(prom_50 = roll_mean(obs, n = 50, 
+                                           align = 'right', fill = NA))
+ggplot(resumenes_50 %>% filter(n < 2000), aes(x = n)) +
+  geom_line(aes(y = obs), alpha = 0.5) + 
+  geom_line(aes(y=prom_50), colour= 'red')
+  
+```
+
+Y vemos que el promedio está sesgado, en cada momento, a valores recientes.
+ Sin embargo, si utilizamos el esquema mostrado arriba (en este caso
+ implementamos con una cerradura):
+
+
+```{r}
+muestra_unif <- function(data_vec, sample_size){
+  n <- length(data_vec)
+  sampled <- sample(data_vec, sample_size)
+  fun_out <- function(dato){
+    n <<- n + 1
+    if(runif(1) < sample_size/n) {
+      sampled[sample.int(sample_size, 1)] <<- dato
+    }
+    mean(sampled)
+  }
+  attr(fun_out, "class") <- "muestra_uniforme"
+  fun_out
+}
+muestra_1 <- muestra_unif(data_vec = datos$obs[1:100], sample_size = 50)
+mean.muestra_uniforme <- function(f){
+  mean(get('sampled', envir = environment(f)))
+}
+mean(muestra_1)
+muestra_1(343434)
+muestra_1(343434)
+mean(muestra_1)
+```
+
+```{r}
+muestra_u <- muestra_unif(data_vec = datos$obs[1:100], sample_size = 50)
+datos_p <- datos %>% filter(n >= 101, n < 5000) %>%
+  mutate(promedio = map_dbl(obs, muestra_u))
+ggplot(datos_p, aes(x = n)) + geom_line(aes(y = obs), alpha=0.5) +
+  geom_line(aes(y = promedio), colour = 'red')
+```
+
+
+## Suavizamiento exponencial
+
+
+Si lo que nos interesa más bien es mantener un promedio de valores más recientes, podemos
+usar ventanas para promediar. 
+
+Una de las maneras más simples de hacer esto es usando suavizamiento exponencial,
+que como veremos tiene la ventaja de sólo requerir el resumen actual y el nuevo dato:
+
+Supongamos entonces que los datos están dados por $x_1,x_2,\ldots$
+
+Para un parámetro de suavizamiento $0<c<1,$ definimos el promedio exponencial al momento $t$ como
+$$s_t = c(a_1(1-c)^{t-1} + a_2(1-c)^{t-2} +\cdots + a_{t-1}(1-c) + a_t),$$ 
+o de manera más compacta
+$$s_t = c \sum_{i=0}^{t-1} a_{t-i} (1-c)^{i},$$
+
+Y nótese como actualizar $s_t$ es muy simple:
+
+$$s_{t+1} = c a_{t+1} + (1-c)s_{t}$$
+
+Tomando $c$ grande le damos más peso al último dato, y si $c$ es más chica pesamos de manera
+similar todos los objetos.
+
+### Ejemplos {#ejemplo}
+```{r}
+prom_exponencial <- function(init, c){
+  actual <- init
+  function(x){
+    actual <<- c*x + (1-c)*actual
+    actual
+  }
+}
+prom_c <- prom_exponencial(datos$obs[1], 0.01)
+datos_pexp <- datos %>% 
+              mutate(prom_exp = map_dbl(obs, prom_c))
+ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
+  geom_line(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = prom_exp), colour = 'red')
+```
+
+
+```{r}
+prom_c <- prom_exponencial(datos$obs[1], 0.005)
+datos_pexp <- datos %>% 
+              mutate(prom_exp = map_dbl(obs, prom_c))
+ggplot(datos_pexp %>% filter(n < 5000), aes(x = n)) +
+  geom_line(aes(y = obs), alpha =0.5) +
+  geom_line(aes(y = prom_exp), colour = 'red')
+```
+
+
+
+Otra manera de ver los promedios exponenciales es notando que
+
+$$s_{t+1} = s_{t} - c(s_{t} - a_{t}),$$
+es decir, el promedio exponencial actual es una corrección del promedio anterior hacia el nuevo dato observado.
+
+### Ejercicio {-}
+Repite los distintos tipos de resúmenes y suavizamientos que vimos arriba
+con una serie de tiempo simulada de distinta manera.
+
+
+## Listas de elementos más populares
+
+Podemos aplicar las ideas de suavizamiento exponencial para mantener una lista
+tamaño fijo de los artículos, películas, posts más populares.  La idea 
+es que si la popularidad de una película es $s_t$, entonces cada vez
+que observamos un evento:
+
+- Si es de esta película, actualizamos a $s_{t+1} = (1-c)s_t + c\times 1$ (1 vista).
+- Si es de otra película, actualizamos a $s_{t+1} = (1-c)s_t + 0\times c= (1-c)s_t$.
+
+Una película empieza con $s_0=0$, y en su primer evento, actualizamos a $s_t=c$.
+
+Para mantener una lista de tamaño fijo, lo cual puede ser importante si el número
+de artículos, películas, etc. es muy grande, dejamos de contabilizar
+las películas que caen por debajo de un umbral (por ejemplo $c/2$).
+
+Si la lista total es muy grande, y no queremos monitorear las películas poco populares, podemos hacer los siguiente cada vez que observamos un reporte
+de que una película fue vista:
+
+1. Para cada película que tengamos actualmente en la lista, actualizamos su score multiplicándolo por $(1-c)$ (decaemos exponencialmente su popularidad)
+2. Si el nuevo dato es de una película que mantenemos en la lista, entonces le agregamos $c$ a su score.
+3. Si es de una película que no está en nuestra lista, le asignamos un score de $c$ y la incluímos en la lista.
+4. Eliminamos las películas cuyo score esté por abajo de $c/2$.
+
+Ahora notemos que si la suma de los scores actual es $S_t$, la nueva suma es
+$$S_{t+1}=(1-c)S_{t}+c-a$$
+donde $a$ es el score de los elementos que eliminamos.
+
+Si $S_t \leq 1$, entonces claramente $S_{t+1}\leq 1-a\leq 1$, lo que implica que esta suma de scores siempre es menor que 1. Por lo tanto, si sólo mantenemos los
+scores mayores a $c/2$ como mostramos arriba,  nunca habrá más de $2/c$ películas en la lista,
+aunque puede ser que tengamos considerablemente menos. Si hacemos $c$ más chica, podemos tener
+una lista corriente más grande. 
+
+- Valores más grandes de $c$ producen decaimiento más rápido, y una lista más dinámica.
+
+
+### Ejemplo: películas de netflix {-}
+
+Consideramos los eventos de vistas de películas ordenados en el tiempo:
+
+```{r}
+system.time(vistas <- readRDS('../datos/flujos/peliculas_fecha.rds'))
+nrow(vistas)
+head(vistas) # están ordenados por fecha
+```
+
+Leemos los nombres de las películas:
+
+```{r, message = FALSE}
+pelis_nombres <- read_csv('../datos/flujos/movies_title_fix.csv', 
+                          col_names = FALSE, na = c("", "NA", "NULL"))
+names(pelis_nombres) <- c('peli_id','año','nombre')
+head(pelis_nombres)
+```
+
+
+En el siguiente código, mantenemos en *lista_pop* nuestro monitor de artículos
+populares. Utilizamos environments en lugar de listas para mejorar el desempeño
+(ver por ejemplo [aquí](https://blog.dominodatalab.com/a-quick-benchmark-of-hashtable-implementations-in-r/)). La implementación con listas es similar:
+
+```{r hashenv}
+lista_pop <- new.env(hash=TRUE)
+c <- 0.005
+system.time(
+for(i in 1:2000){
+  peli_id <- as.character(vistas$peli_id[i])
+  peli_valor <- lista_pop[[peli_id]]
+  if(is.null(peli_valor)){
+    lista_pop[[peli_id]] <- c
+  } else {
+    lista_pop[[peli_id]] <- (peli_valor*(1-c) + c)/(1-c)
+  }  
+  
+  for(j in names(lista_pop)){
+    lista_pop[[j]] <- lista_pop[[j]]*(1-c)
+    if(lista_pop[[j]] <= c/2){
+      remove(list=j, envir = lista_pop)
+    }
+  }
+}
+)
+```
+
+
+Y ahora escogemos un punto de corte para ver las películas más populares 
+En este caso obtenemos (ordenadas por score). Las películas que acaban de
+aparecer tienen score $c$ (o más bajo si no han tenido más vistas), así
+que $c$ es un valor mínimo para cortar. En este ejemplo tomamos las 30
+con score más alto:
+
+```{r}
+scores <- map_dbl(names(lista_pop), function(x){ as.numeric(lista_pop[[x]])})
+df_pop <- data_frame(score=scores, peli_id = as.integer(names(lista_pop)))
+df_pop %>% arrange(desc(score)) %>% left_join(pelis_nombres) %>% head(30)
+nrow(df_pop)
+```
+
+Podemos también implementar en una clase.
+
+```{r}
+PopCounter <- R6Class("PopCounter",
+    public = list(
+      c = NULL,
+      num_eventos = 0,
+      lista_pop = NULL,
+      initialize = function(c){
+        self$c <- c
+        self$lista_pop <- new.env(hash=TRUE)
+      },
+      update = function(items){
+        self$num_eventos = self$num_eventos + 1
+        for(item in items){
+            c <- self$c
+            peli_id <- as.character(item)
+            peli_valor <- self$lista_pop[[peli_id]]
+            if(is.null(peli_valor)){
+              self$lista_pop[[peli_id]] <- c
+            } else {
+              self$lista_pop[[peli_id]] <- (peli_valor*(1-c) + c)/(1-c)
+            }  
+            for(j in names(self$lista_pop)){
+              self$lista_pop[[j]] <- self$lista_pop[[j]]*(1-c)
+              if(self$lista_pop[[j]] <= c/2){
+                remove(list=j, envir = self$lista_pop)
+              }
+            }
+        }
+        invisible(self)
+      },
+      get_items = function(top_n = 30, etiquetas){
+          scores <- map_dbl(names(self$lista_pop), 
+                            function(x){ as.numeric(self$lista_pop[[x]])})
+          df_pop <- data_frame(score=scores, peli_id = as.integer(names(self$lista_pop)))
+          df_pop %>% arrange(desc(score)) %>% left_join(etiquetas) %>% head(top_n)
+        }
+))
+```
+
+Repetimos el ejemplo de arriba:
+
+```{r}
+pop_counter <- PopCounter$new(0.005)
+pop_counter$update(vistas$peli_id[1:2000])
+pop_counter$get_items(30, pelis_nombres)
+```
+
+Y ahora agregamos unas 500 mil películas más
+
+```{r}
+pop_counter$update(vistas$peli_id[2001:200000])
+pop_counter$get_items(30, pelis_nombres)
+```
+
+### Ejercicio {-}
+
+Modifica el código de arriba para que también reporte la fecha de actualización
+(de todas las películas que actualizaste, cuál es la última fecha). Prueba
+también comenzando más adelante en la lista de vistas (por ejemplo, después del
+año 2000. Ojo: no confundas con el año de la película que está reportado arriba).
