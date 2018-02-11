@@ -352,7 +352,7 @@ df <- expand.grid(list(s = c(1e5, 1e6, 1e7, 1e8),
 
 
 ggplot(df, aes(x = k, y = tasa_falsos_p, 
-               colour=(millones_bits), group=millones_bits)) + 
+               colour=factor(millones_bits), group=millones_bits)) + 
                geom_line(size=1.2) +
                facet_wrap(~s_str) +
                labs(x="k = número de hashes", 
@@ -372,7 +372,7 @@ df_opt <- df %>% select(n, s) %>%
   mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
   mutate(s_str = paste0(s, ' insertados'))
 ggplot(df, aes(x = k, y = tasa_falsos_p)) +
-               geom_line(aes(colour=(millones_bits), group=millones_bits),
+               geom_line(aes(colour=factor(millones_bits), group=millones_bits),
                  size=1.2) +
                facet_wrap(~s_str) +
                labs(x="k = número de hashes", 
@@ -618,11 +618,10 @@ Si utilizamos una ventana reciente de tamaño 50, nuestras estimaciones del esta
 library(RcppRoll)
 resumenes_50 <- datos %>% 
                 mutate(prom_50 = roll_mean(obs, n = 50, 
-                                           align = 'right', fill = NA))
-ggplot(resumenes_50 %>% filter(n < 2000), aes(x = n)) +
-  geom_line(aes(y = obs), alpha = 0.5) + 
-  geom_line(aes(y=prom_50), colour= 'red')
-  
+                                           align = 'right', fill = NA)) %>%
+                gather(variable, valor, obs:prom_50)
+ggplot(resumenes_50 %>% filter(n < 2000), aes(x = n, y = valor, colour = variable)) +
+  geom_line()
 ```
 
 Y vemos que el promedio está sesgado, en cada momento, a valores recientes.
@@ -650,16 +649,17 @@ mean.muestra_uniforme <- function(f){
 }
 mean(muestra_1)
 muestra_1(343434)
-muestra_1(343434)
+muestra_1(343)
 mean(muestra_1)
 ```
 
 ```{r}
 muestra_u <- muestra_unif(data_vec = datos$obs[1:100], sample_size = 50)
 datos_p <- datos %>% filter(n >= 101, n < 5000) %>%
-  mutate(promedio = map_dbl(obs, muestra_u))
-ggplot(datos_p, aes(x = n)) + geom_line(aes(y = obs), alpha=0.5) +
-  geom_line(aes(y = promedio), colour = 'red')
+  mutate(promedio_muestra = map_dbl(obs, muestra_u)) %>%
+  mutate(promedio_total = cummean(obs)) %>%
+  gather(variable, valor, obs:promedio_total)
+ggplot(datos_p, aes(x = n, y = valor, colour = variable)) + geom_line()
 ```
 
 
