@@ -1,0 +1,131 @@
+---
+title: 'Sesion 3b: 2018/01/29'
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r include=FALSE}
+library(tidyverse)
+library(textreuse)
+# library()
+```
+
+```{r}
+set.seed(101)
+mat_1 <- matrix(rnorm(300 * 1000) + 3, ncol = 1000)
+mat_2 <- matrix(rnorm(600 * 1000) + 0.2, ncol = 1000)
+df <- rbind(mat_1, mat_2) %>% data.frame %>%
+           add_column(id_1 = 1:900, .before = 1)
+norma <- function(x){
+  sqrt(sum(x ^ 2))
+}
+dist_coseno <- function(x, y){
+  1 - sum(x*y) / (norma(x) * norma(y))
+}
+df_agrup <- df %>% gather('variable', 'valor', -id_1) %>%
+                   group_by(id_1) %>%
+                   arrange(variable) %>%
+                   summarise(vec_1 = list(valor))
+df_pares <- df_agrup %>% 
+            crossing(df_agrup %>% 
+                       rename(id_2 = id_1, vec_2 = vec_1)) %>%
+            filter(id_1 < id_2) %>%
+            mutate(dist = map2_dbl(vec_1, vec_2, dist_coseno))
+df_pares
+```
+
+```{r}
+qplot(df_pares$dist, binwidth = 0.01)
+```
+
+```{r}
+sum(df_pares$dist < 0.20)
+```
+
+```{r}
+set.seed(101021)
+hashes <- lapply(1:200, function(i){
+    v <- rnorm(1000)
+    function(x){
+        ifelse(sum(v*x) >= 0, 1, -1) 
+    }
+})
+x <- as.numeric(df[1,-1])
+sapply(hashes, function(f) f(x))
+df_hash <- df_agrup %>%
+           mutate(df = map(vec_1, function(x){
+              firma <-  sapply(hashes, function(f) f(x)) 
+              data_frame(id_hash = 1:length(firma),
+                         firma = firma) })) %>% 
+              select(-vec_1) %>% unnest
+df_hash
+```
+
+```{r}
+f_1 <- function(x){
+    1-(1-((180-x)/180)^10)^20
+}
+curve(f_1, 0, 180)
+abline(v=20)
+```
+
+```{r}
+df_hash_1 <- df_hash %>% 
+           mutate(banda  = (id_hash - 1) %% 20 + 1) %>%
+           mutate(h = paste(id_hash,firma)) %>%
+           arrange(id_1)
+df_hash_1
+df_hash_1$id_hash%>% unique
+```
+
+```{r}
+cubetas <- df_hash_1 %>% 
+             group_by(id_1, banda) %>%
+             summarise(cubeta = paste(h, collapse = '/')) 
+cubetas
+```
+
+```{r}
+cubetas_hash <- cubetas %>%
+                ungroup %>% rowwise %>%
+                mutate(cubeta = digest::digest(cubeta))
+cubetas_hash
+```
+
+```{r}
+cubetas_agrup <- cubetas_hash %>% group_by(cubeta) %>%
+                  summarise(ids = list(id_1)) %>%
+                  mutate(num_ids = map_dbl(ids, length)) %>%
+                  filter(num_ids > 1 )
+cubetas_agrup
+cubetas_agrup$num_ids %>% unique %>% length
+```
+
+```{r}
+pares_candidatos <- lapply(cubetas_agrup$ids, function(x){
+  combn(sort(x), 2, simplify = FALSE)}) %>% 
+  flatten %>% unique %>% 
+  transpose %>% lapply(as.integer) %>% as.data.frame
+names(pares_candidatos) <- c('id_1','id_2')
+head(pares_candidatos)
+```
+
+```{r}
+pares_reales <- filter(df_pares, dist < 0.15) %>%
+                select(id_1, id_2)
+nrow(pares_reales)
+nrow(pares_candidatos)
+```
+
+```{r}
+nrow(anti_join(pares_candidatos, pares_reales))
+```
+
+Falsos negativos 
+```{r}
+nrow(anti_join(pares_reales, pares_candidatos))
+```
+
