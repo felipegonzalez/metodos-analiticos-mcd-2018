@@ -128,12 +128,12 @@ $(document).ready(function () {
 <h4>Datos</h4>
 <p>Los datos para este ejempo particular trata con dos fuentes bibliográficas (DBLP, ACM) de artículos y conferencias de cómputo. La carpeta del repositorio es datos/similitud/entity-matching.</p>
 <pre class="r"><code>library(tidyverse)</code></pre>
-<pre><code>## ── Attaching packages ──────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.2.1 ──</code></pre>
+<pre><code>## ── Attaching packages ───────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.2.1 ──</code></pre>
 <pre><code>## ✔ ggplot2 2.2.1     ✔ purrr   0.2.4
 ## ✔ tibble  1.4.1     ✔ dplyr   0.7.4
 ## ✔ tidyr   0.7.2     ✔ stringr 1.2.0
 ## ✔ readr   1.1.1     ✔ forcats 0.2.0</code></pre>
-<pre><code>## ── Conflicts ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+<pre><code>## ── Conflicts ──────────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
 ## ✖ dplyr::filter() masks stats::filter()
 ## ✖ dplyr::lag()    masks stats::lag()</code></pre>
 <pre class="r"><code>acm &lt;- read_csv('../../../datos/similitud/entity_matching/ACM.csv')</code></pre>
@@ -264,7 +264,7 @@ candidatos &lt;- lsh_candidates(lsh_conf)
 candidatos &lt;- lsh_compare(candidatos, corpus, jaccard_similarity)</code></pre>
 <pre class="r"><code>candidatos &lt;- candidatos %&gt;% arrange(desc(score))
 candidatos</code></pre>
-<pre><code>## # A tibble: 2,364 x 3
+<pre><code>## # A tibble: 2,262 x 3
 ##    a            b            score
 ##    &lt;chr&gt;        &lt;chr&gt;        &lt;dbl&gt;
 ##  1 acm-doc-1012 dbl-doc-1767  1.00
@@ -277,7 +277,7 @@ candidatos</code></pre>
 ##  8 acm-doc-1030 dbl-doc-1422  1.00
 ##  9 acm-doc-1032 dbl-doc-1441  1.00
 ## 10 acm-doc-1034 dbl-doc-2491  1.00
-## # ... with 2,354 more rows</code></pre>
+## # ... with 2,252 more rows</code></pre>
 <p>Podemos ver el contenido de un texto de esta manera:</p>
 <pre class="r"><code>corpus[[&quot;acm-doc-1012&quot;]]$content</code></pre>
 <pre><code>## Design and Analysis of Parametric Query Optimization Algorithms    Sumit Ganguly</code></pre>
@@ -286,7 +286,7 @@ candidatos</code></pre>
 <pre class="r"><code>#Comparamos los primeros 7 caracteres de las columnas a y b, si son iguales ponemos un 1 en una nueva columna, de no serlo ponemos 0
 candidatos$mismo_origen &lt;-if_else(substr(candidatos$a, start = 1, stop = 7) == substr(candidatos$b, start = 1, stop = 7), true = 1, false = 0) </code></pre>
 <pre class="r"><code>candidatos</code></pre>
-<pre><code>## # A tibble: 2,364 x 4
+<pre><code>## # A tibble: 2,262 x 4
 ##    a            b            score mismo_origen
 ##    &lt;chr&gt;        &lt;chr&gt;        &lt;dbl&gt;        &lt;dbl&gt;
 ##  1 acm-doc-1012 dbl-doc-1767  1.00            0
@@ -299,7 +299,7 @@ candidatos$mismo_origen &lt;-if_else(substr(candidatos$a, start = 1, stop = 7) =
 ##  8 acm-doc-1030 dbl-doc-1422  1.00            0
 ##  9 acm-doc-1032 dbl-doc-1441  1.00            0
 ## 10 acm-doc-1034 dbl-doc-2491  1.00            0
-## # ... with 2,354 more rows</code></pre>
+## # ... with 2,252 more rows</code></pre>
 <pre class="r"><code>#Filtramos donde el score sea 1 y la columna &quot;mismo_origen&quot; tenga un 0
 filter(candidatos, score == 1 &amp; mismo_origen == 0)</code></pre>
 <pre><code>## # A tibble: 285 x 4
@@ -341,20 +341,20 @@ corpus[[&quot;acm-doc-729&quot;]]$content</code></pre>
 <pre class="r"><code>#Filtramos donde la columna &quot;mismo_origen&quot; tenga un 0 y ordenamos de menor a mayor para ir viendo varios casos
 filter(candidatos, mismo_origen == 0) %&gt;%
   arrange(score)</code></pre>
-<pre><code>## # A tibble: 1,677 x 4
-##    a            b             score mismo_origen
-##    &lt;chr&gt;        &lt;chr&gt;         &lt;dbl&gt;        &lt;dbl&gt;
-##  1 acm-doc-1025 dbl-doc-2436 0.0548            0
-##  2 acm-doc-1628 dbl-doc-372  0.0568            0
-##  3 acm-doc-1025 dbl-doc-59   0.0604            0
-##  4 acm-doc-571  dbl-doc-372  0.0635            0
-##  5 acm-doc-460  dbl-doc-458  0.0699            0
-##  6 acm-doc-134  dbl-doc-2034 0.0847            0
-##  7 acm-doc-1871 dbl-doc-2033 0.0901            0
-##  8 acm-doc-571  dbl-doc-85   0.0973            0
-##  9 acm-doc-1790 dbl-doc-819  0.100             0
-## 10 acm-doc-1472 dbl-doc-2052 0.108             0
-## # ... with 1,667 more rows</code></pre>
+<pre><code>## # A tibble: 1,616 x 4
+##    a            b            score mismo_origen
+##    &lt;chr&gt;        &lt;chr&gt;        &lt;dbl&gt;        &lt;dbl&gt;
+##  1 acm-doc-2235 dbl-doc-1023 0.107            0
+##  2 acm-doc-2235 dbl-doc-1094 0.107            0
+##  3 acm-doc-2235 dbl-doc-1261 0.107            0
+##  4 acm-doc-2235 dbl-doc-2131 0.107            0
+##  5 acm-doc-2235 dbl-doc-220  0.107            0
+##  6 acm-doc-2235 dbl-doc-2204 0.107            0
+##  7 acm-doc-2235 dbl-doc-2497 0.107            0
+##  8 acm-doc-2235 dbl-doc-524  0.107            0
+##  9 acm-doc-2235 dbl-doc-694  0.107            0
+## 10 acm-doc-2235 dbl-doc-75   0.107            0
+## # ... with 1,606 more rows</code></pre>
 <pre class="r"><code>#Este es un par con score .05, coinciden en &quot;relational&quot;&quot; data unicamente
 corpus[[&quot;acm-doc-2085&quot;]]$content</code></pre>
 <pre><code>## Rights protection for relational data    Radu Sion, Mikhail Atallah, Sunil Prabhakar</code></pre>
@@ -388,36 +388,36 @@ tabla &lt;- filter(candidatos, mismo_origen == 0) %&gt;%
   arrange(score) 
 
 corpus[[(tabla$a[1])]]$content</code></pre>
-<pre><code>## Building and Customizing Data-Intensive Web Sites Using Weave    Khaled Yagoub, Daniela Florescu, Val&amp;#233;rie Issarny, Patrick Valduriez</code></pre>
+<pre><code>## A framework for supporting data integration using the materialized and virtual approaches    Richard Hull, Gang Zhou</code></pre>
 <pre class="r"><code>corpus[[(tabla$b[1])]]$content</code></pre>
-<pre><code>## Caching Strategies for Data-Intensive Web Sites    Khaled Yagoub, Patrick Valduriez, Valérie Issarny, Daniela Florescu</code></pre>
+<pre><code>## A Framework for Supporting Data Integration Using the Materialized and Virtual Approaches    Gang Zhou, Richard Hull</code></pre>
 <pre class="r"><code>#Filtramos donde el score sea .55 y agarramos los primeros elementos, parece ser el mismo articulo, con una detalle diferente
 tabla &lt;- filter(candidatos, mismo_origen == 0) %&gt;%
   filter(score &gt; 0.55) %&gt;%
   arrange(score) 
 
 corpus[[(tabla$a[1])]]$content</code></pre>
-<pre><code>## A new join algorithm    Dong Keun Shin, Arnold Charles Meltzer</code></pre>
+<pre><code>## Extended ephemeral logging: log storage management for applications with long lived transactions    John S. Keen, William J. Dally</code></pre>
 <pre class="r"><code>corpus[[(tabla$b[1])]]$content</code></pre>
-<pre><code>## A New Join Algorithm    Arnold Charles Meltzer, Dong Keun Shin</code></pre>
+<pre><code>## Extended Ehemeral Logging: Log Storage Management for Applications with Long Lived Transactions    John S. Keen, William J. Dally</code></pre>
 <pre class="r"><code>#Filtramos donde el score sea .56 y agarramos los primeros elementos, parece ser el mismo articulo
 tabla &lt;- filter(candidatos, mismo_origen == 0) %&gt;%
   filter(score &gt; 0.56) %&gt;%
   arrange(score) 
 
 corpus[[(tabla$a[1])]]$content</code></pre>
-<pre><code>## Integrating contents and structure in text retrieval    Ricardo Baeza-Yates, Gonzalo Navarro</code></pre>
+<pre><code>## Density biased sampling: an improved method for data mining and clustering    Christopher R. Palmer, Christos Faloutsos</code></pre>
 <pre class="r"><code>corpus[[(tabla$b[1])]]$content</code></pre>
-<pre><code>## Integrating Contents and Structure in Text Retrieval    Gonzalo Navarro, Ricardo A. Baeza-Yates</code></pre>
+<pre><code>## Density Biased Sampling: An Improved Method for Data Mining and Clustering    Christopher R. Palmer, Christos Faloutsos</code></pre>
 <pre class="r"><code>#Filtramos donde el score sea .54 y agarramos los primeros elementos, articulos similares de los mismos autores
 tabla &lt;- filter(candidatos, mismo_origen == 0) %&gt;%
   filter(score &gt; 0.54) %&gt;%
   arrange(score) 
 
 corpus[[(tabla$a[1])]]$content</code></pre>
-<pre><code>## A query language for a Web-site management system    Mary Fernandez, Daniela Florescu, Alon Levy, Dan Suciu</code></pre>
+<pre><code>## Online dynamic reordering    Vijayshankar Raman, Bhaskaran Raman, Joseph M. Hellerstein</code></pre>
 <pre class="r"><code>corpus[[(tabla$b[1])]]$content</code></pre>
-<pre><code>## A Query Language for a Web-Site Management System    Dan Suciu, Daniela Florescu, Alon Y. Levy, Mary F. Fernandez</code></pre>
+<pre><code>## Online Dynamic Reordering for Interactive Data Processing    Bhaskaran Raman, Joseph M. Hellerstein, Vijayshankar Raman</code></pre>
 <p>A partir de .55 parece ser un buen punto de corte</p>
 <p><strong>Pregunta</strong>: considerando tus hallazgos, ¿cómo cambiarías el número de hashes y bandas para mejorar tus resultados? ¿en qué sentido los mejoras? Aumentando el numero de hashes aumentamos la pendiente y aumentando las bandas ayudamos tambien, aunque esto incrementa el costo computacional, debemos considerar este intercambio.</p>
 </div>
