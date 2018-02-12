@@ -357,7 +357,7 @@ ggplot(df, aes(x = k, y = tasa_falsos_p,
                facet_wrap(~s_str) +
                labs(x="k = número de hashes", 
                     colour = "Mill bits \n en vector") +
-               scale_y_sqrt()
+               scale_y_sqrt(breaks = c(0.01,0.05,0.1,0.25,0.5,1)) 
   
 ```
 
@@ -377,7 +377,7 @@ ggplot(df, aes(x = k, y = tasa_falsos_p)) +
                facet_wrap(~s_str) +
                labs(x="k = número de hashes", 
                     colour = "Mill bits \n en vector") +
-               scale_y_sqrt() +
+               scale_y_sqrt(breaks = c(0.01,0.05,0.1,0.25,0.5,1)) +
                geom_point(data = df_opt, col='red') +
                xlim(0,20)
   
@@ -405,7 +405,7 @@ que quizá queramos insertar otras palabras más adelante.
 ```{r}
 df <- expand.grid(list(s = 300000,
                   k = seq(4, 10),
-                  n = c(1e6, 2e6, 4e6, 9e6)
+                  n = c(1e6, 2e6, 4e6, 8e6)
                   )) %>%
       mutate(millones_bits = (n/1e6)) %>%
       mutate(tasa_falsos_p = tasa_fp(n, s, k)) %>%
@@ -413,7 +413,7 @@ df <- expand.grid(list(s = 300000,
 
 
 ggplot(df, aes(x = k, y = tasa_falsos_p, 
-               colour=(millones_bits), group=millones_bits)) + 
+               colour=factor(millones_bits), group=millones_bits)) + 
                geom_line(size=1.2) +
                facet_wrap(~s_str) +
                labs(x="k = número de hashes", 
@@ -884,3 +884,277 @@ Modifica el código de arriba para que también reporte la fecha de actualizaci�
 (de todas las películas que actualizaste, cuál es la última fecha). Prueba
 también comenzando más adelante en la lista de vistas (por ejemplo, después del
 año 2000. Ojo: no confundas con el año de la película que está reportado arriba).
+
+
+## Contando elementos diferentes en un flujo.
+
+Supongamos que queremos contar el número de elementos diferentes que aparecen 
+en un flujo, por ejemplo, cuántos usuarios únicos tienen un sitio (según
+un identificador como login o ip, por ejemplo).
+
+Como antes, si el número de elementos distintos no es muy grande, podemos
+usar una estructura eficiente en memoria (como un diccionario o tabla hash) para procesar
+cada elemento nuevo del flujo, decidir si es nuevo, agregarlo a la estructura,
+y contar. Un filtro de bloom no es del todo adecuado, pues confrome vayamos
+llenando de 1´s el su vector, la tasa de falsos positivos irá incrementando (en el 
+límite es 1). Sin embargo, si el número de elementos distintos es grande, esta
+estrategia puede requierir mucha memoria y procesamiento.
+
+Una alternativa es usar algoritmos probabilísticos, que utilicen mucha menos
+memoria, siempre y cuando aceptemos cierto error de estimación.
+
+### El algoritmo de Flajolet-Martin
+
+Este es uno de los primeros algoritmos para atacar este problema, y se basa
+en el uso de funciones hash. La referencia básica es este (paper)[http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf], [@Flajolet]
+
+```{block2, type='resumen'}
+La idea básica del algoritmo de Flajolet-Martin se basa en la siguiente observación:
+
+  Si escogemos funciones hash que mapeen elementos del conjunto del flujo a 
+una sucesión de bits suficientemente grande, conforme haya más elementos distintos
+en el flujo observaremos más valores hash distintos, y en consecuencia, es más
+probable observar sucesiones de bits con características especiales.
+
+La característica especial que se explota en este algoritmo es el número
+de ceros que hay al final de las cadenas de bits.
+```
+
+
+### Ejemplo {-}
+Consideramos una función hash (para cadenas):
+```{r}
+hash_gen <- function(seed){
+  function(x){
+    hash_32 <- digest::digest(x, 'xxhash32', serialize = FALSE, seed = seed) 
+    # Covertimos a bits, tomando de dos en dos:
+    sapply(seq(1, nchar(hash_32), 2), function(x) substr(hash_32, x, x+1)) %>%
+    strtoi(16L) %>%  # a enteros
+    as.raw %>%    #bytes      
+    rawToBits()
+    #dig_md5[permutacion]
+  }
+}
+set.seed(5451)
+hash_1 <- hash_gen(seed = 123)
+hash_2 <- hash_gen(seed = 564)
+hash_1("7yya40787")
+```
+
+Y ahora hacemos una función para contar el número 0's consecutivos
+en la cola de esta representación:
+
+```{r}
+tail_length <- function(bits){
+  bits %>% which.max - 1  %>% as.integer
+}
+hash_1("7yya40787") %>% tail_length
+```
+
+La idea es que conforme veamos más elementos, es más probable observar
+que la cola de ceros es un número más grande. Como la función hash que usamos
+es determinista, los elementos ya vistos no contribuyen a hacer crecer a este número.
+
+
+### Discusión {-}
+
+Antes se seguir, hacemos la siguiente observación: Si consideramos
+los bits de cada nuevo elemento como aleatorios: 
+
+- La probabilidad de
+que observemos una cola de 0's de tamaño **al menos** $r$ es $2^{-m}$, para $m \geq 1$ 
+
+- Supongamos
+que tenemos una sucesión de $n$ candidatos del flujo distintos. La probabilidad de
+que *ninguno* tenga una cola de tamaño al menos $m$ es igual a
+\begin{equation}
+(1-2^{-m})^{n}
+(\#eq:probacola)
+\end{equation}
+
+Reescribimos como
+begin{equation}
+$$((1-2^{-m})^{2^m})^{\frac{n}{2^{m}}}. $$
+
+Ahora notamos que la expresión de adentro se escribe (si $m$ no es muy chica) como
+$$(1-2^{-m})^{2^m} = (1-1/t)^t\approx e^{-1}\approx 0.3678$$ 
+
+- Cuando $n$ crece, entonces, la expresión \@ref(eq:probacola) es chica
+si $n$ es más grande que $2^m$, y es cercana a 0 cuando $n$ es más chico que $2^m$.
+
+- Así que para una sucesión de $n$ elementos distintos, es poco probable observar que
+la longitud $m$ de la máxima cola de 0's consecutivos es tal que $2^m$ es mucho más grande que $n$ o mucho más chica que $n$. Abajo graficamos unos ejemplos:
+
+```{r}
+proba_cola <- function(distintos, r){
+  #proba de que el valor máximo de cola de 0's sea r
+  al_menos_r <- 1- (1-0.5^r)^distintos 
+  no_mas_de_r <- 1 - (1-0.5^{r+1})^distintos
+  prob <-  al_menos_r - no_mas_de_r 
+  prob
+}
+df_prob <- data_frame(n = c(2^5, 2^10, 2^20)) %>%
+  mutate(probas = map(n, function(n){ 
+    m <- (1:30)
+    probas <- sapply(m, function(x){proba_cola(n,x)})
+    data_frame(m=m, probas = probas)
+    })) %>%
+  unnest
+ggplot(df_prob, aes(x= m, y=probas, colour=factor(n))) + geom_line() +
+  facet_wrap(~factor(n),ncol = 1) + ylab("Probabilidad de máxima cola de 0s")
+c(2^5, 2^10, 2^20)
+```
+
+
+---
+
+Y ahora podemos probar cómo se ve la aproximación con dos funciones
+hash diferentes:
+
+
+```{r}
+n <- 1000
+df <- data_frame(num_distintos = 1:n) %>%
+      mutate(id = as.character(sample.int(52345678, n))) %>%
+      mutate(tail_1 = map_int(id, function(x) { 
+                    hash_1(x) %>% tail_length })) %>%
+      mutate(tail_2 = map_int(id, function(x) { 
+                    hash_2(x) %>% tail_length }))
+df      
+```
+
+Y ahora calculamos el máximo acumulado
+
+```{r}
+df <- df %>% mutate(max_tail_1 = cummax(tail_1), max_tail_2 = cummax(tail_2))
+tail(df)
+```
+
+```{r}
+ggplot(df, aes(x = num_distintos, y = 2^max_tail_1)) + geom_point() +
+  geom_abline(slope=1, xintercept = 0) + scale_x_log10() + scale_y_log10()
+```
+
+```{r}
+ggplot(df, aes(x = num_distintos, y = 2^max_tail_2)) + geom_point() +
+  geom_abline(slope=1, xintercept = 0)  + scale_x_log10() + scale_y_log10()
+```
+
+Nótese que las gráficas están en escala logarítmica, así que la estimación 
+no es muy buena en términos absolutos si usamos un solo hash. Sin embargo, 
+confirmamos que la longitud máxima de las colas de 0's crece con el número
+de elementos distintos en el flujo.
+
+
+## Combinación de estimadores, Hyperloglog
+
+Como vimos en los ejemplos anteriores, la estimación de Flajolet-Martin
+tiene dos debilidades: varianza alta, y el hecho que de el único resultado
+que puede dar es una potencia de 2.
+
+Podemos usar varias funciones hash y combinarlas de distintas maneras
+para obtener una mejor estimación con menos varianza. 
+
+- La primera idea, que puede ser promediar los valores obtenidos de varias
+funciones hash, requeriría muchas funciones hash por la varianza alta del estimador, 
+de modo que esta opción no es muy buena.
+En nuestro ejemplo anterior, la desviación estándar del estimador es:
+
+```{r}
+df_prob %>% group_by(n) %>%
+  mutate(media = sum((2^m)*probas)) %>%
+  summarise(desv_est = sqrt(sum(probas*(2^m-media)^2))) 
+```
+
+- Usar la mediana para evitar la posbile variación grande de este estimador tiene
+la desventaja de que al final obtenemos una estimación de la forma $2^R$, que también
+tiene error grande.
+
+- Una mejor alternativa es utilizar la recomendación de [@mmd], que consiste
+en agrupar en algunas cubetas las funciones hash, promediar los estimadores $2^{R_i}$
+dentro de cada cubeta, y luego obtener la mediana de las cubetas.
+
+### Hyperloglog
+
+Esta solución (referida en el paper anterior, [@Flajolet]) es una de las más utilizadas y refinadas.
+En primer lugar:
+
+- Para hacer las cubetas usamos los mismos bits producidos por el hash (por ejemplo,
+los primeros $p$ bits). Usamos los últimos bits del mismo hash para calcular la longitud
+de las colas de 0's.
+- Usamos promedio armónico de los valores máximos de cada cubeta (más robusto
+a valores grandes y atípicos, igual que la media geométrica).
+- Intuitivamente, cuando dividimos en $m$ cubetas un flujo de $n$ elementos, cada flujo
+tiene aproximadamente $n/m$ elementos. Como vimos arriba, lo más probable
+es que la cola máxima en cada cubeta sea aproximadamente $\log_2(n/m)$. El promedio
+armónico $a$ de $m$ cantidades $(n/m)$ de esta cantidad entonces debería estar ser
+del orden en $n/m$, así que la estimación final de la cardinalidad del flujo
+completo es $ma$ (el número de cubetas multiplicado por el promedio armónico). 
+- Existen varias correcciones adicionales para mejorar su error en distintas circunstancias (dependiendo del número de elemntos únicos que estamos contando, por ejemplo).
+
+Veamos una implementación **simplificada** (nota: considerar *spark* para hacer
+esto, que incluye una implementación rápida del hyperloglog), usando las funciones hash que construimos arriba:
+
+```{r}
+m_bits <- 5
+m <- 2^m_bits
+tail_length_lead <- function(bits){
+  bits[-c(1:m_bits)] %>% which.max %>% as.integer
+}
+hash_1("7yya40787")
+hash_1("7yya40787") %>% tail_length_lead
+cubeta <- function(bits){
+  paste(as.character(bits[1:m_bits]), collapse='')
+}
+hash_1("7yya40787") %>% cubeta
+```
+
+```{r}
+n <- 100000
+df <- data_frame(num_distintos = 1:n) %>%
+      mutate(id = as.character(sample.int(52345678, n))) %>%
+      mutate(hash = map(id, hash_1)) %>%
+      mutate(cubeta = map_chr(hash, cubeta))
+df
+```
+```{r}
+df <- df %>% 
+      mutate(tail_1 = map_int(hash, tail_length_lead))
+df      
+```
+
+```{r}
+armonica <- function(x){
+  1/mean(1/x)
+  }
+res <- df %>% spread(cubeta, tail_1, fill= 0) %>%
+        gather(cubeta, tail_1, -num_distintos, -id, -hash) %>%
+        select(num_distintos, cubeta, tail_1) 
+res
+tail(res)
+```
+
+
+```{r}
+res_2 <- res %>% 
+      group_by(cubeta) %>%
+      arrange(num_distintos) %>%
+      mutate(tail_max = cummax(tail_1)) %>%
+      group_by(num_distintos) %>%
+      summarise(media = 0.72*(m*armonica(2^tail_max)))
+ggplot(res_2 %>% filter(num_distintos > 100), aes(x = num_distintos, y = media)) + geom_line() +
+  geom_abline(slope = 1, colour ='red') 
+```
+```{r}
+quantile(1-res_2$media/res_2$num_distintos, probs=c(0.1, 0.5, .9))
+```
+
+
+**Observaciones**
+- Ver también [este paper](https://stefanheule.com/papers/edbt13-hyperloglog.pdf) para mejoras del hyperloglog (por ejemplo, si es posible es preferible usar
+hashes de 64 bits en lugar de 32).
+
+- El error relativo teórico del algoritmo (con algunas mejoras) es de $1.04\sqrt{m}$, donde $m$ es el número de cubetas, así que más cubetas mejoran el desempeño.
+
+- Las operaciones necearias son: aplicar la función hash, calcular cubeta, y actualizar
+el máximo de las cubetas
