@@ -27,7 +27,9 @@ RUN install2.r --error \
 	textreuse \
 	hash \
 	text2vec \
-	ggraph
+	ggraph \
+	itertools \
+	RcppRoll
 
 
 
