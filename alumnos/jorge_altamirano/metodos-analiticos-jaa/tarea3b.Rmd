@@ -13,8 +13,8 @@ Los datos para este ejempo particular trata con dos fuentes bibliográficas (DBL
 
 ```{r}
 library(tidyverse)
-acm <- read_csv('datos/ACM.csv')
-dbl <- read_csv('datos/DBLP2.csv')
+acm <- read_csv('../../../datos/similitud/entity_matching/ACM.csv')
+dbl <- read_csv('../../../datos/similitud/entity_matching/DBLP2.csv')
 ```
 
 ```{r}
