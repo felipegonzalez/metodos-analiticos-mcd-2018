@@ -686,7 +686,7 @@ $$s_{t+1} = c a_{t+1} + (1-c)s_{t}$$
 Tomando $c$ grande le damos más peso al último dato, y si $c$ es más chica pesamos de manera
 similar todos los objetos.
 
-### Ejemplos {#ejemplo}
+### Ejemplos {#promexp}
 ```{r}
 prom_exponencial <- function(init, c){
   actual <- init
@@ -962,17 +962,18 @@ Antes se seguir, hacemos la siguiente observación: Si consideramos
 los bits de cada nuevo elemento como aleatorios: 
 
 - La probabilidad de
-que observemos una cola de 0's de tamaño **al menos** $r$ es $2^{-m}$, para $m \geq 1$ 
+que observemos una cola de 0's de tamaño **al menos** $m$ es $2^{-m}$, para $m \geq 1$ 
 
 - Supongamos
 que tenemos una sucesión de $n$ candidatos del flujo distintos. La probabilidad de
-que *ninguno* tenga una cola de tamaño al menos $m$ es igual a
+que *ninguno* tenga una cola de tamaño mayor a $m$ es igual a
 \begin{equation}
 (1-2^{-m})^{n}
 (\#eq:probacola)
 \end{equation}
 
-Reescribimos como
+Que también es la probabilidad de que el máximo de las colas sea menor
+a $m$. Reescribimos como
 begin{equation}
 $$((1-2^{-m})^{2^m})^{\frac{n}{2^{m}}}. $$
 
@@ -980,7 +981,7 @@ Ahora notamos que la expresión de adentro se escribe (si $m$ no es muy chica) c
 $$(1-2^{-m})^{2^m} = (1-1/t)^t\approx e^{-1}\approx 0.3678$$ 
 
 - Cuando $n$ crece, entonces, la expresión \@ref(eq:probacola) es chica
-si $n$ es más grande que $2^m$, y es cercana a 0 cuando $n$ es más chico que $2^m$.
+si $n$ es más grande que $2^m$ (poco probable que 2^m sea más chico que $n$), y es cercana a 1 cuando $n$ es más chico que $2^m$ (muy probable que 2^m sea más grande que $n$).
 
 - Así que para una sucesión de $n$ elementos distintos, es poco probable observar que
 la longitud $m$ de la máxima cola de 0's consecutivos es tal que $2^m$ es mucho más grande que $n$ o mucho más chica que $n$. Abajo graficamos unos ejemplos:
@@ -1154,7 +1155,13 @@ quantile(1-res_2$media/res_2$num_distintos, probs=c(0.1, 0.5, .9))
 - Ver también [este paper](https://stefanheule.com/papers/edbt13-hyperloglog.pdf) para mejoras del hyperloglog (por ejemplo, si es posible es preferible usar
 hashes de 64 bits en lugar de 32).
 
-- El error relativo teórico del algoritmo (con algunas mejoras) es de $1.04\sqrt{m}$, donde $m$ es el número de cubetas, así que más cubetas mejoran el desempeño.
+- El error relativo teórico del algoritmo (con algunas mejoras que puedes ver en los papers citados) es de $1.04/\sqrt{m}$, donde $m$ es el número de cubetas, así que más cubetas mejoran el desempeño.
 
 - Las operaciones necearias son: aplicar la función hash, calcular cubeta, y actualizar
 el máximo de las cubetas
+
+
+
+## Tarea {-}
+Resuelve los primeros tres ejercicios de esta sección (estudia el código de
+\@ref(promexp)).  Asegúrate que entiendes el código del filtro de bloom. 
