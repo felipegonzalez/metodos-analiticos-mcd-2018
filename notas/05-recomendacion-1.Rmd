@@ -1,0 +1,78 @@
+# Sistemas de recomendación y filtrado colaborativo
+
+En esta sección discutiremos métodos que se pueden utilizar
+para hacer recomendaciones de documentos, películas, artículos, etc.
+a personas según sus intereses.
+
+- **Problema**: predecir la respuesta de personas a estímulos a los que no han sido expuestos,
+basados en respuesta a otros estímulos de esta y quizá otras personas similares.
+
+Por ejemplo, si consideramos usuarios de Netflix: ¿qué tanto le puede gustar a X la película Y? Usuarios de Amazon: ¿qué tan probable es que compren Z artículo si se les ofrece?
+
+
+## Enfoques de recomendación
+
+Hay varios enfoques que podemos utilizar para atacar este problema:
+
+- **Principalmente basados en contenido**:  En función de características de los estímulos, productos o películas (por ejemplo, género, actores, país de origen, año, etc.) intentamos predecir el gusto por el estímulo. En este enfoque, construimos variables derivadas del contenido de los artículos (por ejemplo: qué actores salen, año, etc. o en textos palabras que aparecen), e intentamos predecir el gusto a partir de esas características. 
+
+Ejemplo: Si mu gustó *Twilight* entonces el sistema recomienda otros dramas+vampiros ("por ejemplo entrevista con un vampiro", por contenido).
+
+- **Principalmente colaborativos**: utilizamos gustos o intereses de usuarios/artículos similares - en el sentido de que les han gustado los mismos artículos/les gustaron a las mismas personas.
+
+Ejemplo: Me gustó StarWars y Harry Potter, varios otros usuarios a los que también les gustaron estas dos películas también les gustó "Señor de los anillos", así que recomendamos "Señor de los Anillos". Entre estos métodos, veremos principalmente métodos basados en reducción de dimensionalidad o  **modelos de factores latentes**: encontrar factores latentes que describan usuarios y películas, y predecimos dependiendo de los niveles de factores latentes de personas y películas.
+
+
+## Datos
+
+Los datos utilizados para este tipo de sistemas son de dos
+tipos:
+
+- Ratings  *explícitos* dados por los usuarios (por ejemplo, Netflix mucho tiempo fue así: 1-5 estrellas)
+
+- Ratings *implícitos* que se derivan de la actividad de los usuarios (por ejemplo, vio la película completa, dio click en la descripción de un producto, etc.). 
+
+
+### Ejemplo {-}
+
+Consideramos evaluaciones en escala de gusto: por ejemplo 1-5 estrellas, o 1-me disgustó mucho, 5- me gustó mucho, etc.
+
+Podemos representar las evaluaciones como una matriz:
+
+```{r, echo=FALSE}
+mat.cons <- matrix('-', 4, 6)
+mat.cons[1,1] <- '3';mat.cons[1,2] <- '5';mat.cons[1,3] <- '5';mat.cons[1,4] <- '2'
+mat.cons[2,1] <- '3';mat.cons[2,3] <- '4';
+mat.cons[3,4] <- '5'; mat.cons[3,5] <- '4'
+mat.cons[4,1] <- '1';mat.cons[4,3] <- '2';mat.cons[4,5] <- '5';mat.cons[4,6] <- '4';
+rownames(mat.cons) <- c('a','b','c','d')
+colnames(mat.cons) <- c('SWars1','SWars4','SWars5','HPotter1','HPotter2','Twilight')
+print(mat.cons, quote=FALSE)
+mat.cons.o <- mat.cons
+```
+
+
+Y lo que queremos hacer es predecir los valores faltantes de esta matriz, y seleccionar para cada usuario los artículos con predicción más alta, por ejemplo
+
+```{r, echo=FALSE}
+mat.cons <- matrix(round(runif(24, 1,5),1), 4, 6)
+mat.cons[1,1] <- '3';mat.cons[1,2] <- '5';mat.cons[1,3] <- '5';mat.cons[1,4] <- '2'
+mat.cons[2,1] <- '3';mat.cons[2,3] <- '4';
+mat.cons[3,4] <- '5'; mat.cons[3,5] <- '4'
+mat.cons[4,1] <- '1';mat.cons[4,3] <- '2';mat.cons[4,5] <- '5';mat.cons[4,6] <- '4';
+rownames(mat.cons) <- c('a','b','c','d')
+colnames(mat.cons) <- c('SWars1','SWars4','SWars5','HPotter1','HPotter2','Twilight')
+print(mat.cons, quote=FALSE)
+```
+
+Podemos pensar en este problema como uno de **imputación de datos faltantes**. Las dificultades 
+particulares de este problema son:
+
+- Datos ralos: cada usuario sólo ha visto y calificado una proporción baja de películas, y hay películas con pocas vistas.
+- Escalabilidad: el número de películas y usuarios es generalmente grande
+
+Por estas razones, generalmente no es posible usar técnicas estadísticas de imputación de datos (como imputación estocástica basada en regresión)
+
+- Usaremos mejor métodos más simples basados en similitud entre usuarios y películas y descomposición de matrices.
+
+
