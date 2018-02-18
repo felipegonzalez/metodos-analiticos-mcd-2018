@@ -489,14 +489,13 @@ dat_valida_2 %>% ungroup %>% summarise(error = recm(calif, prediccion))
 
 ### Ejercicio: regularización del modelo simple {-}
 
-Adicionalmente a este problema, también tenemos la dificultad del ruido cuando tenemos pocos artículos
+Adicionalmente a este problema, también tenemos la dificultad del ruido cuando tenemos pocos artículos o usuarios
 para centrar las calificaciones de usuarios o películas. Por ejemplo:
 ```{r}
 medias_peliculas <- muestra_nf %>% group_by(peli_id) %>% summarise(media_peli = mean(calif), num_calif_peli = length(calif))
 media_gral <- mean(muestra_nf$calif)
 medias_p_2 <- left_join(medias_peliculas, pelis_nombres)
 arrange(medias_p_2, desc(media_peli)) %>% head
-ggplot(medias_p_2, aes(x=num_calif_peli, y=media_peli)) + geom_point()
 ```
 
 
@@ -763,4 +762,205 @@ las similitudes pues no hay traslape a lo largo de usuarios). En
 este caso, este método puede combinarse con otros (por ejemplo, agregar
 una parte basado en modelos de gusto por género, año, etc.)
 
-## Factores latentes para recomendación
+## Dimensiones latentes para recomendación
+
+En las similitudes que vimos arriba, es razonable pensar que hay ciertos "conceptos" que agrupan o separan películas, y así mismo, que los usuarios se distinguen por el gusto o no
+que tienen por estos "conceptos".
+
+En esta parte, consideramos la idea de utilizar reducción de dimensionalidad para
+hacer recomendaciones. Esta idea propone que hay ciertos factores latentes (no observados)
+que describen películas con "contenido implícito similar", y usuarios según su interés en esa dimensión.
+
+Este método nos permitirá también controlar mejor los resultados ruidosos que
+obtuvimos en los ejemplos anteriores (usando regularización y reducción
+de dimensión).
+
+
+
+### Ejemplo: una dimensión latente.{#ejemplo}
+Por ejemplo: consideramos una dimensión de películas serias contra películas divertidas.
+3 películas podrían describirse con
+
+$$v=(-2,0,1)$$,
+
+lo que interpretamos como la película 1 es divertida (negativa en seriedad-diversión), la película 2 está en promedio, y la película 3 es más seria que las dos anteriores.
+ 
+Por otro lado, tenemos descriptores de 5 usuarios:
+
+$$u=(2,3,-3,0,1)$$
+que dice que a los primeros dos usuarios les gustan las películas serias, al tercero le gustan las divertidas, y los dos últimos no tienen preferencia clara a lo largo de esta dimensión.
+
+Qusiéramos predecir el gusto usando estos dos vectores. Nuestras predicciones (considerando que u y v son vectores columna) serían simplemente
+
+$$\tilde{X} = u v^t$$
+
+```{r}
+u <- c(2,3,-3,0,1)
+v <- c(-2,0,1)
+gustos <- u%*%t(v)
+gustos
+```
+
+Así que al usuario 1 le recomndamos la película 3, pero al usuario 3 le recomendamos la película 1.
+
+###
+
+La idea es entonces encontrar pesos para películas $u$ y para usuarios $v$ de forma que
+$X\approx \tilde{X} = uv^t$$: podemos reproducir las calificaciones observadas a partir de nuestro modelo de factores latentes.
+
+Nótese sin embargo que hay varias dimensiones que pueden describir a películas y usuarios:
+por ejemplo, seria-divertida, artística-hollywood, ciencia ficción, con/sin violencia, etc. 
+Podemos proponer más dimensiones latentes de la siguiente forma:
+
+
+### Ejemplo: dos dimensiones latentes {#ejemplo}
+Tenemos la dimensión anterior de seria-divertida
+```{r}
+v_1 <- c(-2,0,1)
+u_1 <- c(2,3,-3,0,1)
+```
+Y supongamos que tenemos otra dimensión con violencia - sin violencia
+```{r}
+v_2 <- c(-3,2,2)
+u_2 <- c(-3,-3,0,-2,4)
+```
+
+Que quiere decir que las película 2,3 tienen volencia, pero la película 1 no. Por otra parte, a los usuarios 1,2 y 5 no les gustan las películas con violencia, mientras que al usuario 5 si les gustan.
+
+La idea ahora es que el gusto de una persona por una película se escribe como combinación de las dos dimensiones. Por ejemplo, para la persona 1 tenemos, y la película 1, empezamos haciendo
+
+```{r}
+u_1[1]*v_1[1]
+u_2[1]*v_2[1]
+```
+
+lo que quiere decir que el hecho de que la película 1 no sea seria le resta 4 en gusto (pues la película 1 está del lado "divertido"), pero le suma 9 en gusto, pues es una película sin violencia y esta persona está del lado "sin violencia".
+
+Sumamos para encontrar el gusto total
+
+```{r}
+u_1[1]*v_1[1] + u_2[1]*v_2[1]
+```
+
+Para calcular los gustos sobre todas las personas y películas, haríamos
+
+```{}
+U <- cbind(u_1, u_2)
+V <- cbind(v_1, v_2)
+U
+V
+U %*% t(V)
+```
+
+
+### {#importante}
+
+Con $k$ dimensiones latentes, el modelo que proponemos es:
+
+$$\tilde{X} = UV^t$$
+
+donde $U$ es una matrix de $nxk$ (n= número de usuarios), y $V$ es una matriz
+de $mxk$, donde $m$ es el número de películas.
+
+Buscamos que, si $X$ son las verdaderas calificaciones, entonces
+$$X\approx \tilde{X}.$$
+
+y nótese que esta aproximación es en el sentido de las entradas de $X$ que **son observadas**. Sin embargo, $\tilde{X}$ nos da predicciones para **todos los pares película-persona**.
+
+###
+
+Bajo este modelo, la predicción para el usuario $i$ y la película $j$
+es la siguiente suma sobre las dimensiones latentes:
+
+$$\tilde{x}_{ij} =\sum_k u_{ik} v_{jk}$$
+
+que expresa el hecho de que el gusto de $i$ por $j$ depende de una combinación (suma)
+de factores latentes de películas ponderados por gusto por esos factores del usuario.
+
+El número de factores latentes $k$ debe ser seleccionado (por ejemplo, según el error de validación). Dado $k$, para encontrar $U$ y $V$ (un total de $k(m+n)$ parámetros) buscamos
+minimizar 
+
+$$\sum_{(i,j)\, obs} (x_{ij}-\tilde{x}_{ij})^2$$
+que escribimos como
+$$\min_{\tilde{X} = UV^t}||X-\tilde{X}||^2_{obs}$$
+**Observación** Esta es la norma de Frobenius, pero calculada solamente
+sobre las calificaciones observadas.
+
+Finalmente, también podemos escribir este problema como
+
+$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_i^tv_j)^2$$
+donde $u_i$ es el renglón $i$-esimo de $U$ (gustos latentes del usuario $i$ en cada dimensión), y $v_j$ es el renglón $j$-ésimo de la matriz $V$ (calificación latente de la película en cada dimensión)
+
+### Combinación con modelo base
+
+Podemos usar también ideas de nuestro modelo base y modelar desviaciones en lugar de calificaciones directamente:
+
+Si $X^0$ son las predicciones del modelo de referencia, y
+$$R = X-X^0$$
+son los residuales del modelo base, buscamos mejor
+$$R\approx \tilde{X} = UV^t$$
+de manera que las predicciones finales son
+$$X^0 + \tilde{X}$$
+
+
+## Factorización de matrices.
+
+Como vimos arriba, reexpresamos nuestro problema como un problema
+de factorización de matrices  (encontrar $U$ y $V$). Hay varias alternativas populares para atacarlo:
+
+- Descomposición en valores singulares (SVD).
+- Mínimos cuadrados alternados.
+- Descenso en gradiente estocástico.
+
+Para entender más del primer enfoque, puedes consultar por ejemplo
+las notas del curso de aprendizaje de máquina <https://felipegonzalez.github.io/aprendizaje-maquina-2017/reduccion-de-dimensionalidad.html>. No vamos a ver más de este enfoque, pues no
+es del todo apropiado: nuestras matrices tienen muchos datos faltantes, y SVD naturalmente no está diseñado para lidiar con este problema. Se pueden hacer ciertas imputaciones (por ejemplo, insertar 0's una vez que centramos por usuario), pero los siguientes dos métodos están mejor adaptados para
+nuestro problema.
+
+### Mínimos cuadrados alternados.
+
+Supongamos entonces que queremos encontrar matrices $U$ y $V$, donde $U$ es una matrix de $nxk$ (n= número de usuarios), y $V$ es una matriz
+de $mxk$, donde $m$ es el número de películas que nos de una
+aproximación de la matrix $X$ de calificaciones
+$$
+X \approx UV^t
+$$
+Ahora supongamos que conocemos $V_1$. Si este es el caso, entonces queremos
+resolver
+$$ \min_{U_1}|| X - UV_1^t||_{obs}^2$$
+Como $V_1^t$ están fijas, este es un problema de mínimos cuadrados usual, y puede resolverse analíticamente (o usar descenso en gradiente, que
+es simple de calcular de forma analítica) para encontrar $U_1$. Una vez que encontramos $U_1$, la fijamos, e intentamos ahora resolver para $V$:
+
+$$ \min_{V_2}|| X - U_1V_2^t||_{obs}^2$$
+Continuamos este proceso hasta encontrar un mínimo local o hasta cierto número de iteraciones.
+
+### Mínimos cuadrados alternados con regularización
+
+Para agregar regularización y lidiar con los datos ralos, podemos
+incluir un coeficiente adicional. Minimizamos entonces (como en
+ [@alsreg]):
+
+$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_i^tv_j)^2 + 
+\lambda \left ( \sum_i n_{i}||u_i||^2 + \sum_j m_{j} ||v_j||^2 \right)$$
+
+y modificamos de manera correspondiente cada paso de mínimos cuadrados
+mostrado arriba. $n_{i}$ es el número de evaluaciones del usuario $i$, y
+$m_j$ es el número de evaluaciones de la película $j$.
+
+**Observaciones**:
+- Nótese que penalizamos el tamaños de los vectores $u_i$ y $v_j$ para evitar sobreajuste (como en regresión ridge).
+- Nótese también que los pesos $n_i$ y $m_j$ en esta regularización hace comparables el término que aparece en la suma de los residuales al cuadrado
+(la primera suma),
+y el término de regularización: por ejemplo, si el usuario $i$ hizo
+$n_i$ evaluaciones, entonces habrá $n_i$ términos en la suma de la izquierda. Lo mismo podemos decir acerca de las películas.
+- Este no es el único posible término de regularización posible. Por ejemplo, podríamos *no* usar los pesos $n_i$ y $m_j$, y obtendríamos
+un esquema razonable también, donde hay más regularización relativa
+para usuarios/películas que tengan pocas evaluaciones.
+
+Este método está implementado en [spark](https://spark.apache.org/docs/2.1.0/mllib-collaborative-filtering.html). La implementación está basada en [@alsreg].
+
+```{r}
+library(sparklyr)
+```
+
+
