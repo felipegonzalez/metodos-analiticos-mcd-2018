@@ -917,7 +917,7 @@ las notas del curso de aprendizaje de máquina <https://felipegonzalez.github.io
 es del todo apropiado: nuestras matrices tienen muchos datos faltantes, y SVD naturalmente no está diseñado para lidiar con este problema. Se pueden hacer ciertas imputaciones (por ejemplo, insertar 0's una vez que centramos por usuario), pero los siguientes dos métodos están mejor adaptados para
 nuestro problema.
 
-### Mínimos cuadrados alternados.
+## Mínimos cuadrados alternados.
 
 Supongamos entonces que queremos encontrar matrices $U$ y $V$, donde $U$ es una matrix de $nxk$ (n= número de usuarios), y $V$ es una matriz
 de $mxk$, donde $m$ es el número de películas que nos de una
@@ -963,13 +963,14 @@ En este caso, copiamos nuestra tabla a spark (nota: esto es algo que normalmente
 de spark de otra forma):
 
 ```{r}
-rm(list = c('muestra_nf', 'dat_entrena_2'))
+rm(list = c('muestra_nf', 'dat_entrena_2','dat','dat_entrena_c'))
 library(sparklyr)
 # conectamos a cluster local - idealmente aquí nos conectaríamos
 # a un cluster de spark
 config <- spark_config()
 config$`sparklyr.shell.driver-memory` <- "4G"
 sc <- spark_connect(master = "local", config = config)
+spark_set_checkpoint_dir(sc, './checkpoint')
 dat <- dat_entrena %>% 
       as_data_frame %>% 
       select(peli_id, usuario_id, calif)
@@ -985,20 +986,22 @@ modelo <- ml_als(dat_tbl,
               rating_col = 'calif',
               user_col = 'usuario_id',
               item_col = 'peli_id', 
-              rank = 10, reg_param = 0.05,
-              max_iter = 20)
+              rank = 10, reg_param = 0.1,
+              checkpoint_interval = 5,
+              max_iter = 30)
 ```
 
 ```{r}
 modelo
 ```
 
-Verifiquemos el desempeño del modelo con la muestra de validación
+Hacemos predicciones para el conjunto de validación:
 
 ```{r, warning = FALSE, message = FALSE, fig.width=5, fig.asp=0.7}
 valida_tbl <- copy_to(sc, dat_valida)
 preds <- sdf_predict(valida_tbl, modelo) %>% collect()
-qplot(preds$prediction)
+table(is.nan(preds$prediction))
+ggplot(preds, aes(x = prediction)) + geom_histogram()
 ```
 
 Y ahora calculamos el error de validación, sustituyendo 
@@ -1006,17 +1009,15 @@ los usuarios o películas que no fueron vistas en entrenamiento
 por la media general (podríamos usar la predicción del modelo base).
 
 ```{r}
-table(is.nan(preds$prediction))
 preds$prediction[is.nan(preds$prediction)] <- media_gral_ent
 preds %>% ungroup %>% summarise(error = recm(calif, prediction))
 ```
 
-Y redujimos considerablemente el error del modelo base.
+Y redujimos considerablemente el error del modelo base. Examinamos 
+ahora las dimensiones asociadas con películas:
 
 
 ```{r}
-class(modelo$user_factors)
-class(modelo$item_factors)
 V_df <- collect(modelo$item_factors)
 dim(V_df)
 ```
@@ -1028,7 +1029,7 @@ V_df
 Nota: La columna *features* contiene la misma información de *feature_1,feature_2,...*, pero en forma de lista.
 
 Examinemos la interpretación de los factores latentes de las
-películas.
+películas. 
 
 ```{r}
 latentes_pelis <- V_df %>% 
@@ -1037,44 +1038,41 @@ latentes_pelis <- V_df %>%
   rename(id = peli_id))
 ```
 
-```{r}
-arrange(latentes_pelis, features_1) %>% 
-  select(nombre, features_1, media_peli, num_calif_peli) %>% 
-  head(100) 
-arrange(latentes_pelis, features_1) %>% 
-  select(nombre, features_1, media_peli, num_calif_peli) %>% 
-  tail(100)
-```
 
-La tercera dimensión captura el nivel general de gusto por la película.
-Nótese que
+Algunas dimensiones capturan parte del gusto general por las
+películas, por ejemplo:
 
 
 ```{r}
 latentes_pelis <- latentes_pelis %>% mutate(num_grupo = 
                                               ntile(num_calif_peli, 10))
-ggplot(sample_n(latentes_pelis, 500), aes(x = features_2, 
-                           y = media_peli, 
+ggplot(sample_n(latentes_pelis, 500), aes(y = features_1, 
+                           x = media_peli - mean(latentes_pelis$media_peli), 
                            colour = log10(num_calif_peli))) +
-  geom_point() + facet_wrap(~num_grupo) +
-  geom_abline(intercept=1.5, slope = 1)
+  geom_point() 
 ```
 
+
+
 ```{r}
-arrange(latentes_pelis, features_1) %>% 
-  select(nombre, features_2, media_peli, num_calif_peli) %>% 
+arrange(latentes_pelis, features_2) %>% 
+  select(nombre, features_1, media_peli, num_calif_peli) %>% 
+  filter(num_calif_peli > 500) %>% 
   head(100) 
-arrange(latentes_pelis, features_1) %>% 
-  select(nombre, features_2, media_peli, num_calif_peli) %>% 
+arrange(latentes_pelis, features_2) %>% 
+  select(nombre, features_1, media_peli, num_calif_peli) %>%
+  filter(num_calif_peli > 500) %>% 
   tail(100)
 ```
 
 ```{r}
-arrange(latentes_pelis, features_2) %>% 
+arrange(latentes_pelis, features_5) %>% 
   select(nombre, features_3, media_peli, num_calif_peli) %>% 
+  filter(num_calif_peli > 500) %>% 
   head(100) 
-arrange(latentes_pelis, features_2) %>% 
+arrange(latentes_pelis, features_5) %>% 
   select(nombre, features_3, media_peli, num_calif_peli) %>% 
+  filter(num_calif_peli > 500) %>% 
   tail(100)
 ```
 
