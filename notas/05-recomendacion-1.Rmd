@@ -113,11 +113,12 @@ $$DAM =\frac{1}{T} \sum_{(i,j) \, observada} |x_{ij}-\hat{x}_{ij}|$$
 que tengamos una observación $x_{ij}$
 
 **Observaciones**:
+
 - Generalmente evaluamos sobre un conjunto de validación separado del conjunto
 de entrenamiento.
 - Escogemos una muestra de películas, una muestra de usuarios, y ponemos
 en validación el conjunto de calificaciones de esos usuarios para esas películas.
-- Nótese que no seleccionamos *todas* las evaluaciones de un usuario*, ni *todas* las
+- Nótese que no seleccionamos *todas* las evaluaciones de un usuario, ni *todas* las
 evaluaciones de una película. Lo que queremos ententer es cómo se desempeña nuestro sistema
 cuando tenemos cierta información de usuarios y de películas.
 
@@ -148,12 +149,7 @@ CustomerID,Rating,Date
 - Ratings are on a five star (integral) scale from 1 to 5.
 - Dates have the format YYYY-MM-DD.
 
-
-
-
-
-
-### Ejercicio:datos de netflix {-}
+---
 
 1. Carga los datos de muestra (dat_muestra_nflix, incluye solo 100 mil usuarios), calcula medias para las películas. ¿Qué películas tienen las mejores calificaciones? Grafica el número de evaluaciones contra la calificación promedio.
 
@@ -172,7 +168,10 @@ medias_pelis <- muestra_nf %>%
     group_by(peli_id) %>% 
     summarise(media_peli = mean(calif), num_calif_peli = length(calif))
 medias_pelis <- left_join(medias_pelis, pelis_nombres)
-arrange(medias_pelis, desc(media_peli)) %>% data.frame %>% head
+arrange(medias_pelis, desc(media_peli)) %>% 
+  top_n(200, media_peli) %>% 
+  mutate(media_peli = round(media_peli, 2)) %>%
+  DT::datatable()
 mean(muestra_nf$calif)
 ```
 
@@ -181,15 +180,20 @@ ggplot(medias_pelis, aes(x=num_calif_peli, y=media_peli)) +
   geom_point(alpha=0.2)
 ```
 
-¿Puedes ver algún problema que podamos tener con nuestro modelo simple? 
-Películas con pocas evaluaciones, cuyo promedio es muy alto o muy bajo (variabilidad del promedio). Terminaríamos como las mejores películas
-a unas que fueron evaluadas por unos cuantos usuarios entusiastas.
+¿Puedes ver algún problema que tendremos que enfrentar con el modelo simple? 
+Películas con pocas evaluaciones, cuyo promedio tiene variabilidad alta. 
+Terminaríamos recomendando como las mejores películas
+a algunas que fueron evaluadas por unos cuantos usuarios entusiastas (nichos).
 
-Si filtramos por número de calificaciones (al menos 500 por ejemplo), vemos resultados que tienen más sentido:
+Si filtramos por número de calificaciones (al menos 500 por ejemplo), 
+estas son las películas mejor calificadas:
 
 ```{r}
-arrange(filter(medias_pelis, num_calif_peli > 500), desc(media_peli)) %>% 
-  print(n = 10) %>% select(media_peli, nombre)
+arrange(medias_pelis, desc(media_peli)) %>% 
+  filter(num_calif_peli > 500) %>%
+  top_n(200, media_peli) %>% 
+  mutate(media_peli = round(media_peli, 2)) %>%
+  DT::datatable()
 ```
 
 
@@ -220,7 +224,7 @@ nrow(dat_2)
 3. Construye predicciones con el modelo simple de arriba y evalúa con la muestra de validación. Evalúa con la raíz error cuadrático medio.
 
 
-```{r}
+```{r, message = FALSE}
 medias_pred <- dat_entrena %>%
   group_by(peli_id) %>%
   summarise(media_pred = mean(calif))
@@ -311,11 +315,12 @@ $$X_2 = N + S_2,$$
 donde $S_1$ y $S_2$ representan el gusto por la película, y $N$ representa el nivel general
 de calificaciones. Consideramos que son variables aleatorias ($N$ varía con las personas, igual que $S_1$ y $S_2$).
 
-Alguien nos podría dar un manazo por calcular 
+Podemos calcular
 
 $$Cov(X_1,X_2)$$
 
-para estimar el grado de correlación de *gusto por las dos películas*, porque estas son variables ordinales. Pero nos da un manazo por la razón equivocada. La verdadera razón es que buscamos
+para estimar el grado de correlación de *gusto por las dos películas*, como si fueran variables numéricas. Esta no es muy buena idea, pero no tanto porque se 
+trate de variables ordinales, sino porque en realidad quisiéramos calcular:
 
 $$Cov(S_1, S_2)$$
 
@@ -419,7 +424,7 @@ más complejos, y también como una manera simple de producir estimaciones cuand
 ```{block2, type='resumen'}
 Si $x_{ij}$ es el gusto del usuario $i$ por la película $j$, entonces nuestra predicción
 es
-$$\hat{x}_{uj} = \hat{b}_j +  (\hat{a}_i-\hat{\mu} ) $$
+$$\hat{x}_{ij} = \hat{b}_j +  (\hat{a}_i-\hat{\mu} ) $$
 
 donde $a_i$ indica un nivel general de calificaciones del usuario $i$, y $b_j$ es el nivel general de gusto por la película. 
 ```
@@ -443,7 +448,7 @@ $$\hat{\mu} =\frac{1}{T}\sum_{s,t} x_{st}$$
 2. Desviación de las calificaciones de usuario $i$ respecto a la media general
 $$\hat{c}_i =\frac{1}{M_i}\sum_{t} x_{it} - \hat{\mu} $$
 3. Desviación  de la película $j$ respecto a la media general
-$$\hat{b_j} =\frac{1}{N_j}\sum_{s} x_{sj}- \hat{\mu}$$
+$$\hat{d_j} =\frac{1}{N_j}\sum_{s} x_{sj}- \hat{\mu}$$
 
 
 Una vez que observamos una calificación $x_{ij}$, el residual del modelo de referencia es
@@ -591,7 +596,7 @@ para eliminar parte de la heterogeneidad en el uso de la escala.
 
 ### Ejemplo {-}
 
-```{r}
+```{r, echo = FALSE}
 mat.cons <- matrix(NA, 5, 6)
 mat.cons[1,1] <- 5;mat.cons[1,2] <- 5;mat.cons[1,3] <- 5;mat.cons[1,4] <- 2
 mat.cons[2,1] <- 3;mat.cons[2,3] <- 4;
@@ -610,21 +615,22 @@ apply(mat.cons,1, mean, na.rm=TRUE)
 mat.c <- mat.cons - apply(mat.cons,1, mean, na.rm=TRUE)
 knitr::kable(mat.c, digits = 2)
 ```
-Y calculamos distancia coseno entre películas,  **suponiendo que las películas
+
+Y calculamos similitud coseno entre películas,  **suponiendo que las películas
 no evaluadas tienen calificación 0**:
 
 ```{r}
-dcos <- function(x,y){
+sim_cos <- function(x,y){
   sum(x*y, na.rm = T)/(sqrt(sum(x^2, na.rm = T))*sqrt(sum(y^2, na.rm = T)))
 }
 mat.c[,1]
 mat.c[,2]
-dcos(mat.c[,1], mat.c[,2])
+sim_cos(mat.c[,1], mat.c[,2])
 
 ```
 
 ```{r}
-dcos(mat.c[,1], mat.c[,6])
+sim_cos(mat.c[,1], mat.c[,6])
 ```
 
 
@@ -633,7 +639,7 @@ dcos(mat.c[,1], mat.c[,6])
 como centramos por usuario tiene más sentido hacerlo. Si utilizaramos las calificaciones
 no centradas, entonces estaríamos suponiendo que las no evaluadas están calificadas muy mal (0, por abajo de 1,2,3,4,5).
 - Si calculamos similitud entre *usuarios* de esta forma, las distancia coseno es simplemente el coeficiente de correlación. Nótese que estamos
-calculanod similitud entre *items*, centrando por usuario, y esto no
+calculando similitud entre *items*, centrando por usuario, y esto no
 es lo mismo que correlación entre columnas.
 
 
@@ -667,16 +673,22 @@ comunes_2 <- inner_join(dat_1[, c('usuario_id','calif_c')], dat_3[, c('usuario_i
 
 Y ahora graficamos. ¿Por qué se ven bandas en estas gráficas??
 
-```{r, fig.width = 5, fig.asp = 0.7}
-ggplot(comunes, aes(x=calif_c, y=calif_c_2)) + geom_point() + geom_smooth()
-ggplot(comunes_2, aes(x=calif_c, y=calif_c_2)) + geom_point() + geom_smooth()
+```{r, fig.width = 5, fig.asp = 0.7, message=FALSE, warning = FALSE}
+ggplot(comunes, aes(x=calif_c, y=calif_c_2)) + 
+  geom_jitter(width = 0.2, height = 0.2, alpha = 0.5) + 
+  geom_smooth() + xlab('Gremlins 1') + ylab('Gremlins 2')
+ggplot(comunes_2, aes(x=calif_c, y=calif_c_2))  + 
+  geom_jitter(width = 0.2, height = 0.2, alpha = 0.5) + 
+  geom_smooth() + xlab('Gremlins 1') + ylab('When Harry met Sally')
 ```
 
-Y el coseno:
+**Pregunta**: ¿por qué los datos se ven en bandas?
+
+Y calculamos la similitud coseno:
 
 ```{r}
-dcos(comunes$calif_c, comunes$calif_c_2)
-dcos(comunes_2$calif_c, comunes_2$calif_c_2)
+sim_cos(comunes$calif_c, comunes$calif_c_2)
+sim_cos(comunes_2$calif_c, comunes_2$calif_c_2)
 ```
 
 Así que las dos Gremlins son similares, pero Gremlins 2 y Harry Met Sally no son similares.
@@ -700,7 +712,7 @@ ejemplos <- function(pelicula){
   # calcular similitudes
   out_sum <- datos_comp %>% 
       group_by(peli_id) %>%
-      summarise(dist = dcos(calif_c, calif_c_1)) %>% 
+      summarise(dist = sim_cos(calif_c, calif_c_1)) %>% 
       left_join(medias_p_2)
   out_sum %>% arrange(desc(dist))  %>% select(nombre, dist, num_calif_peli)
 }
@@ -711,17 +723,18 @@ Nótese que las similitudes aparentan ser ruidosas si no filtramos por número d
 
 ```{r}
 ejemplos(8199) %>% head(20) %>% knitr::kable()
-ejemplos(8199) %>% filter(num_calif_peli>300) %>% head(20) %>% knitr::kable()
+ejemplos(8199) %>% filter(num_calif_peli > 300) %>% head(20) %>% knitr::kable()
 ```
 
 ```{r}
 ejemplos(6807) %>% head(20) %>% knitr::kable()
-ejemplos(6807) %>% filter(num_calif_peli>300) %>% head(20) %>% knitr::kable()
+ejemplos(6807) %>% filter(num_calif_peli > 300) %>% head(20) %>% knitr::kable()
 ```
 
 El problema otra vez es similitudes ruidosas que provienen de pocas evaluaciones en común. 
-Intenta con otros ejemplos de películas que te interesen.
 
+### Ejercicio {-}
+Intenta con otras películas que te interesen
 
 ```{r}
 ejemplos(11271) %>% filter(num_calif_peli>300) %>% head(20)
@@ -853,8 +866,7 @@ U %*% t(V)
 ```
 
 
-### {#importante}
-
+```{block2, type ="resumen"}
 Con $k$ dimensiones latentes, el modelo que proponemos es:
 
 $$\tilde{X} = UV^t$$
@@ -866,8 +878,8 @@ Buscamos que, si $X$ son las verdaderas calificaciones, entonces
 $$X\approx \tilde{X}.$$
 
 y nótese que esta aproximación es en el sentido de las entradas de $X$ que **son observadas**. Sin embargo, $\tilde{X}$ nos da predicciones para **todos los pares película-persona**.
+```
 
-###
 
 Bajo este modelo, la predicción para el usuario $i$ y la película $j$
 es la siguiente suma sobre las dimensiones latentes:
@@ -927,12 +939,18 @@ X \approx UV^t
 $$
 Ahora supongamos que conocemos $V_1$. Si este es el caso, entonces queremos
 resolver
-$$ \min_{U_1}|| X - UV_1^t||_{obs}^2$$
+$$ \min_{U_1}|| X - U_1V_1^t||_{obs}^2$$
 Como $V_1^t$ están fijas, este es un problema de mínimos cuadrados usual, y puede resolverse analíticamente (o usar descenso en gradiente, que
 es simple de calcular de forma analítica) para encontrar $U_1$. Una vez que encontramos $U_1$, la fijamos, e intentamos ahora resolver para $V$:
 
 $$ \min_{V_2}|| X - U_1V_2^t||_{obs}^2$$
-Continuamos este proceso hasta encontrar un mínimo local o hasta cierto número de iteraciones.
+Y una vez que encontramos $V_2$ resolvemos
+
+$$ \min_{U_2}|| X - U_2V_2^t||_{obs}^2$$
+
+Continuamos este proceso hasta encontrar un mínimo local o hasta cierto número de iteraciones. Para inicializar $V_1$, en [@alsreg] se recomienda tomar como primer
+renglón el promedio de las calificaciones de las películas, y el resto 
+números aleatorios chicos (por ejemplo $U(0,1)$).
 
 ### Mínimos cuadrados alternados con regularización
 
@@ -957,7 +975,9 @@ $n_i$ evaluaciones, entonces habrá $n_i$ términos en la suma de la izquierda. 
 un esquema razonable también, donde hay más regularización relativa
 para usuarios/películas que tengan pocas evaluaciones.
 
-Este método está implementado en [spark](https://spark.apache.org/docs/2.1.0/mllib-collaborative-filtering.html). La implementación está basada en [@alsreg].
+Este método está implementado en [spark](https://spark.apache.org/docs/2.1.0/mllib-collaborative-filtering.html). La implementación está basada parcialmente en [@alsreg]. La inicialización
+es diferente en spark, ver (el código)[https://github.com/apache/spark/blob/v2.2.0/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala], donde cada renglón se inicializa con
+un vector de $N(0,1)$ normalizado.
 
 En este caso, copiamos nuestra tabla a spark (nota: esto es algo que normalmente no haríamos, los datos habrían sido cargados en el cluster
 de spark de otra forma):
@@ -979,14 +999,14 @@ dat_tbl
 ```
 
 Vamos a hacer primero una descomposición en 10 factores,
-con regularización alta:
+con regularización relativamente alta:
 
 ```{r}
 modelo <- ml_als(dat_tbl, 
               rating_col = 'calif',
               user_col = 'usuario_id',
               item_col = 'peli_id', 
-              rank = 10, reg_param = 0.1,
+              rank = 10, reg_param = 0.05,
               checkpoint_interval = 5,
               max_iter = 30)
 ```
@@ -1056,26 +1076,28 @@ ggplot(sample_n(latentes_pelis, 500), aes(y = features_1,
 
 ```{r}
 arrange(latentes_pelis, features_2) %>% 
-  select(nombre, features_1, media_peli, num_calif_peli) %>% 
-  filter(num_calif_peli > 500) %>% 
+  select(nombre, features_2, media_peli, num_calif_peli) %>% 
+  filter(num_calif_peli > 300) %>% 
   head(100) 
 arrange(latentes_pelis, features_2) %>% 
-  select(nombre, features_1, media_peli, num_calif_peli) %>%
-  filter(num_calif_peli > 500) %>% 
+  select(nombre, features_2, media_peli, num_calif_peli) %>%
+  filter(num_calif_peli > 300) %>% 
   tail(100)
 ```
 
 ```{r}
-arrange(latentes_pelis, features_5) %>% 
+arrange(latentes_pelis, features_3) %>% 
   select(nombre, features_3, media_peli, num_calif_peli) %>% 
   filter(num_calif_peli > 500) %>% 
   head(100) 
-arrange(latentes_pelis, features_5) %>% 
+arrange(latentes_pelis, features_3) %>% 
   select(nombre, features_3, media_peli, num_calif_peli) %>% 
   filter(num_calif_peli > 500) %>% 
   tail(100)
 ```
 
 
+### Ejercicio {-}
+Examina otras dimensiones latentes, ¿qué puedes interpretar?
 
-
+## Factorización por descenso estocástico
