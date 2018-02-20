@@ -1096,6 +1096,9 @@ arrange(latentes_pelis, features_3) %>%
   tail(100)
 ```
 
+```{r}
+spark_disconnect_all()
+```
 
 ### Ejercicio {-}
 Examina otras dimensiones latentes, ¿qué puedes interpretar?
