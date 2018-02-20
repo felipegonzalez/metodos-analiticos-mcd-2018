@@ -723,7 +723,7 @@ Nótese que las similitudes aparentan ser ruidosas si no filtramos por número d
 
 ```{r}
 ejemplos(8199) %>% head(20) %>% knitr::kable()
-ejemplos(8199) %>% filter(num_pares > 200) %>% head(20) %>% knitr::kable()
+ejemplos(8199) %>% filter(num_calif_peli > 200) %>% head(20) %>% knitr::kable()
 ```
 
 ```{r}
