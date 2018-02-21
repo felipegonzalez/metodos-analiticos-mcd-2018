@@ -803,7 +803,7 @@ Por otro lado, tenemos descriptores de 5 usuarios:
 $$u=(2,3,-3,0,1)$$
 que dice que a los primeros dos usuarios les gustan las películas serias, al tercero le gustan las divertidas, y los dos últimos no tienen preferencia clara a lo largo de esta dimensión.
 
-Qusiéramos predecir el gusto usando estos dos vectores. Nuestras predicciones (considerando que u y v son vectores columna) serían simplemente
+Qusiéramos predecir el gusto usando estos dos vectores. Nuestras predicciones (considerando que u y v son vectores renglón) serían simplemente
 
 $$\tilde{X} = u v^t$$
 
@@ -857,9 +857,9 @@ u_1[1]*v_1[1] + u_2[1]*v_2[1]
 
 Para calcular los gustos sobre todas las personas y películas, haríamos
 
-```{}
-U <- cbind(u_1, u_2)
-V <- cbind(v_1, v_2)
+```{r}
+U <- rbind(u_1, u_2)
+V <- rbind(v_1, v_2)
 U
 V
 U %*% t(V)
@@ -898,9 +898,10 @@ $$\min_{\tilde{X} = UV^t}||X-\tilde{X}||^2_{obs}$$
 **Observación** Esta es la norma de Frobenius, pero calculada solamente
 sobre las calificaciones observadas.
 
-Finalmente, también podemos escribir este problema como
+Finalmente, también podemos escribir este problema (recuérdese que $u_i$ y
+$v_j$ aquí son vectores renglón) como
 
-$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_i^tv_j)^2$$
+$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_iv_j^t)^2$$
 donde $u_i$ es el renglón $i$-esimo de $U$ (gustos latentes del usuario $i$ en cada dimensión), y $v_j$ es el renglón $j$-ésimo de la matriz $V$ (calificación latente de la película en cada dimensión)
 
 ### Combinación con modelo base
@@ -982,15 +983,23 @@ un vector de $N(0,1)$ normalizado.
 En este caso, copiamos nuestra tabla a spark (nota: esto es algo que normalmente no haríamos, los datos habrían sido cargados en el cluster
 de spark de otra forma):
 
-```{r}
+```{r,  message=FALSE, warning = FALSE}
 rm(list = c('muestra_nf', 'dat_entrena_2','dat','dat_entrena_c'))
 library(sparklyr)
-# conectamos a cluster local - idealmente aquí nos conectaríamos
-# a un cluster de spark
+# configuración para spark
 config <- spark_config()
 config$`sparklyr.shell.driver-memory` <- "4G"
+```
+
+```{r}
+# conectar con "cluster" local
 sc <- spark_connect(master = "local", config = config)
 spark_set_checkpoint_dir(sc, './checkpoint')
+```
+
+Y copiamos la tabla a Spark:
+
+```{r leertabla}
 dat <- dat_entrena %>% 
       as_data_frame %>% 
       select(peli_id, usuario_id, calif)
@@ -1001,7 +1010,7 @@ dat_tbl
 Vamos a hacer primero una descomposición en 10 factores,
 con regularización relativamente alta:
 
-```{r}
+```{r als-spark}
 modelo <- ml_als(dat_tbl, 
               rating_col = 'calif',
               user_col = 'usuario_id',
@@ -1009,6 +1018,9 @@ modelo <- ml_als(dat_tbl,
               rank = 10, reg_param = 0.05,
               checkpoint_interval = 5,
               max_iter = 30)
+# Nota: checkpoint evita que la gráfica de cálculo
+# sea demasiado grande. Cada 5 iteraciones hace una
+# nueva gráfica con los resultados de la última iteración.
 ```
 
 ```{r}
@@ -1019,7 +1031,7 @@ Hacemos predicciones para el conjunto de validación:
 
 ```{r, warning = FALSE, message = FALSE, fig.width=5, fig.asp=0.7}
 valida_tbl <- copy_to(sc, dat_valida)
-preds <- sdf_predict(valida_tbl, modelo) %>% collect()
+preds <- sdf_predict(valida_tbl, modelo) %>% collect() #traemos a R con collect
 table(is.nan(preds$prediction))
 ggplot(preds, aes(x = prediction)) + geom_histogram()
 ```
@@ -1122,7 +1134,9 @@ En esta parte veremos otra manera de construir factorización de matrices
 para filtrado colaborativo, usando descenso en gradiente estocástico. Este método es similar a mínimos cuadrados alternados (ALS).
 
 Para un recordatorio de descenso en gradiente, y la versión
-estocástica, puedes ver por ejemplo, la [notas de aprendizaje 
+estocástica, puedes ver por ejemplo, el artículo de
+[wikipedia - Stochastic Gradient Descent](https://en.wikipedia.org/wiki/Stochastic_gradient_descent) 
+o las [notas de aprendizaje 
 de máquina](https://felipegonzalez.github.io/aprendizaje-maquina-2017/redes-neuronales-parte-2.html#descenso-estocastico).
 
 
@@ -1154,13 +1168,13 @@ y
 $$\frac{\partial L_{i,j}}{\partial v_{j,t}} = -2e_{i,j} u_{i,t}
 $$
 
-El resto de las derivadas son iguales a 0 (para otros $u_s^{(m)}$, 
-$v_t^{(m)}$). Esto nos da la dirección del gradiente en cada paso del descenso estocástico. 
+El resto de las derivadas son iguales a 0 (para otros $u_a^{(m)}$, 
+$v_b^{(m)}$). Esto nos da la dirección del gradiente en cada paso del descenso estocástico. 
 
 ```{block2, type = 'comentario'}
-Sea $\gamma >0$ el tamaño de paso de descenso estocástico.
-Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por (en
- forma vectorial):
+Sea $\gamma >0$ el tamaño de paso (tasa de aprendizaje) de descenso estocástico.
+Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por,
+en forma vectorial:
                                                                             
 $$
 u_i^{(n+1)} = u_i^{(n)} +\gamma e_{i,j} v_j^{(n)}
@@ -1169,6 +1183,8 @@ y
 $$
 v_j^{(n+1)} = v_j^{(n)} +\gamma e_{i,j} u_j^{(n)}
 $$
+  
+Inicializamos las matrices $U$ y $V$ con valores aleatorios chicos.
 ```
   
 ### Agregando el modelo base (sesgos)
@@ -1203,37 +1219,80 @@ en lotes y procesar cada lote sucesivemante.
 
 Finalmente, podemos agregar regularización para controlar el sobreajuste
 (por ejemplo, usuarios con pocas evaluaciones, o películas con
-pocas evaluaciones):
+pocas evaluaciones). 
+
+La función a minimizar es ahora
+
+$$
+L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i}^{(l)}v_{j}^{(l)})^2 +
+\lambda \left ( \sum_i ||u_i||^2 + \sum_j ||v_j||^2 + \sum_i a_i^2 + \sum_i b_j^2 \right )
+$$
+
+donde también es posible usar parámetros de regularización distintos ($\lambda$) para
+los vectores y los sesgos.
+
+```{block2, type = 'comentario'}
+Sea $\gamma >0$ el tamaño de paso (tasa de aprendizaje) de descenso estocástico,
+y $\lambda \geq 0 $ una constante de regularización
+Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por,
+en forma vectorial:
+                                                                            
+$$
+u_i^{(n+1)} = u_i^{(n)} + \gamma \left ( e_{i,j} v_j^{(n)} - \lambda u_i^{(n)} \right )
+$$
+  
+y
+
+$$
+v_j^{(n+1)} = v_j^{(n)} + \gamma \left ( e_{i,j} u_j^{(n)} - \lambda v_j^{(n)} \right )
+$$
 
 
+Para los sesgos, las actualizaciones son:
 
+$$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \lambda a_i^{(n)} \right )$$
+  
+$$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \lambda b_j^{(n)} \right )$$
+  
+Inicializamos las matrices $U$ y $V$ con valores aleatorios chicos.
+```
 
-
-Podemos implementar en C++ para tener mejor desempeño.
+### Ejemplo (netflix)
+Usaremos una  implementación en C++ para tener mejor desempeño.
 
 
 ```{r}
 library(Rcpp)
-Rcpp::sourceCpp('../src/factorizacion_mat/descenso_mat.cpp')
+Rcpp::sourceCpp('../src/factorizacion_mat/descenso_estocastico.cpp')
 Rcpp::sourceCpp('../src/factorizacion_mat/calc_error_bias.cpp')
 ```
+
+```{r, comment=""}
+cat(readLines('../src/factorizacion_mat/descenso_estocastico.cpp'), sep = "\n")
+```
+
 
 Por ejemplo:
 
 ```{r}
 library(Matrix)
+# entrenamiento
 i <- dat_entrena$usuario_id
 j <- dat_entrena$peli_id
 y <- dat_entrena$calif
 X <- sparseMatrix(i, j, x = y, dims=c(max(i), 17770))
 dim(X)
+# validación
+i_val <- dat_valida$usuario_id
+j_val <- dat_valida$peli_id
+y_val <- dat_valida$calif
 ```
 
-```{r}
+```{r descenso}
 set.seed(2805)
 #inicialización
-U_0 <- matrix(rnorm(5*dim(X)[1],0,0.01), ncol=5, nrow=dim(X)[1])
-V_0 <- matrix(rnorm(5*dim(X)[2],0,0.01), ncol=5, nrow=dim(X)[2])
+U_0 <- matrix(rnorm(10 * max(i), 0, 0.01), ncol = 10)
+V_0 <- matrix(rnorm(10 * 17770, 0, 0.01), ncol = 10)
 U <- U_0
 V <- V_0
 #a <- rep(0, dim(X)[1])
@@ -1242,11 +1301,16 @@ a <- rowMeans(X)- mean(X)
 b <- colMeans(X) 
 print(sqrt(calc_error(i,j,y, U, V, a,b)))
 for(iter in 1:10){
-out <- descenso_gradiente(i, j, y, U, V, a, b, 0.004, 0.01)
-print(sqrt(calc_error(i,j,y, out$U, out$V, out$a, out$b)))
-U <- out$U
-V <- out$V
-a <- out$a
-b <- out$b
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  out <- descenso_estocastico(i, j, y, U, V, a, b, 
+              gamma = 0.01, lambda = 0.03, n_iter = 1)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, a, b))
+  sprintf("Error entrena: %.3f, Error valida: %.3f", 
+                        error_entrena, error_valida) %>% print
+
 }
 ```
+
+
