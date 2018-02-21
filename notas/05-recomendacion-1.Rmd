@@ -1097,7 +1097,7 @@ arrange(latentes_pelis, features_3) %>%
 ```
 
 ```{r}
-spark_disconnect_all()
+sparklyr::spark_disconnect_all()
 ```
 
 ### Ejercicio {-}
@@ -1116,4 +1116,137 @@ similitud coseno positivo relativamente grande.
 de similitud coseno (filtra películas usando número de pares que se usaron para calcular 
 la similitud).
 
+## Descenso en gradiente estocástico
 
+En esta parte veremos otra manera de construir factorización de matrices
+para filtrado colaborativo, usando descenso en gradiente estocástico. Este método es similar a mínimos cuadrados alternados (ALS).
+
+Para un recordatorio de descenso en gradiente, y la versión
+estocástica, puedes ver por ejemplo, la [notas de aprendizaje 
+de máquina](https://felipegonzalez.github.io/aprendizaje-maquina-2017/redes-neuronales-parte-2.html#descenso-estocastico).
+
+
+Consideremos el problema de factorización que queremos resolver.
+Si $X$ ($n\times p$) es la matriz de calificaciones, quisieramos encontrar matrices $U$ y $V$ (de tamaños $n\times k$ y $p\times k$) tales que
+$$X\approx UV^t,$$
+donde los reglones de $U$ son los descriptores de los usuarios
+y los renglones de $V$ son los descriptores de las películas (ver sección anterior). Más expecíficamente, buscamos minimizar
+
+\begin{equation}
+\min_{U,V} \sum_{(i,j) obs} (x_{ij} - u_iv_j^t)^2
+\end{equation}
+donde $u_i$ es el renglón $i-ésimo$ de $U$ y $v_j$ es el renglón
+$j$-ésimo de $V$. En términos de sus componentes, queremos minimizar
+
+\begin{equation}
+L =  \sum_{(i,j) obs} (x_{ij} - \sum_{l=1}^k u_{i,l}v_{j,l})^2
+\end{equation}
+
+Escribimos $$ L_{i,j} = e_{i,j}^2 =  (x_{ij} - \sum_{l=1}^k u_{i,l}v_{j,l})^2$$.
+
+Para encontrar el gradiente, derivamos con respecto a cada parámetro
+($u_{i,l}$ y $v_{j,l}$). Empezamos con cada término $L_{i,j}$:
+
+$$\frac{\partial L_{i,j}}{\partial u_{i,s}} = -2e_{i,j} v_{j,s}
+$$
+
+y
+$$\frac{\partial L_{i,j}}{\partial v_{j,t}} = -2e_{i,j} u_{i,t}
+$$
+
+El resto de las derivadas son iguales a 0 (para otros $u_s^{(m)}$, 
+$v_t^{(m)}$). Esto nos da la dirección del gradiente en cada paso del descenso estocástico. 
+
+```{block2, type = 'comentario'}
+Sea $\gamma >0$ el tamaño de paso de descenso estocástico.
+Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por (en
+ forma vectorial):
+                                                                            
+$$
+u_i^{(n+1)} = u_i^{(n)} +\gamma e_{i,j} v_j^{(n)}
+$$
+y
+$$
+v_j^{(n+1)} = v_j^{(n)} +\gamma e_{i,j} u_j^{(n)}
+$$
+```
+  
+### Agregando el modelo base (sesgos)
+
+Podemos también agregar el modelo base (que a veces es llamado modelo
+con *sesgos*):
+
+\begin{equation}
+L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i}^{(l)}v_{j}^{(l)})^2
+\end{equation}
+
+Y las derivadas adicionales están dadas por
+
+$$\frac{\partial L_{i,j}}{\partial a_i} = -2e_{i,j} 
+$$
+
+$$\frac{\partial L_{i,j}}{\partial b_j} = -2e_{i,j} 
+$$
+
+y el resto de las derivadas (para otras $a_s$ y $b_t$) son iguales a 0.
+
+
+```{block2, type='resumen'}
+- Nótese que en cada paso de descenso estocástico, las actualizaciones
+sólo involucran los parámetros asociados con el usuario/película 
+que estamos evaluando, y el cálculo es simple.
+- No necesitamos tener en memoria todos los datos, podemos leerlos
+en lotes y procesar cada lote sucesivemante.
+```
+
+### Regularización
+
+Finalmente, podemos agregar regularización para controlar el sobreajuste
+(por ejemplo, usuarios con pocas evaluaciones, o películas con
+pocas evaluaciones):
+
+
+
+
+
+Podemos implementar en C++ para tener mejor desempeño.
+
+
+```{r}
+library(Rcpp)
+Rcpp::sourceCpp('../src/factorizacion_mat/descenso_mat.cpp')
+Rcpp::sourceCpp('../src/factorizacion_mat/calc_error_bias.cpp')
+```
+
+Por ejemplo:
+
+```{r}
+library(Matrix)
+i <- dat_entrena$usuario_id
+j <- dat_entrena$peli_id
+y <- dat_entrena$calif
+X <- sparseMatrix(i, j, x = y, dims=c(max(i), 17770))
+dim(X)
+```
+
+```{r}
+set.seed(2805)
+#inicialización
+U_0 <- matrix(rnorm(5*dim(X)[1],0,0.01), ncol=5, nrow=dim(X)[1])
+V_0 <- matrix(rnorm(5*dim(X)[2],0,0.01), ncol=5, nrow=dim(X)[2])
+U <- U_0
+V <- V_0
+#a <- rep(0, dim(X)[1])
+#b <- rep(0, dim(X)[2])
+a <- rowMeans(X)- mean(X)
+b <- colMeans(X) 
+print(sqrt(calc_error(i,j,y, U, V, a,b)))
+for(iter in 1:10){
+out <- descenso_gradiente(i, j, y, U, V, a, b, 0.004, 0.01)
+print(sqrt(calc_error(i,j,y, out$U, out$V, out$a, out$b)))
+U <- out$U
+V <- out$V
+a <- out$a
+b <- out$b
+}
+```
