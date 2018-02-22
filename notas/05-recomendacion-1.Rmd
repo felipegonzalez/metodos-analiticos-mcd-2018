@@ -858,8 +858,8 @@ u_1[1]*v_1[1] + u_2[1]*v_2[1]
 Para calcular los gustos sobre todas las personas y películas, haríamos
 
 ```{r}
-U <- rbind(u_1, u_2)
-V <- rbind(v_1, v_2)
+U <- cbind(u_1, u_2)
+V <- cbind(v_1, v_2)
 U
 V
 U %*% t(V)
@@ -872,7 +872,7 @@ Con $k$ dimensiones latentes, el modelo que proponemos es:
 $$\tilde{X} = UV^t$$
 
 donde $U$ es una matrix de $nxk$ (n= número de usuarios), y $V$ es una matriz
-de $mxk$, donde $m$ es el número de películas.
+de $pxk$, donde $p$ es el número de películas.
 
 Buscamos que, si $X$ son las verdaderas calificaciones, entonces
 $$X\approx \tilde{X}.$$
@@ -933,7 +933,7 @@ nuestro problema.
 ## Mínimos cuadrados alternados.
 
 Supongamos entonces que queremos encontrar matrices $U$ y $V$, donde $U$ es una matrix de $nxk$ (n= número de usuarios), y $V$ es una matriz
-de $mxk$, donde $m$ es el número de películas que nos de una
+de $pxk$, donde $p$ es el número de películas que nos de una
 aproximación de la matrix $X$ de calificaciones
 $$
 X \approx UV^t
@@ -951,7 +951,8 @@ $$ \min_{U_2}|| X - U_2V_2^t||_{obs}^2$$
 
 Continuamos este proceso hasta encontrar un mínimo local o hasta cierto número de iteraciones. Para inicializar $V_1$, en [@alsreg] se recomienda tomar como primer
 renglón el promedio de las calificaciones de las películas, y el resto 
-números aleatorios chicos (por ejemplo $U(0,1)$).
+números aleatorios chicos (por ejemplo $U(0,1)$). También pueden inicializarse con números
+aleatorios chicos las dos matrices.
 
 ### Mínimos cuadrados alternados con regularización
 
@@ -1277,9 +1278,12 @@ Por ejemplo:
 ```{r}
 library(Matrix)
 # entrenamiento
-i <- dat_entrena$usuario_id
-j <- dat_entrena$peli_id
-y <- dat_entrena$calif
+set.seed(1182)
+permutacion <- sample(1:length(dat_entrena$usuario_id), 
+                      length(dat_entrena$usuario_id))
+i <- dat_entrena$usuario_id[permutacion]
+j <- dat_entrena$peli_id[permutacion]
+y <- dat_entrena$calif[permutacion]
 X <- sparseMatrix(i, j, x = y, dims=c(max(i), 17770))
 dim(X)
 # validación
@@ -1297,14 +1301,16 @@ U <- U_0
 V <- V_0
 #a <- rep(0, dim(X)[1])
 #b <- rep(0, dim(X)[2])
-a <- rowMeans(X)- mean(X)
-b <- colMeans(X) 
-print(sqrt(calc_error(i,j,y, U, V, a,b)))
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0)
+print(sqrt(calc_error(i, j, y, U, V, a, b)))
+
 for(iter in 1:10){
   # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
   # cambia in-place estos parámetros
   out <- descenso_estocastico(i, j, y, U, V, a, b, 
-              gamma = 0.01, lambda = 0.03, n_iter = 1)
+              gamma = 0.01, lambda = 0.01, n_iter = 1)
   error_entrena <- sqrt(calc_error(i, j, y, U, V, a, b))
   error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, a, b))
   sprintf("Error entrena: %.3f, Error valida: %.3f", 
