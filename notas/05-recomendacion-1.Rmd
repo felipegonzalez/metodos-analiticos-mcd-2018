@@ -816,10 +816,10 @@ gustos
 
 Así que al usuario 1 le recomndamos la película 3, pero al usuario 3 le recomendamos la película 1.
 
-###
+---
 
 La idea es entonces encontrar pesos para películas $u$ y para usuarios $v$ de forma que
-$X\approx \tilde{X} = uv^t$$: podemos reproducir las calificaciones observadas a partir de nuestro modelo de factores latentes.
+$X\approx \tilde{X} = uv^t$: podemos reproducir las calificaciones observadas a partir de nuestro modelo de factores latentes.
 
 Nótese sin embargo que hay varias dimensiones que pueden describir a películas y usuarios:
 por ejemplo, seria-divertida, artística-hollywood, ciencia ficción, con/sin violencia, etc. 
@@ -889,6 +889,16 @@ $$\tilde{x}_{ij} =\sum_k u_{ik} v_{jk}$$
 que expresa el hecho de que el gusto de $i$ por $j$ depende de una combinación (suma)
 de factores latentes de películas ponderados por gusto por esos factores del usuario.
 
+```{block2, type='resumen'}
+- El método de factorización de matrices de grado bajo ($k$)
+funciona compartiendo información a lo largo de películas y usuarios. 
+
+- Es importante que la representación sea de grado relativamente bajo,
+pues esta "compresión" es la que permite que las dimensiones 
+latentes capturen regularidades que están en los datos observados (que
+esperamos encontrar en el proceso de ajuste). 
+```
+
 El número de factores latentes $k$ debe ser seleccionado (por ejemplo, según el error de validación). Dado $k$, para encontrar $U$ y $V$ (un total de $k(m+n)$ parámetros) buscamos
 minimizar 
 
@@ -915,6 +925,8 @@ $$R\approx \tilde{X} = UV^t$$
 de manera que las predicciones finales son
 $$X^0 + \tilde{X}$$
 
+Veremos también más adelante cómo regularizar estos sesgos como
+parte de la construcción del modelo.
 
 ## Factorización de matrices.
 
@@ -968,6 +980,7 @@ mostrado arriba. $n_{i}$ es el número de evaluaciones del usuario $i$, y
 $m_j$ es el número de evaluaciones de la película $j$.
 
 **Observaciones**:
+
 - Nótese que penalizamos el tamaños de los vectores $u_i$ y $v_j$ para evitar sobreajuste (como en regresión ridge).
 - Nótese también que los pesos $n_i$ y $m_j$ en esta regularización hace comparables el término que aparece en la suma de los residuales al cuadrado
 (la primera suma),
@@ -978,7 +991,7 @@ un esquema razonable también, donde hay más regularización relativa
 para usuarios/películas que tengan pocas evaluaciones.
 
 Este método está implementado en [spark](https://spark.apache.org/docs/2.1.0/mllib-collaborative-filtering.html). La implementación está basada parcialmente en [@alsreg]. La inicialización
-es diferente en spark, ver (el código)[https://github.com/apache/spark/blob/v2.2.0/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala], donde cada renglón se inicializa con
+es diferente en spark, ver [el código](https://github.com/apache/spark/blob/v2.2.0/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala), donde cada renglón se inicializa con
 un vector de $N(0,1)$ normalizado.
 
 En este caso, copiamos nuestra tabla a spark (nota: esto es algo que normalmente no haríamos, los datos habrían sido cargados en el cluster
@@ -1225,7 +1238,7 @@ pocas evaluaciones).
 La función a minimizar es ahora
 
 $$
-L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i}^{(l)}v_{j}^{(l)})^2 +
+L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i,l}v_{j,l})^2 +
 \lambda \left ( \sum_i ||u_i||^2 + \sum_j ||v_j||^2 + \sum_i a_i^2 + \sum_i b_j^2 \right )
 $$
 
@@ -1234,7 +1247,7 @@ los vectores y los sesgos.
 
 ```{block2, type = 'comentario'}
 Sea $\gamma >0$ el tamaño de paso (tasa de aprendizaje) de descenso estocástico,
-y $\lambda \geq 0 $ una constante de regularización
+y $\lambda \geq 0$ una constante de regularización
 Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por,
 en forma vectorial:
                                                                             
@@ -1258,8 +1271,12 @@ $$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \lambda b_j^{(n)} \right )$$
 Inicializamos las matrices $U$ y $V$ con valores aleatorios chicos.
 ```
 
+Puedes ver [este video](https://www.youtube.com/watch?v=GGWBMg0i9d4&index=56&list=PLLssT5z_DsK9JDLcT8T62VtzwyW9LNepV) de nuestro libro de texto
+
 ### Ejemplo (netflix)
-Usaremos una  implementación en C++ para tener mejor desempeño.
+Usaremos una  implementación en C++ para tener mejor desempeño 
+(una introducción a extensiones de C++ para R está en 
+[@advanced-r]).
 
 
 ```{r}
