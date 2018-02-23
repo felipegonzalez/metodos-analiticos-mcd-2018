@@ -159,6 +159,9 @@ muestra_nf <- readRDS('../datos/netflix/dat_muestra_nflix.rds')
 pelis_nombres <- read_csv('../datos/flujos/movies_title_fix.csv', 
                           col_names = FALSE, na = c("", "NA", "NULL"))
 names(pelis_nombres) <- c('peli_id','año','nombre')
+#numerar consecutivamente usuarios
+muestra_nf <- muestra_nf %>% 
+  mutate(usuario_id = as.integer(as.factor(usuario_id)))
 dim(muestra_nf)
 head(muestra_nf)
 ```
@@ -1103,21 +1106,21 @@ ggplot(sample_n(latentes_pelis, 500), aes(y = features_1,
 ```{r}
 arrange(latentes_pelis, features_2) %>% 
   select(nombre, features_2, media_peli, num_calif_peli) %>% 
-  filter(num_calif_peli > 300) %>% 
+  filter(num_calif_peli > 500) %>% 
   head(100) 
 arrange(latentes_pelis, features_2) %>% 
   select(nombre, features_2, media_peli, num_calif_peli) %>%
-  filter(num_calif_peli > 300) %>% 
+  filter(num_calif_peli > 500) %>% 
   tail(100)
 ```
 
 ```{r}
-arrange(latentes_pelis, features_3) %>% 
-  select(nombre, features_3, media_peli, num_calif_peli) %>% 
+arrange(latentes_pelis, features_5) %>% 
+  select(nombre, features_5, media_peli, num_calif_peli) %>% 
   filter(num_calif_peli > 500) %>% 
   head(100) 
-arrange(latentes_pelis, features_3) %>% 
-  select(nombre, features_3, media_peli, num_calif_peli) %>% 
+arrange(latentes_pelis, features_5) %>% 
+  select(nombre, features_5, media_peli, num_calif_peli) %>% 
   filter(num_calif_peli > 500) %>% 
   tail(100)
 ```
@@ -1296,6 +1299,7 @@ Por ejemplo:
 library(Matrix)
 # entrenamiento
 set.seed(1182)
+#permutamos para las rondas de descenso estocástico
 permutacion <- sample(1:length(dat_entrena$usuario_id), 
                       length(dat_entrena$usuario_id))
 i <- dat_entrena$usuario_id[permutacion]
