@@ -86,14 +86,14 @@ $j$ es simplemente la media de la película $j$ sobre todos los usuarios que la 
 
 Introducimos la siguente notación:
 
-- $x_{ij}$ es la evaluación del usuario $j$ de la película. Obsérvese que muchos de estos valores no son observados (no tenemos información de varias $x_{ij}$).
+- $x_{ij}$ es la evaluación del usuario $i$ de la película $j$. Obsérvese que muchos de estos valores no son observados (no tenemos información de varias $x_{ij}$).
 - $\hat{x}_{ij}$ es la predicción que hacemos de gusto del usuario $i$ por la película $j$
 
 
 En nuestro primer modelo simple, nuestra predicción es simplemente
 $$\hat{x}_{ij} = \hat{b}_j$$
 donde 
-$$\hat{b_j} = \frac{1}{N_j}\sum_{s} x_{ij},$$
+$$\hat{b_j} = \frac{1}{N_j}\sum_{s} x_{sj},$$
 y este promedio es sobre los $N_j$ usuarios que vieron (y calificaron) la película $j$.
 
 ¿Cómo evaluamos nuestras predicciones?
@@ -587,7 +587,7 @@ Cuando no tenemos películas similares que hayan sido calificadas por nuestro us
 **entonces usamos simplemente la predicción base**.
 
 
-### Cálculo de similitud entre usuarios/películas
+### Cálculo de similitud entre usuarios/películas {#simitems}
 
 Proponemos utilizar la distancia coseno de las calificaciones centradas 
 por usuario. Como discutimos arriba, antes de calcular similitud conviene centrar las calificaciones por usuario
@@ -723,7 +723,7 @@ Nótese que las similitudes aparentan ser ruidosas si no filtramos por número d
 
 ```{r}
 ejemplos(8199) %>% head(20) %>% knitr::kable()
-ejemplos(8199) %>% filter(num_calif_peli > 300) %>% head(20) %>% knitr::kable()
+ejemplos(8199) %>% filter(num_calif_peli > 200) %>% head(20) %>% knitr::kable()
 ```
 
 ```{r}
@@ -1096,8 +1096,24 @@ arrange(latentes_pelis, features_3) %>%
   tail(100)
 ```
 
+```{r}
+spark_disconnect_all()
+```
 
 ### Ejercicio {-}
 Examina otras dimensiones latentes, ¿qué puedes interpretar?
 
-## Factorización por descenso estocástico
+## Tarea (para 26 de febrero)
+
+- En la sección \@ref(simitems), mejora la función *ejemplo* para que en lugar del número
+de evaluaciones de las películas de el número de pares de evaluaciones que se usaron
+para calcular la similitud coseno (nota que el *left_join* tiene varias calificaciones
+vacías (NA)). Esta es la cantidad más relevante para filtrar después. En los ejercicios siguientes, filtra usando este número de pares en lugar de número de evaluaciones:
+- En la parte de filtrado colaborativo usando vecinos cercanos, encuentra dos películas que
+tengan similitud coseno negativa relativamente grande, y dos películas que tengan
+similitud coseno positivo relativamente grande.
+- Escoge una película que te interese y muestra los 10 vecinos más cercanos en términos
+de similitud coseno (filtra películas usando número de pares que se usaron para calcular 
+la similitud).
+
+
