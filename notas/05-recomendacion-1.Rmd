@@ -1005,7 +1005,7 @@ rm(list = c('muestra_nf', 'dat_entrena_2','dat','dat_entrena_c'))
 library(sparklyr)
 # configuración para spark
 config <- spark_config()
-config$`sparklyr.shell.driver-memory` <- "4G"
+#config$`sparklyr.shell.driver-memory` <- "4G"
 ```
 
 ```{r}
@@ -1376,7 +1376,7 @@ for(iter in 1:15){
 
 ```{r}
 usuario_1_u <- U[100001, ]
-prefs_1 <- mu + a[100001] + b + V%*%usuario_1_u %>% as.numeric
+prefs_1 <- mu + a[100001] + b + V %*% usuario_1_u %>% as.numeric
 prefs <- data_frame(prefs = prefs_1, peli_id = 1:17770) %>% 
   left_join(medias_pelis) %>%
   arrange(desc(prefs)) %>% 
@@ -1386,7 +1386,7 @@ prefs <- data_frame(prefs = prefs_1, peli_id = 1:17770) %>%
 
 ```{r}
 usuario_2_u <- U[100002, ]
-prefs_2 <- mu + a[100002] + b + V%*%usuario_2_u %>% as.numeric
+prefs_2 <- mu + a[100002] + b + V %*% usuario_2_u %>% as.numeric
 prefs <- data_frame(prefs = prefs_2, peli_id = 1:17770) %>% 
   left_join(medias_pelis) %>%
   arrange(desc(prefs)) %>% 
@@ -1473,10 +1473,30 @@ del gusto implícito, por ejemplo:
 - Cuántas veces un usuario ha pedido un cierto artículo.
 - Qué porcentaje del programa fue visto.
 - Cuánto tiempo pasó en la página web.
+- Cuántas veces oyó una canción.
+
+
 
 Sea $r_{ij}$ una medida implícita como las mencionadas arriba, para el usuario
 $i$ y el artículo $j$. Ponemos $r_{i,j}=0$ cuando no ha habido interacción
-entre este usuario y el artículo. Definimos la variable de preferencia
+entre este usuario y el artículo. 
+
+
+La diferencia importante con los ratings explícitos es que los datos
+implícitos son menos informativos que los explícitos:
+
+- Puede ser que el valor de $r_{ij}$ sea relativamente bajo (pocas interacciones), pero de todas formas se trate de un artículo que es muy preferido (por ejemplo, solo vi Star Wars I una vez, pero me gusta mucho). Esto no pasa con los ratings, pues ratings bajos indican baja preferencia.
+
+- Sin embargo, estamos seguros de que niveles altos de interacción (vio muchas veces una canción, etc.), es indicación de preferencia alta.
+
+- Así que en nuestro modelo no necesariamente queremos predecir directamente la variable $r_{ij}$: puede haber artículos con predicción baja de $r_{ij}$ que
+descubramos de todas formas van a ser altamente preferidos.
+
+
+Una solución propuesta en [@recomendacion-implicito] (e implementada en 
+spark) es darle menos importancia al valor $r_{ij}$ en la construcción
+de los factores latentes. Para hacer esto, primero definimos
+la variable de preferencia
 
 $$p_{ij} = 
 \begin{cases}
@@ -1485,14 +1505,82 @@ $$p_{ij} =
 \end{cases}$$
 
 Esta variable $p_{ij}$, cuando vale uno, indica algún nivel de preferencia.
-¿Pero qué tanto valor debemos darle a esta preferencia? Por ejemplo,
-puede ser que el usuario simplemente dio click en un artículo y no hizo nada más,
-
-La idea es que un valor bajo de $r_{ij}$ no necesariamente indica alguna
-preferencia, pero conforme crece este valor, tenemos más confianza de
-que el usuario prefiere el artículo. Definimos entonces
+¿Pero qué tanto valor debemos darle a esta preferencia? Definimos la confianza
+como
 $$c_{ij} = 1+ \alpha r_{ui},$$
-donde $\alpha$ es un parámetro que hay que afinar (por ejemplo $\alpha = 40$)
+donde $\alpha$ es un parámetro que hay que afinar (por ejemplo $\alpha$ entre 1 y 50). Para predicciones de vistas de TV, en [@recomendacion-implicita] utilizan
+$\alpha = 40$, donde $r_{ij}$ es el número de veces que el usuario ha visto
+un programa (contando vistas parciales, así que es un número real).
+
+Y la función objetivo se define como
+
+\begin{equation}
+L =  \sum_{(i,j)} c_{ij}(p_{ij}  - \sum_{l=1}^k u_{i,l}v_{j,l})^2
+(#eq:implicita)
+\end{equation}
+
+Nótese la diferencia con el caso explícito. En este caso, los valores
+de $c_{ij}$ (confianza) actúan como un pesos en el ajuste de
+los factores, indicando que valores de $r_{ij}$ son más informativos y
+deben contribuir más en el ajuste. Adicionalmente, los valores
+para los cuales $p_{ij}=0$ son los que reciben el peso mínimo (c_{ij}=1).
+
+Igual que en los ejemplos anteriores, usualmente se agregan términos
+de regularización para los vectores renglón $u_i$ y $v_j$. Como en
+el paper original, este problema se puede resolver usando mínimos cuadrados
+alternados.
+
+### Evaluación para modelos implícitos
+
+La evaluación para modelos implícitos no es tan simple como
+en el caso explícito. La diferencia es que algunas observaciones
+que son 0 para un usuario pueden deberse a diversas razones, y no 
+significa que ese item no le gustaría al usuario. Medidas
+como RECM o MAD no son tan apropiadas para este problema. 
+
+Una alternativa es, para cada usuario $i$ ordenar los artículos de 
+mayor a menor valor de $\hat{p}_{ij}} = u_iv_j^t$ , 
+seleccionar una lista de los mejores $K$ artículos
+(canciones, pellículas), y calcular
+
+$$
+rank = \frac{\sum_{j} p_{ij}rank_{i,j}}{\sum_j p_{ij}}
+$$
+
+donde $rank_{ij}$ es el percentil del artículo $j$ en la lista ordenada
+de artículos. $rank_{ij}=0$ para el mejor artículo, y $rank_{ij}=1$ para el peor.
+
+Esta suma es un promedio sobre los rankings del usuario con $p_{ij}=1$, 
+y **menores valores son mejores** (quiere decir que hubo alguna preferencia
+por los items con $rank_{ij}$ bajo, es decir, los mejores de nuestra lista predicha. Es posible también hacer un promedio ponderado
+por $r_{ij}$:
+$$
+rank = \frac{\sum_{j} r_{ij}rank_{i,j}}{\sum_j r_{ij}}
+$$
+que es lo mismo que la ecuación anterior pero ponderando por el interés mostrado
+en cada artículo con $p_{ij}=1$.
+
+- Menores valores de $rank$ son mejores.
+- Si escogemos al azar el ordenamiento de los artículos, el valor esperado de $rank_{ij}$ es 0.5 (en medio de la lista), lo que implica que el valor esperado
+de $rank$ es 0.50. Cualquier modelo con $rank\geq 0.5$ es peor que dar recomendaciones al azar.
+
+Esta cantidad la podemos evaluar en entrenamiento y en validación. Para construir
+el conjunto de validación podemos hacer:
+
+- Escogemos un número de usuarios para validación (por ejemplo 20\%)
+- Ponemos 50\% de los artículos evaluados por estas personas en validación, por ejemplo.
+
+Estas cantidades dependen de cuántos datos tengamos, como siempre, para tener
+un tamaño razonable de de datos de validación.
+
+
+
+
+
+
+
+
+
 
 
 
