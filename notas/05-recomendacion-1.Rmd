@@ -1462,7 +1462,7 @@ y otros (ver por ejemplo [este artículo](https://amba-bigdata.wikispaces.com/fi
 
 ## Retroalimentación implícita
 
-Esta sección está basada en [@recomendacion-implicito].
+Esta sección está basada en [@recomendacion-implicita].
 
 En el ejemplo que vimos arriba, la retroalimentación es expícita en el 
 sentido de que los usuarios califican los artículos (1- no me gustó nada,
@@ -1493,7 +1493,7 @@ implícitos son menos informativos que los explícitos:
 descubramos de todas formas van a ser altamente preferidos.
 
 
-Una solución propuesta en [@recomendacion-implicito] (e implementada en 
+Una solución propuesta en [@recomendacion-implicita] (e implementada en 
 spark) es darle menos importancia al valor $r_{ij}$ en la construcción
 de los factores latentes. Para hacer esto, primero definimos
 la variable de preferencia
