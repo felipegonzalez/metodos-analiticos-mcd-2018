@@ -9,8 +9,10 @@ _175904 - Jorge III Altamirano Astorga_
 
 ```{r include=FALSE}
 library(tidyverse)
-library(ggplot2)
 ```
+## {.tabset}
+
+### Pregunta 1
 
 - En la sección 5.6.1, mejora la función *ejemplo* para que en lugar del número
 de evaluaciones de las películas de el número de pares de evaluaciones que se usaron
@@ -61,6 +63,8 @@ ggplot(medias_pred2, aes(media_pred, num_pred)) +
 ```
 
 
+### Pregunta 2
+
 - En la parte de filtrado colaborativo usando vecinos cercanos, encuentra dos películas que
 tengan similitud coseno negativa relativamente grande, y dos películas que tengan
 similitud coseno positivo relativamente grande.
@@ -69,18 +73,6 @@ similitud coseno positivo relativamente grande.
 sim_cos <- function(x,y){
   sum(x*y, na.rm = T)/(sqrt(sum(x^2, na.rm = T))*sqrt(sum(y^2, na.rm = T)))
 }
-# mat.cons <- matrix(NA, 5, 6)
-# mat.cons[1,1] <- 5;mat.cons[1,2] <- 5;mat.cons[1,3] <- 5;mat.cons[1,4] <- 2
-# mat.cons[2,1] <- 3;mat.cons[2,3] <- 4;
-# mat.cons[3,4] <- 5; mat.cons[3,5] <- 4
-# mat.cons[4,1] <- 1;mat.cons[4,3] <- 2;mat.cons[4,5] <- 5;mat.cons[4,6] <- 4;
-# mat.cons[5,1] <- 4; mat.cons[5,2] <- 5; mat.cons[5,6] <- 2
-# rownames(mat.cons) <- c('a','b','c','d','e')
-# colnames(mat.cons) <- c('SWars1','SWars4','SWars5','HPotter1','HPotter2','Twilight')
-# apply(mat.cons,1, mean, na.rm=TRUE)
-# mat.c <- mat.cons - apply(mat.cons,1, mean, na.rm=TRUE)
-# mat.c
-# sim_cos(mat.cons, mat.c)
 ```
 
 ```{r}
@@ -165,7 +157,30 @@ pares <- pairwise_compare(corpus_tweets[1:100], sim_cos2, progress = F)
 pares 
 ```
 
+### Pregunta 3
 
 - Escoge una película que te interese y muestra los 10 vecinos más cercanos en términos
 de similitud coseno (filtra películas usando número de pares que se usaron para calcular 
 la similitud).
+
+Sacando las pelis con más de 30,000 reviews:
+
+```{r}
+top_30 <- medias_pred %>% 
+  filter(num_pred > 30000)
+top_30 %>% left_join(pelis_nombres) %>% arrange(desc(num_pred))
+filter(dat_entrena_c[, c(1, 5,8)], peli_id==10451)
+lapply(top_30$peli_id, function(x){
+  print(x)
+}) %>% invisible
+```
+
+```{r}
+comunes2 <- inner_join(
+  filter(dat_entrena_c, peli_id==10451), 
+  filter(dat_entrena_c, peli_id==10452) %>%
+    rename(calif_c_2=calif_c), 
+  by = c("usuario_id", "usuario_id"))
+sim_cos(comunes2$calif_c, comunes2$calif_c_2)
+```
+
