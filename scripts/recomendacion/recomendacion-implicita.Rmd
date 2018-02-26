@@ -1,0 +1,194 @@
+---
+title: "Recomendación implícita"
+output: html_notebook
+---
+
+Datos de preferencia implícita de Lastfm, <http://www.dtic.upf.edu/~ocelma/MusicRecommendationDataset/lastfm-360K.html>
+
+
+## Limpieza de datos
+```{r}
+library(tidyverse)
+dat_completos <- read_delim(
+  file = '../../datos/lastfm-dataset-360K/usersha1-artmbid-artname-plays.tsv', 
+  delim = '\t', col_names = c('user_id','artist_id','name','plays'), quote="\"",
+  escape_double = FALSE, 
+  n_max = 17559730, progress = FALSE) 
+nrow(dat_completos)
+```
+
+Limpiamos algunos na's y vemos la distribución de número de *plays*
+
+```{r}
+dat_completos <- dat_completos %>% 
+  filter(!is.na(plays)) %>%
+  filter(!is.na(artist_id)) 
+nrow(dat_completos)
+quantile(dat_completos$plays, probs = seq(0, 1, 0.1))
+```
+
+En la cola superior hay valores muy grandes (casi medio millón de veces para
+un usuario y una canción). Podemos filtrar estos valores atípicos. Probamos
+por ejemplo con 5000 veces para una canción y un usuario:
+
+```{r}
+table(dat_completos$plays > 5000)
+dat_completos <- filter(dat_completos, plays <= 5000)
+```
+
+**Nota**: en estos casos, donde tenemos una cola fuertemente larga a la derecha,
+podemos usar también $c_{ij} = 1 + \alpha\log(1+r_{ij}/\epsilon)$, donde
+$\epsilon>0$ es chica (en el paper, por ejemplo, usan $\epsilon=10^{-8}$).
+
+Numeramos los usuarios y los artistas, filtramos artistas desconocidos:
+
+
+```{r}
+dat_completos$user_num <- as.integer(factor(dat_completos$user_id))
+dat_completos$artist_num <- as.integer(factor(dat_completos$artist_id))
+#Filtramos artista desconocido
+desconocidos <- dat_completos %>% 
+  filter(artist_id=='125ec42a-7229-4250-afc5-e057484327fe')
+table(desconocidos$name)
+dat_completos <- dat_completos %>% 
+  filter(artist_id != '125ec42a-7229-4250-afc5-e057484327fe')
+```
+
+Y podemos ver los artistas más populares, escogiendo un numbre (puede haber
+variaciones en el nombre que se identifican con el mismo id) para
+cada id de artistas:
+
+```{r}
+artistas <- dat_completos %>% group_by(artist_num, artist_id) %>%
+  summarise(total_plays = sum(plays), name = first(name)) %>%
+  arrange(desc(total_plays))
+artistas
+dat_completos <- dat_completos %>% ungroup %>%
+  select(-name) %>% 
+  left_join(artistas %>% select(artist_num, name)) %>%
+  group_by(user_id, artist_id, artist_num, user_num, name) %>%
+  summarise(plays = sum(plays))
+```
+
+## ALS para calificaciones implícitas
+
+```{r}
+library(sparklyr)
+sc <- spark_connect(master = "local")
+spark_set_checkpoint_dir(sc, './checkpoint')
+```
+
+
+```{r}
+lastfm_tbl <- copy_to(sc, 
+                  dat_completos %>% ungroup %>%
+                  select(user_num, artist_num, plays), 
+                  name = 'last_fm',
+                  overwrite = TRUE)
+lastfm_tbl
+rm('dat_completos')
+```
+
+
+
+```{r als-spark}
+modelo_imp <- ml_als(lastfm_tbl, 
+              rating_col = 'plays',
+              user_col = 'user_num',
+              item_col = 'artist_num', 
+              rank = 10, reg_param = 0.01,
+              implicit_prefs = TRUE, alpha = 30,
+              checkpoint_interval = 5,
+              max_iter = 30)
+# Nota: checkpoint evita que la gráfica de cálculo
+# sea demasiado grande. Cada 5 iteraciones hace una
+# nueva gráfica con los resultados de la última iteración.
+```
+
+
+Colectamos los factores de los artistas:
+
+```{r}
+V_df <- collect(modelo_imp$item_factors)
+dim(V_df)
+```
+
+
+```{r}
+head(V_df)
+```
+
+Y ahora veamos cuáles artistas son similares según nuestros factores (haz
+algunas pruebas):
+
+```{r}
+# 43514 Britney Spears
+# 87675 red hot chili peppers
+# 110757 beatles
+# 63900 metallica
+repr_artista <- V_df %>% filter(id == 43514) 
+repr_artista <- as.numeric(repr_artista[-c(1,2)])
+```
+
+```{r}
+#sim_beatles <- apply((as.matrix(V_df[, -c(1,2)]) - beatles)^2,1,mean)
+sim_artista <- t(scale(t(as.matrix(V_df[, -c(1,2)])))) %*% 
+                (repr_artista - mean(repr_artista))
+artista_df <- data_frame(artist_num = V_df$id,
+                         sim_artista = as.numeric(sim_artista)) %>% 
+  left_join(artistas) %>% arrange(desc(sim_artista))
+head(artista_df %>% filter(total_plays > 100), 20) %>%
+  select(name, sim_artista, total_plays)
+```
+
+## Evaluación del modelo
+
+Vamos a hacer una evaluación de entrenamiento para las predicciones para un subconjunto de usuarios
+
+```{r}
+set.seed(129)
+muestra_usuarios <- modelo_imp$item_factors %>% 
+  sample_n(1000) %>%
+  collect()
+muestra_usuarios
+```
+
+Esta función no es muy rápida (requerimos más memoria para hacer
+el cálculo más fácil, ¿puedes hacerlo en spark, por ejemplo?), pero podemos evaluar algunos cientos de usuarios:
+
+```{r}
+V <- as.matrix(V_df[, -c(1,2)])
+error_rank_u <- function(usuario){
+  factores_u <- muestra_usuarios %>% 
+    filter(id == usuario) %>% pull(features) %>% unlist
+  prefs_pred <- V %*% factores_u
+  prefs_df <- data_frame(prefs_pred = as.numeric(prefs_pred), 
+             user_num = usuario,
+             artist_num = V_df$id,
+             preds_rank = 1 - rank(prefs_pred)/length(prefs_pred))
+  obs_df <- lastfm_tbl %>% filter(user_num == usuario) %>% collect()
+  prefs_df <- obs_df %>% left_join(prefs_df, by = c('user_num', 'artist_num')) 
+  error_rank <- prefs_df %>% ungroup %>% 
+    summarise(rank = sum(as.numeric(preds_rank*plays))/sum(as.numeric(plays)))
+  c(error_rank = error_rank, num_evals = nrow(prefs_df))
+}
+errores_rank_entrena <- 
+  muestra_usuarios$id[100:300] %>% 
+  map(error_rank_u) %>% 
+  transpose %>% map(unlist) %>% 
+  as_data_frame
+ggplot(errores_rank_entrena, aes(x = num_evals, y = error_rank.rank)) +
+  geom_point() 
+mean(errores_rank_entrena$error_rank.rank)
+```
+
+
+### Ejercicio:
+- Escoge los factores de las personas de manera aleatoria. ¿Cómo cambia
+la distribución de *rank*?
+- Separa un conjunto de validación: selecciona un conjunto de usuarios,
+y quita al azar la mitad de sus evaluaciones.
+- Haz pruebas cambiando la regularización, el número de factores y el
+número de iteraciones. ¿Qué tan bajo puedes hacer el valor de *rank* para
+entrenamiento y validación?
+
