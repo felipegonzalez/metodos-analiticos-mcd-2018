@@ -1345,7 +1345,7 @@ nombres_evaluar <- data_frame(nombre =
                      'Being John Malkovich', 'A Clockwork Orange', 
                      'Fight Club', 'Pulp Fiction',
                      'The Terminator'))
-evals_1 <- c(3, 2, 2, 4, 3, 4, 4, 2, 4, 5, 5, 5)
+evals_1 <- c(1, 2, 2, 4, 3, 4, 4, 2, 4, 5, 5, 5)
 evals_2 <- 6 - evals_1
 nombres_evaluar$evals <- evals_1
 nombres_evaluar
@@ -1370,11 +1370,13 @@ dim(X)
 #U_0 <- test$u%*%sqrt(diag(test$d))
 #V_0 <- test$v%*%sqrt(diag(test$d))
 #inicialización
-set.seed(28051)
+set.seed(2805)
 U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
 V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
 U <- U_0
 V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
 mu <- mean(y)
 a <- rowSums(X)/rowSums(X>0) - mean(y)
 a[is.nan(a)] <- 0
@@ -1385,8 +1387,8 @@ for(iter in 1:15){
   # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
   # cambia in-place estos parámetros
   salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
-              gamma = 0.01, lambda_mat = 0.01, lambda_sesgos=0.5,
-              n_iter = 1)
+              gamma = 0.003, lambda_mat = 1, lambda_sesgos = 1,
+              n_iter = 1, num_peli, num_usu)
   error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
   error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
   sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
@@ -1400,10 +1402,11 @@ for(iter in 1:15){
 usuario_1_u <- U[100001, ]
 prefs_1 <- mu + a[100001] + b + V %*% usuario_1_u %>% as.numeric
 prefs <- data_frame(prefs = prefs_1, peli_id = 1:17770) %>% 
-  left_join(medias_pelis) %>%
+  left_join(medias_pelis, by = 'peli_id') %>%
   arrange(desc(prefs)) %>% 
   filter(num_calif_peli > 500) %>%
-  select(nombre, prefs) %>% print(n=20)
+  select(nombre, prefs) %>% top_n(100, prefs) 
+ DT::datatable(prefs)
 ```
 
 ```{r}
@@ -1412,8 +1415,9 @@ prefs_2 <- mu + a[100002] + b + V %*% usuario_2_u %>% as.numeric
 prefs <- data_frame(prefs = prefs_2, peli_id = 1:17770) %>% 
   left_join(medias_pelis) %>%
   arrange(desc(prefs)) %>% 
-    filter(num_calif_peli > 500) %>%
-  select(nombre, prefs) %>% print(n=20)
+  filter(num_calif_peli > 500) %>%
+  select(nombre, prefs) %>% top_n(100, prefs) 
+DT::datatable(prefs)
 ```
 
 
@@ -1424,26 +1428,30 @@ empezar a entender el significado de las dimensiones:
 library(ggrepel)
 V_df <- as_data_frame(V) %>% mutate(peli_id=1:nrow(V)) %>%
   left_join(medias_pelis) 
-set.seed(1225)
+set.seed(12211)
 muestra_graf <- V_df %>%
-  filter(num_calif_peli > 20000) %>%
-  sample_n(120)
+  filter(num_calif_peli > 10000) %>%
+  sample_n(100)
 ggplot(muestra_graf,
-  #filter(V_df, num_calif_peli > 5000, abs(V1^2+V2^2)> 0.5), 
-       aes(x = V1, y= V2, label=nombre, colour=media_peli,3))+
-           #colour = factor(ntile(V3,3)))) + 
-  geom_point() + geom_text_repel(size=3.5, segment.alpha = 0.3)
+       aes(x = V1, y= V2, label=nombre, colour=media_peli))+
+  geom_point() + geom_text_repel(size=3.5, segment.alpha = 0.3, direction = 'y')
 ```
 
 
 ```{r, fig.width = 10, fig.asp = 0.7}
 ggplot(muestra_graf,
-  #filter(V_df, num_calif_peli > 5000, abs(V1^2+V2^2)> 0.5), 
-       aes(x = V3, y= V4, label=nombre, colour=media_peli,3))+
-           #colour = factor(ntile(V3,3)))) + 
-  geom_point() + geom_text_repel(size=3.5, segment.alpha = 0.3)
+       aes(x = V3, y= V4, label=nombre, colour=media_peli))+
+  geom_point() + geom_text_repel(size=3.5, segment.alpha = 0.3, direction='y')
 ```
 
+En la distribución de las películas en el espacio de dimensiones podemos
+apreciar el efecto del encogimiento:
+
+```{r}
+quantile(V_df$num_calif_peli, probs = seq(0, 1, 0.1))
+ggplot(V_df, aes(x = V1, y= V2, label=nombre)) +
+  geom_point(alpha=0.5, size=0.5) + facet_wrap(~ntile(num_calif_peli, 10)) 
+```
 
 ## Más acerca del concurso de Netflix
 
