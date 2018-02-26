@@ -1497,15 +1497,22 @@ del gusto implícito, por ejemplo:
 - Cuánto tiempo pasó en la página web.
 - Cuántas veces oyó una canción.
 
-
+Estos datos tienen la ventaja de que describen acciones del usuario,
+en lugar de un rating que puede estar influido por sesgos de imagen
+o de propiedad: quizá
+disfruto muchísimo *Buffy the Vampire Slayer*, pero lo califico con un 3,
+aunque un documental de ballenas que me simplemente me gustó le pongo un 5.
+En los datos implícitos se vería de todas formas mi consumo frecuente
+de *Buffy the Vampire Slayer*, y quizá unos cuantos de documentales 
+famosos.
 
 Sea $r_{ij}$ una medida implícita como las mencionadas arriba, para el usuario
 $i$ y el artículo $j$. Ponemos $r_{i,j}=0$ cuando no ha habido interacción
 entre este usuario y el artículo. 
 
 
-La diferencia importante con los ratings explícitos es que los datos
-implícitos son menos informativos que los explícitos:
+Una diferencia importante con los ratings explícitos es que los datos
+implícitos son en un sentido menos informativos que los explícitos:
 
 - Puede ser que el valor de $r_{ij}$ sea relativamente bajo (pocas interacciones), pero de todas formas se trate de un artículo que es muy preferido (por ejemplo, solo vi Star Wars I una vez, pero me gusta mucho). Esto no pasa con los ratings, pues ratings bajos indican baja preferencia.
 
@@ -1545,7 +1552,7 @@ Nótese la diferencia con el caso explícito. En este caso, los valores
 de $c_{ij}$ (confianza) actúan como un pesos en el ajuste de
 los factores, indicando que valores de $r_{ij}$ son más informativos y
 deben contribuir más en el ajuste. Adicionalmente, los valores
-para los cuales $p_{ij}=0$ son los que reciben el peso mínimo (c_{ij}=1).
+para los cuales $p_{ij}=0$ son los que reciben el peso mínimo ($c_{ij}=1$).
 
 Igual que en los ejemplos anteriores, usualmente se agregan términos
 de regularización para los vectores renglón $u_i$ y $v_j$. Como en
@@ -1555,13 +1562,13 @@ alternados.
 ### Evaluación para modelos implícitos
 
 La evaluación para modelos implícitos no es tan simple como
-en el caso explícito. La diferencia es que algunas observaciones
-que son 0 para un usuario pueden deberse a diversas razones, y no 
-significa que ese item no le gustaría al usuario. Medidas
-como RECM o MAD no son tan apropiadas para este problema. 
+en el caso explícito, pues no estamos modelando
+directamente los valores observados $r_{ij}$.  Medidas
+como RECM o MAD que usamos en el caso explícito
+no son tan apropiadas para este problema. 
 
-Una alternativa es, para cada usuario $i$ ordenar los artículos de 
-mayor a menor valor de $\hat{p}_{ij}} = u_iv_j^t$ , 
+Una alternativa es, para cada usuario $i$, ordenar los artículos de 
+mayor a menor valor de $\hat{p}_{ij} = u_iv_j^t$ , 
 seleccionar una lista de los mejores $K$ artículos
 (canciones, pellículas), y calcular
 
