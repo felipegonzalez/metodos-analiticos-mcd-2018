@@ -806,7 +806,7 @@ Por otro lado, tenemos descriptores de 5 usuarios:
 $$u=(2,3,-3,0,1)$$
 que dice que a los primeros dos usuarios les gustan las películas serias, al tercero le gustan las divertidas, y los dos últimos no tienen preferencia clara a lo largo de esta dimensión.
 
-Qusiéramos predecir el gusto usando estos dos vectores. Nuestras predicciones (considerando que u y v son vectores renglón) serían simplemente
+Qusiéramos predecir el gusto usando estos dos vectores. Nuestras predicciones (considerando que u y v son matrices de una columna) serían simplemente
 
 $$\tilde{X} = u v^t$$
 
@@ -868,6 +868,11 @@ V
 U %*% t(V)
 ```
 
+- El renglón $j$ de $U$ son los valores en las dimensiones latentes para
+la película $i$ (descriptores de usuarios).
+- El renglón $j$ de $V$ son los valores en las dimensiones latentes para
+el usuario $j$ (descriptores de películas)
+
 
 ```{block2, type ="resumen"}
 Con $k$ dimensiones latentes, el modelo que proponemos es:
@@ -892,9 +897,28 @@ $$\tilde{x}_{ij} =\sum_k u_{ik} v_{jk}$$
 que expresa el hecho de que el gusto de $i$ por $j$ depende de una combinación (suma)
 de factores latentes de películas ponderados por gusto por esos factores del usuario.
 
+
+El número de factores latentes $k$ debe ser seleccionado (por ejemplo, según el error de validación). Dado $k$, para encontrar $U$ y $V$ (un total de $k(m+n)$ parámetros) buscamos
+minimizar 
+
+$$\sum_{(i,j)\, obs} (x_{ij}-\tilde{x}_{ij})^2,$$
+
+
+que también podemos escribir este problema (recuérdese que $u_i$ y
+$v_j$ aquí son vectores renglón) como
+
+$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_iv_j^t)^2$$
+donde $u_i$ es el renglón $i$-esimo de $U$ (gustos latentes del usuario $i$ en cada dimensión), y $v_j$ es el renglón $j$-ésimo de la matriz $V$ (calificación latente de la película en cada dimensión)
+
+
 ```{block2, type='resumen'}
+**¿Por qué funciona la idea de factores latentes?**
+
 - El método de factorización de matrices de grado bajo ($k$)
-funciona compartiendo información a lo largo de películas y usuarios. 
+funciona compartiendo información a lo largo de películas y usuarios. Como tenemos
+que ajustar los datos observados, y solo tenemos a nuestra disposición $k$
+  descriptores para cada película y usuario, una minimización exitosa
+captura regularidades en los datos.
 
 - Es importante que la representación sea de grado relativamente bajo,
 pues esta "compresión" es la que permite que las dimensiones 
@@ -902,20 +926,16 @@ latentes capturen regularidades que están en los datos observados (que
 esperamos encontrar en el proceso de ajuste). 
 ```
 
-El número de factores latentes $k$ debe ser seleccionado (por ejemplo, según el error de validación). Dado $k$, para encontrar $U$ y $V$ (un total de $k(m+n)$ parámetros) buscamos
-minimizar 
 
-$$\sum_{(i,j)\, obs} (x_{ij}-\tilde{x}_{ij})^2$$
-que escribimos como
-$$\min_{\tilde{X} = UV^t}||X-\tilde{X}||^2_{obs}$$
-**Observación** Esta es la norma de Frobenius, pero calculada solamente
-sobre las calificaciones observadas.
-
-Finalmente, también podemos escribir este problema (recuérdese que $u_i$ y
-$v_j$ aquí son vectores renglón) como
-
-$$\min_{U,V}\sum_{(i,j)\, obs} (x_{ij}-u_iv_j^t)^2$$
-donde $u_i$ es el renglón $i$-esimo de $U$ (gustos latentes del usuario $i$ en cada dimensión), y $v_j$ es el renglón $j$-ésimo de la matriz $V$ (calificación latente de la película en cada dimensión)
+Por ejemplo, supongamos que el gusto por las películas sólo depende de
+una dimensión seria - divertida. Si ajustamos un modelo de un solo
+factor latente, un **mínimo** se alcanzaría separando con la dimensión latente
+las películas serias de las divertidas, y los usuarios que prefieren películas
+serias o divertidas. Esta sería una buena explicación de los datos observados,
+y las predicciones para películas no vistas sería buena usando simplemente
+el valor en seriedad de la película (extraída de otras personas con gustos
+divertido o serio) y el gusto por seriedad de esa persona (extraida de la 
+observación de que le gustan otras películas serias u otras divertidas).
 
 ### Combinación con modelo base
 
