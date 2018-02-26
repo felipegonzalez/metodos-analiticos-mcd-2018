@@ -974,7 +974,7 @@ $$
 X \approx UV^t
 $$
 Ahora supongamos que conocemos $V_1$. Si este es el caso, entonces queremos
-resolver
+resolver para $U_1$:
 $$ \min_{U_1}|| X - U_1V_1^t||_{obs}^2$$
 Como $V_1^t$ están fijas, este es un problema de mínimos cuadrados usual, y puede resolverse analíticamente (o usar descenso en gradiente, que
 es simple de calcular de forma analítica) para encontrar $U_1$. Una vez que encontramos $U_1$, la fijamos, e intentamos ahora resolver para $V$:
@@ -1261,14 +1261,14 @@ pocas evaluaciones).
 La función a minimizar es ahora
 
 $$
-L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i,l}v_{j,l})^2 +
-\lambda \left ( \sum_i ||u_i||^2 + \sum_j ||v_j||^2 + \sum_i a_i^2 + \sum_i b_j^2 \right )
+L =  \sum_{(i,j) obs}\left ( (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i,l}v_{j,l})^2 +
+\lambda \left (  ||u_i||^2 +  ||v_j||^2 +  a_i^2 + b_j^2 \right )\right)
 $$
 
 donde también es posible usar parámetros de regularización distintos ($\lambda$) para
 los vectores y los sesgos.
 
-```{block2, type = 'comentario'}
+```{block2, type = 'resumen'}
 Sea $\gamma >0$ el tamaño de paso (tasa de aprendizaje) de descenso estocástico,
 y $\lambda \geq 0$ una constante de regularización
 Para cada evaluación $x_{i,j}$, la actualización de descenso está dada por,
@@ -1294,7 +1294,9 @@ $$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \lambda b_j^{(n)} \right )$$
 Inicializamos las matrices $U$ y $V$ con valores aleatorios chicos.
 ```
 
-Puedes ver [este video](https://www.youtube.com/watch?v=GGWBMg0i9d4&index=56&list=PLLssT5z_DsK9JDLcT8T62VtzwyW9LNepV) de nuestro libro de texto
+Puedes ver [este video](https://www.youtube.com/watch?v=GGWBMg0i9d4&index=56&list=PLLssT5z_DsK9JDLcT8T62VtzwyW9LNepV) de nuestro libro de texto. El planteamiento
+es ligeramente diferente (el parámetro $lambda$ se trata de manera diferente), pero
+las ideas básicas son las mismas.
 
 ### Ejemplo (netflix)
 Usaremos una  implementación en C++ para tener mejor desempeño 
@@ -1458,7 +1460,7 @@ es antes o después del cambio).
 En esta gráfica vemos el promedio local de las calificaciones conforme
 transcurre el tiempo:
 
-```{r, fig.width = 0.6, fig.asp=0.7}
+```{r, fig.width = 6, fig.asp=0.7}
 library(lubridate)
 ggplot(sample_n(dat_entrena, 5000), aes(x= ymd(fecha), y = calif)) + 
   geom_smooth(method = 'loess', span=0.3, lambda = 1)
