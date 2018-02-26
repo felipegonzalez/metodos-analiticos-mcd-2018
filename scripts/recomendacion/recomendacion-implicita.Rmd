@@ -13,7 +13,7 @@ dat_completos <- read_delim(
   file = '../../datos/lastfm-dataset-360K/usersha1-artmbid-artname-plays.tsv', 
   delim = '\t', col_names = c('user_id','artist_id','name','plays'), quote="\"",
   escape_double = FALSE, 
-  n_max = 17559730) 
+  n_max = 17559730, progress = FALSE) 
 nrow(dat_completos)
 ```
 
@@ -96,10 +96,10 @@ modelo_imp <- ml_als(lastfm_tbl,
               rating_col = 'plays',
               user_col = 'user_num',
               item_col = 'artist_num', 
-              rank = 10, reg_param = 0.0001,
-              implicit_prefs = TRUE, alpha = 20,
+              rank = 10, reg_param = 0.01,
+              implicit_prefs = TRUE, alpha = 30,
               checkpoint_interval = 5,
-              max_iter = 20)
+              max_iter = 30)
 # Nota: checkpoint evita que la gráfica de cálculo
 # sea demasiado grande. Cada 5 iteraciones hace una
 # nueva gráfica con los resultados de la última iteración.
@@ -179,6 +179,7 @@ errores_rank_entrena <-
   as_data_frame
 ggplot(errores_rank_entrena, aes(x = num_evals, y = error_rank.rank)) +
   geom_point() 
+mean(errores_rank_entrena$error_rank.rank)
 ```
 
 
