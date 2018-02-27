@@ -1261,7 +1261,7 @@ pocas evaluaciones).
 La función a minimizar es ahora
 
 \begin{equation}
-L =  \sum_{(i,j) obs} (x_{ij} - a_i - b_j - \sum_{l=1}^k u_{i,l}v_{j,l})^2 +
+L =  \sum_{(i,j) obs} (x_{ij} - \mu - a_i - b_j - \sum_{l=1}^k u_{i,l}v_{j,l})^2 +
 \lambda \left (  \sum_i ||u_i||^2 +  \sum_j ||v_j||^2 +  \sum_i a_i^2 + \sum_j b_j^2 \right )
 (\#eq:regdescenso)
 \end{equation}
@@ -1288,11 +1288,13 @@ v_j^{(n+1)} = v_j^{(n)} + \gamma \left ( e_{i,j} u_j^{(n)} -  \frac{\lambda}{m_j
 $$
 
 
-Para los sesgos, las actualizaciones son:
+Para los sesgos, las actualizaciones son (no regularizamos la media global):
 
-$$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \frac{\lambda}{n_i} a_i^{(n)} \right )$$
+$$mu^{(n+1)} = mu^{(n)} + \gamma e_{i,j}$$
   
-$$a_i^{(n+1)} = \gamma \left ( e_{i,j} - \frac{\lambda}{m_j} b_j^{(n)} \right )$$
+$$a_i^{(n+1)} = a_i^{(n)} + \gamma \left ( e_{i,j} - \frac{\lambda}{n_i} a_i^{(n)} \right )$$
+  
+$$b_j^{(n+1)} = b_i^{(n+1)} + \gamma \left ( e_{i,j} - \frac{\lambda}{m_j} b_j^{(n)} \right )$$
   
 Inicializamos las matrices $U$ y $V$ con valores aleatorios chicos.
 ```
