@@ -14,7 +14,6 @@ de estas páginas filtradas.
 - Es crucial usar la importancia de los *in-links* de una página: si no, sería tambíen fácil crear muchas páginas spam que apunten a otra dada para aumentar
 su importancia.
 
-
 El *Pagerank*, más en general, es una medida de *centralidad* o *importancia* de los nodos de una red dirigida. Comenzaremos considerando redes más variadas (por ejemplo, redes sociales) y el concepto general de *centralidad*.
 
 ### Centralidad en redes 
@@ -37,29 +36,120 @@ o la de *seguidor*.  Importancia: número de amigos o seguidores (grado de entra
 
 (Gráfica creada con *Gephi*).
 
-## Representación de redes
+## Tipos de redes y su representación
 
-Podemos representar redes de varias maneras. Por ejemplo, dada la 
-siguiente gráfica
+Una red es un conjunto de *nodos* conectados por algunas *aristas*. 
+Las aristas pueden ser 
 
-```{r, fig.width=6, fig.asp=0.7}
+- Dirigidas: hay un nodo origen y un nodo destino.
+- No dirigidas: una arista representa una conexión simétrica entre dos nodos.
+
+Podemos representar redes de varias maneras. Una primera manera
+es con una lista de pares de *vértices* o *nodos* 
+que están conectados por una *arista*. Por ejemplo, para una red dirigida:
+
+```{r, fig.width=4, fig.asp=0.7, message = FALSE, warning = FALSE}
 library(tidyverse)
 library(tidygraph)
 library(ggraph)
-red_1 <- igraph::graph_from_literal(1--2 ,1--3, 1--4, 1--5, 2--3) 
-plot(red_1)
+aristas <- data_frame(from = c(1, 1, 1, 1, 2), 
+                      to =   c(2, 3, 4, 5, 3))
+aristas
 ```
 
 ```{r}
-red_tbl <- as_tbl_graph(red_1)
-
+red_tbl <- tidygraph::as_tbl_graph(aristas, directed = TRUE)
+red_tbl
 ```
 
+Que podemos visualizar como sigue:
+
+```{r, fig.width = 6, fig.asp = 0.7}
+graficar_red <- function(red_tbl){
+  ggraph(red_tbl) + 
+    geom_edge_link(arrow = arrow(), end_cap = circle(4, 'mm')) +
+    geom_node_point(size = 10, colour = 'salmon') +
+    geom_node_text(aes(label = name)) +
+    theme_graph() + coord_fixed()
+}
+graficar_red(red_tbl)
+```
+
+También es posible representar una red mediante una **matriz de adyacencia**. 
+
+La matriz de adyacencia para una red es la matriz $A$ tal que
+$$A_{ij} = 1$$
+si existe una arista de $i$ a $j$. En el caso dirigido, $A$ es una
+matriz simétrica.
+
 ```{r}
-ggraph(graph_1, layout = 'fr', start.temp=100) +
-  geom_edge_link(aes(alpha=hyper_lift), colour = 'red',arrow = arrow(length = unit(4, 'mm'))) + 
-      geom_node_point(aes(size = centrality, colour = centrality)) + 
-      geom_node_text(aes(label = name), size=4,
-                   colour = 'gray20', repel=TRUE) +
+matriz_ad <- igraph::get.adjacency(red_tbl)
+matriz_ad
+```
+
+Es más conveniente representar estas matrices como matrices ralas,
+como veremos más adelantes.
+
+**Nota de R**: utilizamos el paquete *tidygraph* y **ggraph** para hacer manipulaciones de gráficas graficación. Estos paquetes son extensiones
+del paquete  *igraph*, que es el que contiene los algoritmos de visualización, procesamiento
+y resumen de redes.
+
+
+## Visualización de redes
+
+Existen varios algoritmos para visualizar redes que revelan distintos aspectos de su estructura (ver por ejemplo *?layout* en R, en el paquete igraph). 
+Para examinar redes de tamaño relativamente
+chico, el algoritmo de visualización es importante para determinar qué podemos
+entender de la red.
+
+Por ejemplo, aquí construimos una red aleatoria, y hacemos un *layout* de
+nodos aleatorio:
+
+```{r, fig.width = 6, fig.asp = 0.7}
+set.seed(123)
+g <- play_erdos_renyi(20, 0.05) %>% as_tbl_graph()
+ggraph(g, layout = 'randomly') +
+  geom_edge_link() +
+  geom_node_point(size = 2, colour = 'salmon') +
   theme_graph()
 ```
+
+Y comparamos con un algoritmo basado en fuerzas.
+
+```{r, fig.width = 6, fig.asp = 0.7}
+ggraph(g, layout = 'graphopt') +
+  geom_edge_link() +
+  geom_node_point(size = 2, colour = 'salmon') +
+  theme_graph()
+```
+
+```{block2, type='resumen'}
+Los algoritmos basados en fuerzas para representar redes en 2 o 3 dimensiones se basan principalmente en la siguiente idea:
+
+- Las aristas actúan como resortes, que no permiten que nodos ligados se alejen mucho
+- Los nodos tienen fuerzas de repulsión entre ellos (la analogía física es de cargas elécricas)
+- El algoritmo de representación intenta minimizar la configuración del sistema de resortes y cargas.
+```
+
+Hay muchas variaciones de estos algoritmos, por ejemplo: *graphopt* en igraph, 
+fruchtermann-rheingold, kamada-kawai, gem, escalamiento multidimensional, etc.
+
+
+### Ejercicio
+- Para la gráfica anterior, intenta usar los algoritmos *kk* o *fr*. Busca qué parámetros
+puedes cambiar en el algoritmo y experimenta cambiándolos (cuánta repulsión, rigidez
+de los resortes, número de iteraciones, etc.)
+
+
+Otras familias de algoritmos intentan distintas estrategias, como los layout
+de círculo, estrella, para árboles, etc.
+
+```{r, fig.width = 6, fig.asp = 0.7}
+ggraph(g, layout = 'circle') +
+  geom_edge_link() +
+  geom_node_point(size = 2, colour = 'salmon') +
+  theme_graph()
+```
+
+
+
