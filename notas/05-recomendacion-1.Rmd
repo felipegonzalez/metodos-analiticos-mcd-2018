@@ -1625,6 +1625,22 @@ un tamaño razonable de de datos de validación.
 
 
 
+## Tarea (para 5 de marzo) {-}
+
+
+- Intenta usar unos 20- 30 factores latentes para el ejemplo
+de descenso estocástico. Puede ser que tengas que cambiar el 
+parámetro de regularización para obtener mejor desempeño. ¿Cómo
+se comparan los errores de entrenamiento y validación en cada caso?
+
+- En el ejemplo de descenso estocástico, escoge algunas películas
+adicionales y calificalas con tus propios gustos (o algún prototipo
+de gustos que se te ocurrra). Examina las recomendaciones que produces.
+
+- Haz algunos experimentos con el
+parámetro de regularización en el ejemplo de mínimos cuadrados
+alternados (por ejemplo 0.001, 0.1, 1.0). ¿Qué observas en el error
+de validación? 
 
 
 
