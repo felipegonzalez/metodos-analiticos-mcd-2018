@@ -1346,7 +1346,7 @@ j_val <- dat_valida$peli_id
 y_val <- dat_valida$calif
 ```
 
-Podemos agregar tamibén dos usuarios nuevos con evaluaciones
+Podemos agregar también dos usuarios nuevos con evaluaciones
 opuestas (puedes llenar con tus preferencias)
 ```{r}
 i_usuario_1 <- rep(100001, 12)
@@ -1520,15 +1520,16 @@ del gusto implícito, por ejemplo:
 
 Estos datos tienen la ventaja de que describen acciones del usuario,
 en lugar de un rating que puede estar influido por sesgos de imagen
-o de propiedad: quizá
+o de la calificación que "debería" tener un artículo además 
+de la preferencia: quizá
 disfruto muchísimo *Buffy the Vampire Slayer*, pero lo califico con un 3,
-aunque un documental de ballenas que me simplemente me gustó le pongo un 5.
+aunque un documental de ballenas que simplemente me gustó le pongo un 5.
 En los datos implícitos se vería de todas formas mi consumo frecuente
 de *Buffy the Vampire Slayer*, y quizá unos cuantos de documentales 
 famosos.
 
 Sea $r_{ij}$ una medida implícita como las mencionadas arriba, para el usuario
-$i$ y el artículo $j$. Ponemos $r_{i,j}=0$ cuando no ha habido interacción
+$i$ y el artículo $j$. Ponemos $r_{i,j}=0$ cuando no se ha observado interacción
 entre este usuario y el artículo. 
 
 
@@ -1537,7 +1538,7 @@ implícitos son en un sentido menos informativos que los explícitos:
 
 - Puede ser que el valor de $r_{ij}$ sea relativamente bajo (pocas interacciones), pero de todas formas se trate de un artículo que es muy preferido (por ejemplo, solo vi Star Wars I una vez, pero me gusta mucho). Esto no pasa con los ratings, pues ratings bajos indican baja preferencia.
 
-- Sin embargo, estamos seguros de que niveles altos de interacción (vio muchas veces una canción, etc.), es indicación de preferencia alta.
+- Sin embargo, estamos seguros de que niveles altos de interacción (oyó muchas veces una canción, etc.), es indicación de preferencia alta.
 
 - Así que en nuestro modelo no necesariamente queremos predecir directamente la variable $r_{ij}$: puede haber artículos con predicción baja de $r_{ij}$ que
 descubramos de todas formas van a ser altamente preferidos.
@@ -1562,7 +1563,7 @@ donde $\alpha$ es un parámetro que hay que afinar (por ejemplo $\alpha$ entre 1
 $\alpha = 40$, donde $r_{ij}$ es el número de veces que el usuario ha visto
 un programa (contando vistas parciales, así que es un número real).
 
-Y la función objetivo se define como
+La función objetivo (sin regularización) se define como
 
 \begin{equation}
 L =  \sum_{(i,j)} c_{ij}(p_{ij}  - \sum_{l=1}^k u_{i,l}v_{j,l})^2
