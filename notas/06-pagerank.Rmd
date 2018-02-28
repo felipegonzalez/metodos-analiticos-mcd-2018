@@ -1,0 +1,65 @@
+# Pagerank y análisis de redes
+
+## Introducción
+
+**Pagerank** asigna un número real a cada página de una red (web). Este número es un indicador de su importancia. Las ideas fundamentales son: 
+
+- Las páginas de internet forman una red o gráfica, donde los nodos son las páginas y las aristas dirigidas son las ligas de unas páginas a otras.
+- La importancia de un página A depende de cuántas otras páginas apuntan a la página A. También depende de qué tan importantes sean las páginas que apuntan a A.
+- Cuando hacemos una búsqueda, primero se filtran las páginas que tienen el contenido
+de nuestra búsqueda, y después los resultados se ordenan según el pagerank
+de estas páginas filtradas.
+- ¿Qué problema resuelve? En un principio, se usaron métodos como índices y recuperación de documentos usando técnicas como tf-idf. El problema es que es muy fácil que un *spammer* sesgue los resultados para que sus páginas tengan alto nivel de relevancia en este sentido. Así que la importancia no se juzga sólo con el contenido,  sino de los *votos* de otras páginas importantes. Este es un sistema más difícil de engañar.
+
+- Es crucial usar la importancia de los *in-links* de una página: si no, sería tambíen fácil crear muchas páginas spam que apunten a otra dada para aumentar
+su importancia.
+
+
+El *Pagerank*, más en general, es una medida de *centralidad* o *importancia* de los nodos de una red dirigida. Comenzaremos considerando redes más variadas (por ejemplo, redes sociales) y el concepto general de *centralidad*.
+
+### Centralidad en redes 
+
+Consideremos una red de personas, que representamos como una gráfica $G$ no dirigida. Las personas son los nodos y sus relaciones se representan con aristas no dirigidas.
+
+Quiséramos construir una medida de importancia o centralidad de una persona dentro de la red. Por ejemplo:
+
+- Redes sociales de internet: las ligas representan relación de *amigos*,
+o la de *seguidor*.  Importancia: número de amigos o seguidores (grado de entrada o salida).
+- Redes de citas bibliográficas: las ligas representan quién comparte o usa la información de quién. Importancia: número de citas o usos, ser citado por alguien importante, etc. 
+- Red de empleados de una oficina: las ligas representan interacciones en algún periodo. Importancia: quién puede conectar de manera más inmediata a dos personas.
+
+
+### Ejemplo de Moviegalaxies.com: Pulp Fiction {-}
+
+ Dos personajes están ligados si tienen interacciones en la película. El tamaño y color de los nodos dependen de su "centralidad" en la red.
+
+![Pulp fiction](./imagenes/pulpfiction.png)
+
+(Gráfica creada con *Gephi*).
+
+## Representación de redes
+
+Podemos representar redes de varias maneras. Por ejemplo, dada la 
+siguiente gráfica
+
+```{r, fig.width=6, fig.asp=0.7}
+library(tidyverse)
+library(tidygraph)
+library(ggraph)
+red_1 <- igraph::graph_from_literal(1--2 ,1--3, 1--4, 1--5, 2--3) 
+plot(red_1)
+```
+
+```{r}
+red_tbl <- as_tbl_graph(red_1)
+
+```
+
+```{r}
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=hyper_lift), colour = 'red',arrow = arrow(length = unit(4, 'mm'))) + 
+      geom_node_point(aes(size = centrality, colour = centrality)) + 
+      geom_node_text(aes(label = name), size=4,
+                   colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
