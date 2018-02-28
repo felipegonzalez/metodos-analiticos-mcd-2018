@@ -1572,8 +1572,9 @@ L =  \sum_{(i,j)} c_{ij}(p_{ij}  - \sum_{l=1}^k u_{i,l}v_{j,l})^2
 
 Nótese la diferencia con el caso explícito. En este caso, los valores
 de $c_{ij}$ (confianza) actúan como un pesos en el ajuste de
-los factores, indicando que valores de $r_{ij}$ son más informativos y
-deben contribuir más en el ajuste. Adicionalmente, los valores
+los factores, indicando que valores altos de $r_{ij}$ son más informativos y
+deben contribuir más en el ajuste, sin descalificar que un
+artìculo con $r_{ij$ bajo puede ser preferido. Adicionalmente, los valores
 para los cuales $p_{ij}=0$ son los que reciben el peso mínimo ($c_{ij}=1$).
 
 Igual que en los ejemplos anteriores, usualmente se agregan términos
@@ -1590,9 +1591,7 @@ como RECM o MAD que usamos en el caso explícito
 no son tan apropiadas para este problema. 
 
 Una alternativa es, para cada usuario $i$, ordenar los artículos de 
-mayor a menor valor de $\hat{p}_{ij} = u_iv_j^t$ , 
-seleccionar una lista de los mejores $K$ artículos
-(canciones, pellículas), y calcular
+mayor a menor valor de $\hat{p}_{ij} = u_iv_j^t$ (canciones, pellículas), y calcular
 
 $$
 rank = \frac{\sum_{j} p_{ij}rank_{i,j}}{\sum_j p_{ij}}
