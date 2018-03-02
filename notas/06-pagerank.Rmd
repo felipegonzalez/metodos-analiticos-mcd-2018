@@ -439,7 +439,7 @@ desc_A
 
 Las medida de centralidad da entonces, en este caso:
 
-```{r, dev='pdf', fig.width=2, fig.height=1}
+```{r, fig.width=4}
 x <- desc_A$vectors[,1]
 x
 par(mar=c(0,0,0,0)); plot(red_6, vertex.size  = 100*x)
@@ -452,7 +452,7 @@ Sin embargo, puede ser que obtengamos más de un valor propio no negativo con
 vectores asociados no negativos, por ejemplo:
 
 
-```{r, dev='pdf', fig.width=2, fig.height=1, message=FALSE}
+```{r, fig.width=6, message=FALSE}
 red <- igraph::graph(c(1,2,2,3,3,1,2,4,5,6), directed = FALSE)
 par(mar=c(0,0,0,0)); plot(red, vertex.size=50)
 A_red <- igraph::get.adjacency(red)
@@ -489,7 +489,7 @@ que $(A^m)_{i,j} > 0$.
 Si $A$ es una matriz no-negativa irreducible, entonces
 
 - Existe un valor
-propio real *no-negativo* $\lambda_0$ tal que $\lambda_0 \geq |\lambda|$ para cualquier otro valor propio $\lambda$ de $A$, asociado a un vector propio $x$ con entradas positivas.
+propio real *no-negativo* $\lambda_0$ tal que $\lambda_0 > |\lambda|$ para cualquier otro valor propio $\lambda$ de $A$, asociado a un vector propio $x$ con entradas positivas.
 - No existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$.
 ```
 
@@ -572,7 +572,7 @@ Estos conceptos pueden generalizarse para gráficas dirigidas, cuando hay un con
 
 Consideremos en particular cómo se calcula la centralidad de eigenvector para una red dirigida.
 
-```{r, fig.height=3, fig.width=3, dev='pdf'}
+```{r, fig.width=4}
 set.seed(2801)
 red.6 <- igraph::erdos.renyi.game(5, p.or.m=0.5, directed=T)
 par(mar=c(0,0,0,0))
