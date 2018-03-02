@@ -65,14 +65,14 @@ red_tbl
 Que podemos visualizar como sigue:
 
 ```{r, fig.width = 6, fig.asp = 0.7}
-graficar_red <- function(red_tbl){
+graficar_red_dirigida <- function(red_tbl){
   ggraph(red_tbl) + 
     geom_edge_link(arrow = arrow(), end_cap = circle(4, 'mm')) +
     geom_node_point(size = 10, colour = 'salmon') +
     geom_node_text(aes(label = name)) +
     theme_graph() + coord_fixed()
 }
-graficar_red(red_tbl)
+graficar_red_dirigida(red_tbl)
 ```
 
 También es posible representar una red mediante una **matriz de adyacencia**. 
@@ -178,7 +178,7 @@ con el caso **no dirigido**. Medidas básicas de centralidad son
 - **Betweeness**: qué tan importante o única es un nodo para conectar otras dosnodos de la red (por ejemplo, una persona con betweeness alto controla más fácilmente el flujo de información en una red social). 
 - **Cercanía**: qué tan lejos en promedio están los otros nodos de la red (pues puede encontrar y conectar más fácilmente otras dos en la red).
 
-- **Centralidad de eigenvector/Pagerank**: la centralidad de un nodo es una especie de promedio de la centralidad de sus vecinos, lo cual es una definición apartentemente circular.
+- **Centralidad de eigenvector/Pagerank**: la centralidad de un nodo es una especie de promedio de la centralidad de sus vecinos.
 
 ### Grado
 
@@ -189,22 +189,27 @@ $$c_G(i)=\sum_{j\leq i} A_{i,j}.$$
 que cuenta cúantas aristas conectan con el nodo $i$.
 
 ```{r}
+graficar_red_nd <- function(dat_g){
+  ggraph(dat_g, layout = 'kk') +
+  geom_edge_link() +
+  geom_node_point(aes(size = importancia), colour = 'salmon') +
+  geom_node_text(aes(label = nombre), nudge_y = 0.2) +
+  theme_graph(base_family = 'sans')
+}
+
 g_grado <- g %>% activate(nodes) %>%
   mutate(importancia = centrality_degree()) %>%
   mutate(nombre = 1:20) 
-ggraph(g_grado, layout = 'kk') +
-  geom_edge_link() +
-  geom_node_point(aes(size = importancia), colour = 'salmon') +
-  geom_node_text(aes(label = nombre)) +
-  theme_graph()
+
+graficar_red_nd(g_grado)
 ```
 
 
 #### ¿Qué no captura el grado como medida de centralidad? {-}
 
 ```{block2, type='resumen'}
-El **grado** es una medida local que no toma en cuenta la topología de la red, que
-puede indicar que un nodo es importante más allá de la incidencia local de aristas
+El **grado** es una medida local que no toma en cuenta la topología más global
+de la red: cómo están conectados nodos más lejanos alrededor del nodo que nos interesa.
 ```
 
 #### Distancia a otros nodos {-}
@@ -217,12 +222,7 @@ g_simple <- igraph::graph(c(1, 2, 2, 3, 3, 4, 4, 5), directed = FALSE) %>%
   as_tbl_graph() %>%
   mutate(importancia = centrality_degree()) %>%
   mutate(nombre  = LETTERS[1:5])
-
-ggraph(g_simple) +
-  geom_edge_link() +
-  geom_node_point(aes(size = importancia), colour = 'salmon') +
-  geom_node_text(aes(label = nombre)) +
-  theme_graph(base_family = 'sans')
+graficar_red_nd(g_simple)
 ```
 
 Obsérvese en este ejemplo que el nodo $C$ es más importante que $D$, en el sentido
@@ -242,12 +242,7 @@ red_3 <- igraph::graph(c(triangulo_1, triangulo_2, c(7,1,7,4)), directed = FALSE
   as_tbl_graph() %>%
   mutate(importancia = centrality_degree()) %>%
   mutate(nombre  = LETTERS[1:7])
-
-ggraph(red_3) +
-  geom_edge_link() +
-  geom_node_point(aes(size = importancia), colour = 'salmon') +
-  geom_node_text(aes(label = nombre), nudge_y = 0.2) +
-  theme_graph(base_family = 'sans')
+graficar_red_nd(red_3)
 ```
 
 #### Nodos conectados a otros nodos importantes {-}
@@ -255,26 +250,23 @@ ggraph(red_3) +
 En la siguiente gráfica el nodo $H$ tienen el mismo grado que $F$, pero
 $H$ está conectado a un nodo más importante ($A$)
 ```{r}
-red_4 <- igraph::graph(c(2,1,3,1,4,1,5,1,2,3,6,2,1,7,1,8), directed=FALSE)%>% 
+red_4 <- igraph::graph(c(2,1,3,1,4,1,5,1,2,3,6,2,1,7,1,8), directed=FALSE) %>% 
   as_tbl_graph() %>%
   mutate(importancia = centrality_degree()) %>%
   mutate(nombre  = LETTERS[1:8])
-
-ggraph(red_4) +
-  geom_edge_link() +
-  geom_node_point(aes(size = importancia), colour = 'salmon') +
-  geom_node_text(aes(label = nombre), nudge_y = 0.2) +
-  theme_graph(base_family = 'sans')
+graficar_red_nd(red_4)
 ```
 
 
 ### Medida de centralidad: *Betweeness*.
 
 La medida de centralidad *betweeness* de un nodo $i$ se define como:
-$$c_b (i) = \sum_{j<k, j,k\neq i} g_{jk} (i) / g_{jk},$$
-donde 
-$g_{jk}$ es el número de caminos más cortos distintos entre $j$ y $k$ y 
-$g_{jk}(i)$ es el número de caminos más cortos distintos entre $j$ y $k$ que pasan por $i$. 
+$$c_b (u) = \sum_{j<k, u\neq j,u\neq i} g(j,k |u) / g(j,k),$$
+donde
+
+- $g(j,k)$ es el número de caminos más cortos distintos entre $j$ y $k$ y 
+- $g(j,k |i)$ es el número de caminos más cortos distintos entre $j$ y $k$ que pasan por $i$. 
+- $g(j,k | i ) = 0$ cuando $j=i$ o $k=i$.
 
 - Los caminos que más aportan al betweeness de un nodo $i$ son los que no tienen otra alternativa más que pasar por $i$.
 
@@ -283,27 +275,25 @@ $$\overline{c}_b (i)=c_b (i)/\binom{n-1}{2},$$
 pues el denominador es el máximo valor de betweeness que puede alcanzar un vértice
 en una red de $n$ nodos. 
 
-*Betweenness*: ejemplo
+#### Ejemplo {-}
 
-```{r, tidy=FALSE, dev='pdf', fig.width=4, fig.height=3}
+```{r, fig.width=4, align='center'}
 red_4 <- igraph::graph(c(2,1,3,1,4,1,5,1,2,3,6,2,2,5,1,6,6,7), directed = FALSE) %>% 
   as_tbl_graph() %>%
-  mutate(betweeness = centrality_betweenness()) %>%
+  mutate(importancia = centrality_betweenness()) %>%
   mutate(nombre  = LETTERS[1:7])
-ggraph(red_4) +
-  geom_edge_link() +
-  geom_node_point(aes(size = betweeness), colour = 'salmon') +
-  geom_node_text(aes(label = nombre), nudge_y = 0.2) +
-  theme_graph(base_family = 'sans')
-red_4 %>% activate(nodes) %>% as_data_frame
+graficar_red_nd(red_4) + labs(subtitle = 'Betweeness')
 ```
 
 Por ejemplo: para el nodo $B$, de dos posibles,
 hay un camino más corto de 6 a 3 que pasa por 2 (aporta 0.5), igual entre
 5 y 6 y entre 3 y 5, para un total de 1.5. Los demás caminos más cortos
 (por ejemplo, entre 4 y 5) no aportan nada pues ninguno de ellos pasa por 2.
-Calcula el *betweeness* para el nodo $F$ y $D$.
+Calcula el *betweeness* para el nodo $B$ y $D$.
 
+```{r}
+red_4 %>% as_data_frame
+```
 
 #### Ejemplo de grado y betweeness: Pulp Fiction {-}
 
@@ -321,18 +311,25 @@ pasan también por Vincent).
 También es posible definir medidas de importancia según el promedio de cercanía a todos
 los nodos: el inverso del promedio de distancias del nodo a todos los demás.
 
-En el siguiente ejemplo, el nodo 6 tiene grado bajo, *betweeness* bajo, pero tiene buena
-cercanía promedio, pues se conecta a un nodo bien conectado de la red (en grado y betweeness):
+#### Ejemplo {-}
 ```{r}
 red_5 <- igraph::graph(c(2,1,3,1,4,9,5,2,2,3,6,1,7,8,
                  8,9,9,1,1,8,1,7), 
                directed = FALSE)
-igraph::closeness(red_5)
-```
-```{r, fig.height=2, fig.width=6, dev='pdf'}
-par(mar=c(0,0,0,0)); plot(red_5, vertex.size=30, vertex.label.cex=0.6)
 ```
 
+```{r}
+red_5 <- red_5 %>% as_tbl_graph() %>%
+  mutate(importancia = centrality_closeness(normalized = TRUE)) %>%
+  mutate(nombre  = LETTERS[1:9])
+red_5 %>% activate(nodes) %>% as_data_frame
+graficar_red_nd(red_5) + labs(subtitle = 'Cercanía')
+```
+En este ejemplo, el nodo $F$ tiene cercanía más alta que $D$, por ejemplo,
+pues se conecta a un nodo bien conectado de la red (en grado y betweeness):
+
+#### Ejercicio {-}
+Verifica que la cercanía de $A$ es 0.80.
 
 ### Centralidad de eigenvector
 
@@ -344,10 +341,10 @@ importancias de sus vecinos. De esta forma, es importante estar cercano a nodos 
 Consideremos el ejemplo siguiente:
 
 
-```{r, fig.height=3, fig.width=3, dev='pdf'}
-red.6 <- graph(c(1,2,1,3,1,4,5,2), directed = FALSE)
-par(mar=c(0,0,0,0))
-plot(red.6, vertex.size=40)
+```{r, fig.height=3}
+red_6 <- igraph::graph(c(1,2,1,3,1,4,5,2), directed = FALSE) %>%
+  as_tbl_graph() %>% mutate(nombre = 1:5, importancia = 0)
+graficar_red_nd(red_6) + theme(legend.position="none")
 ```
 
 Supongamos que las importancias  de estos 5 nodos son
@@ -357,26 +354,32 @@ normalizadas, es decir,
 $$\sum_i x_i = 1.$$
 
 Por ejemplo, en una red con un solo nodo, este nodo tiene importancia 1, una con dos
-nodos conectados (o no conectados) debe tener $(1/2,1/2)$ como importancias.
+nodos conectados  debe tener $(1/2,1/2)$ como importancias.
 
-De acuerdo a la idea mencionada arriba, calculamos entonces como se ve la suma de las importancias de nodos adyacentes a cada nodo. Para el nodo uno,
+De acuerdo a la idea mencionada arriba, calculamos entonces cómo se ve la suma de las importancias de nodos adyacentes a cada nodo. Para el nodo uno,
 
-$$y_1 = x_2 + x_3 + x_4$$
+$$\frac{y_1}{\lambda} = x_2 + x_3 + x_4$$
 
-para el nodo 2
+donde $\lambda = \sum_i  y_i$ es la constante de normalización. También podemos
+escribir como
 
-$$y_2 = x_1 + x_5$$
+$${y_1} = \lambda(x_2 + x_3 + x_4)$$
+
+
+para el nodo 2 (despejando $\lambda$)
+
+$$y_2 = \lambda(x_1 + x_5)$$
 
 y para los siguientes nodos tendríamos
-$$y_3 = x_1$$
-$$y_4 = x_1$$
-$$y_5 = x_2$$.
+$$y_3 = \lambda x_1$$
+$$y_4 = \lambda x_1$$
+$$y_5 = \lambda x_2$$.
 
 Este sistema lo podemos escribir de forma matricial, usando
 la matriz de adyacencia, como
 
 \[ y = 
-\left (
+\lambda \left (
 \begin{array}{rrrrr}
  0 & 1 & 1 & 1 & 0 \\ 
  1 & 0 & 0 & 0 & 1 \\ 
@@ -399,134 +402,153 @@ es decir, $x$ es un vector propio de la matriz de adyacencia con valor propio po
 
 Sin embargo, ¿cuando existe un vector $x\geq 0$ con $\lambda>0$ que satisfaga esta propiedad?
 
+#### Ejercicio {-}
+Resuelve el sistema de ecuaciones de arriba y verifica que tal vector existe.
+¿Cuál es el valor de lambda?
+
+
+
 ### Perron Frobenius: Centralidad de eigenvector 
 
-El método se fundamenta en una versión del teorema de Perron-Frobenius:
 
-### Perron-Frobenius {#importante}
+```{block2, type='resumen'}
+**Espectro de matrices no-negativas**
+
 Si $A$ es una matriz no negativa,  entonces:
 
-- existe un valor
-propio real *no-negativo* $\lambda_0$ tal que $\lambda_0\geq |\lambda|$ para cualquier otro valor propio $\lambda$ de A^t. 
+- Existe un valor
+propio real *no-negativo* $\lambda_0$ tal que $\lambda_0\geq |\lambda|$ para cualquier otro valor propio $\lambda$ de $A$. 
 - Al valor propio $\lambda_0$ está asociado a un vector propio $x$ con entradas no negativas. 
+```
 
-###
-
-Si este vector propio fuera único, entonces esto nos daría un conjunto de medidas (únicas hasta normalización) $x$ para la importancia de los nodos.
-Por el momento, es posible que haya más de una manera de asignar importancias.
+Si este vector propio no-negativo fuera único (hasta normalización), entonces esto nos daría un conjunto de medidas (únicas hasta normalización) $x$ para la importancia de los nodos:
 
 ### Ejemplo 1
 
-```{r, dev='pdf', fig.width=2, fig.height=1, message=FALSE}
-red <- graph(c(1,2,2,3,3,1,2,4), directed = FALSE)
-par(mar=c(0,0,0,0)); plot(red, vertex.size=40)
-A.red <- get.adjacency(red)
-A.red
+```{r fig.width=4}
+par(mar=c(0,0,0,0)); plot(red_6, vertex.size=40)
+A_red <- igraph::get.adjacency(red_6)
+A_red
 ```
 
-
-
-Ejemplo 1
 
 ```{r}
-desc.A <- eigen(A.red)
-desc.A
+desc_A <- eigen(A_red)
+desc_A
 ```
-
-
-
 
 Las medida de centralidad da entonces, en este caso:
 
 ```{r, dev='pdf', fig.width=2, fig.height=1}
-x <- -desc.A$vectors[,1]
+x <- desc_A$vectors[,1]
 x
-par(mar=c(0,0,0,0)); plot(red, vertex.size  = 100*x)
+par(mar=c(0,0,0,0)); plot(red_6, vertex.size  = 100*x)
 ```
 
 
-### Ejemplo 2 {#ejemplo}
+#### Ejemplo 2 {-}
 
-Cuando la gráfica no es conexa, encontramos más de un eigenvector no negativo:
+Sin embargo, puede ser que obtengamos más de un valor propio no negativo con
+vectores asociados no negativos, por ejemplo:
 
 
 ```{r, dev='pdf', fig.width=2, fig.height=1, message=FALSE}
-red <- graph(c(1,2,2,3,3,1,2,4,5,6), directed = FALSE)
+red <- igraph::graph(c(1,2,2,3,3,1,2,4,5,6), directed = FALSE)
 par(mar=c(0,0,0,0)); plot(red, vertex.size=50)
-A.red <- get.adjacency(red)
-A.red
+A_red <- igraph::get.adjacency(red)
+A_red
 ```
-
 
 
 Nótese que los eigenvectores 1 y 2 son positivos, y están asociados a 
 vectores propios no negativos:
 ```{r}
-desc.A <- eigen(A.red)
-
-desc.A
+desc_A <- eigen(A_red)
+desc_A
 ```
 
 En este caso, la medida de centralización dependería de qué
-peso le ponemos al primer vector propio vs el segundo vector propio
+peso le ponemos al primer vector propio vs el segundo vector propio. En este
+ejemplo, la unicidad no sucede pues la red asociado no es conexa.
 
-### Perron Frobenius: matrices irreducibles (no dirigido, matriz simétrica)
+### Matrices irreducibles y gráficas fuertemente conexas
 
-¿Cuándo podemos garantizar unicidad en la solución de $Ax=\lambda x$ con $\lambda >0$.
+¿Cuándo podemos garantizar unicidad en la solución de $Ax=\lambda x$ con $\lambda >0?$.
+
 Sea $A$ la matriz de adyacencia de una gráfica no dirigida.
+  
+-  Si la gráfica asociada a $A$ es fuertemente conexa (existen caminos entre cualquier par de vértices) entonces decimos que $A$ es **irreducible**.
+- Podemos dar también una definición de irreducibilidad sólo en términos
+de $A$: $A$ es irreducible cuando para toda $i,j$ existe $m\geq 0$ tal
+que $(A^m)_{i,j} > 0$.
 
--  Si la gráfica asociada a $A$ es conexa (existen caminos entre cualquier par de vértices) entonces decimos que $A$ es **irreducible**.
 
-- Si $A$ es irreducible, entonces $\lambda_0 > 0$ es un eigenvector simple de A, un vector propio asociado $x$ tiene entradas positivas, y no existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$
+```{block2, type='resumen'}
+**Teorema de Perron-Frobenius**
+  
+Si $A$ es una matriz no-negativa irreducible, entonces
 
-- Podemos definir una medida única de centralidad módulo una constante multiplicativa.
+- Existe un valor
+propio real *no-negativo* $\lambda_0$ tal que $\lambda_0 \geq |\lambda|$ para cualquier otro valor propio $\lambda$ de $A$, asociado a un vector propio $x$ con entradas positivas.
+- No existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$.
+```
 
-### Definición: Centralidad de Eigenvector {#importante}
+Y entonces podemos definir una medida única de centralidad módulo una constante multiplicativa.
 
-Si $A$ es la matriz de adyacencia de una red no dirigida, y $A$ es irreducible, definimos
+```{block2, type="resumen"}
+Si $A$ es la matriz de adyacencia de una red no dirigida, y $A$ es irreducible (significa que la red es fuertemente conexa), definimos
 la **centralidad de eigenvector** de un nodo $i$ como la $i$-esima componente
 del vector positivo $x$ (con $\sum x_i = 1$)
 asociado al valor propio (único) de Perron-Frobenius. 
+```
 
-
-### Ejemplo: facultad de tres universidades
+#### Ejemplo: facultad de tres universidades {-}
 
 ```{r}
+install.packages('igraphdata')
 library("igraphdata")
 data("UKfaculty")
-ukf.und <- as.undirected(UKfaculty) 
-head(dat.1 <- get.data.frame((ukf.und)))
-dat.1$from <- dat.1$from - 1
-dat.1$to <- dat.1$to - 1
-grupo <- get.vertex.attribute(UKfaculty, 'Group')
-nodos <- data.frame(nombre=1:length(grupo), grupo=grupo)
-nodos$nombre <- factor(nodos$nombre)
+ukf.und <- igraph::as.undirected(UKfaculty) 
+head(dat.1 <- igraph::get.data.frame((ukf.und)))
+dat.1$from <- dat.1$from 
+dat.1$to <- dat.1$to
+grupo <- igraph::get.vertex.attribute(UKfaculty, 'Group')
+nodos <- data.frame(id=1:length(grupo))
 
-forceNetwork(dat.1, nodos, Source='from',Target='to',NodeID='nombre',
-             Group='grupo', opacity=0.9, Value='weight', charge=-400,
-             linkWidth = "function(d) { return 0.2*Math.sqrt(d.value); }")
+visNetwork(nodos, dat.1, width = "100%") %>%
+  visPhysics(solver ='forceAtlas2Based', 
+             forceAtlas2Based = list(gravitationalConstant = -10),
+             stabilization = TRUE)
 ```
 
 
 
 Ahora calculamos centralidad de eigenvector.
 
-```{r}
-A <- get.adjacency(ukf.und)
+```{r, fig.width=5, fig.asp=0.7}
+A <- igraph::get.adjacency(ukf.und)
 e.A <- eigen(as.matrix(A))
 vec <- as.numeric(e.A$vector[,1])
 e.A$values[1]
-qplot(vec)
+qplot(vec, binwidth = 0.01)
 ```
+
 ```{r}
-grupo <- -vec
-nodos <- data.frame(nombre=1:length(grupo), grupo=grupo)
-nodos$nombre <- factor(nodos$nombre)
-forceNetwork(dat.1, nodos, Source='from',Target='to',NodeID='nombre',
-             Group='grupo', opacity=0.9, Value='weight', charge=-1000,
-             linkWidth = "function(d) { return 0.2*Math.sqrt(d.value); }",
-             colourScale ='d3.scale.linear().domain([0, 0.15, 0.35]).range(["lightblue", "orange", "red"])')
+e_vector <- -vec
+colores <- colorRampPalette(c('red','green'))
+colores_1 <- colores(length(e_vector))
+nodos <- data.frame(id=1:length(vec), value = e_vector, 
+                    color = colores_1[rank(e_vector)])
+
+visNetwork(nodos, dat.1 %>% select(-weight), 
+           width = "100%") %>%
+  visPhysics(solver ='forceAtlas2Based', 
+             stabilization = TRUE) %>%
+  visNodes(value = 1, scaling = list(min = 1, max = 200))
 ```
+
+
+
 
 
 ### Ejercicio {#ejemplo}
@@ -536,3 +558,100 @@ Usa Gephi para calcular la centralidad de eigenvector/betweeness de tu red de am
 - Bajar tu red: http://snacourse.com/getnet
 - Gephi: https://gephi.org
 
+
+
+
+### Gráficas dirigidas
+
+Estos conceptos pueden generalizarse para gráficas dirigidas, cuando hay un concepto de dirección en las relaciones de los nodos.
+
+- In degree, out degree
+- Betweenness puede definirse en función de caminos dirigidos.
+- Cercanía también (in closeness, out closeness)
+- Centralidad de eigenvector: misma idea, pero la matriz $A$ no es simétrica.
+
+Consideremos en particular cómo se calcula la centralidad de eigenvector para una red dirigida.
+
+```{r, fig.height=3, fig.width=3, dev='pdf'}
+set.seed(2801)
+red.6 <- igraph::erdos.renyi.game(5, p.or.m=0.5, directed=T)
+par(mar=c(0,0,0,0))
+plot(red.6, vertex.size=40)
+```
+
+Su matriz de adyacencia es no simétrica
+```{r}
+A <- igraph::get.adjacency(red.6)
+A
+```
+
+```{r}
+centralidad <- igraph::evcent(red.6, directed = T)
+centralidad$vector
+```
+
+Para este ejemplo, las ecuaciones de importancia son como sigue. Para el nodo 1,
+$$\lambda x_1 = x_4 + x_2$$
+para el nodo 5, por ejemplo, es
+$$\lambda x_5 = x_4 + x_2 + x_3$$
+y así sucesivamente.
+
+Obsérvese que en cada ecuación se consideran las aristas *entrantes*, de forma que la ecuación del nodo 1 requiere la columna 1 de la matriz de adyacencia, el nodo 2 la columna 2, etc. Es decir, la ecuación que debemos resolver es
+
+$$A^t x = \lambda x$$
+
+En el ejemplo anterior,
+```{r}
+v.salida <- as.numeric(eigen(t(as.matrix(A)))$vectors[,1])
+-v.salida/(sum(-v.salida))
+```
+
+
+### Perron Frobenius: 
+
+¿Cuándo podemos garantizar unicidad en la solución de $A^tx=\lambda x$ con $\lambda > 0$.
+Sea $A$ la matriz de adyacencia de una gráfica dirigida.
+
+-  Si la gráfica asociada a $A$ es fuertemente conexa (para cualquier par de vértices hay caminos $i\to j$ y $j\to i$) entonces decimos que $A$ es **irreducible**.
+
+- Si $A$ es irreducible, entonces $\lambda_0 > 0$ es un eigenvector simple de A, un vector propio asociado $x$ tiene entradas positivas, y no existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$
+
+- Podemos definir una medida única de centralidad módulo una constante multiplicativa.
+
+
+### Ejemplo: $A$ no irreducible {#ejemplo}
+
+En este caso podemos no tener vectores propios no positivos (ponen
+peso 0 en algunos nodos), cuando no es fuertemente conexa:
+
+```{r}
+red <- igraph::graph(c(1,2,2,3,3,4,4,3), directed = TRUE)
+par(mar=c(0,0,0,0)); plot(red, vertex.size=50)
+A.red <- as.matrix(igraph::get.adjacency(red))
+A.red
+eigen(t(A.red))
+```
+
+Podemos tener valores propios no simples con distintos
+vectores propios no negativos (disconexa):
+
+```{r}
+red <- igraph::graph(c(1,2,2,3,3,1,4,5,5,4), directed = TRUE)
+par(mar=c(0,0,0,0)); plot(red, vertex.size=50)
+A.red <- as.matrix(igraph::get.adjacency(red))
+A.red
+eigen(t(A.red))
+```
+
+O ningún valor propio positivo:
+```{r}
+red <- igraph::graph(c(1,2,2,3), directed = TRUE)
+par(mar=c(0,0,0,0)); plot(red, vertex.size=50)
+A.red <- as.matrix(igraph::get.adjacency(red))
+A.red
+eigen(t(A.red))
+```
+
+
+
+## Pagerank
