@@ -1136,6 +1136,44 @@ ordenada %>% filter(str_detect(V2, query)) %>% head(10)
 ```
 
 
+## Pagerank en spark
+
+Podemos usar el paquete *sparklygraphs* para
+extender sparklyr y poder usar algoritmos para redes de spark
+(GraphX). Puedes ver el código <https://github.com/kevinykuo/sparklygraphs> para entender
+cómo hacer un paquete que extienda a sparklyr:
+
+```{r, message = FALSE, warning = FALSE}
+library(sparklyr)
+devtools::install_github("kevinykuo/sparklygraphs")
+library(sparklygraphs)
+sc <- spark_connect(master = "local")
+```
+
+```{r}
+hollins_tbl <- copy_to(sc, tab.1 %>% rename(from = V1, to = V2), "hollins", overwrite = TRUE)
+vertices_tbl <- sdf_bind_rows(
+  hollins_tbl %>% distinct(from) %>% transmute(id = from),
+  hollins_tbl %>% distinct(to) %>% transmute(id = to)
+) %>% distinct()
+aristas_tbl <- hollins_tbl %>% transmute(src = from, dst = to)
+```
+
+```{r}
+hollings_pagerank <- gf_graphframe(vertices_tbl, aristas_tbl) %>%
+  gf_pagerank(reset_prob = 0.15, max_iter = 10L)
+vertices_pr <- gf_algo_result(hollings_pagerank)$vertices %>% collect()
+arrange(vertices_pr, desc(pagerank)) 
+```
+
+
+```{r}
+vertices_pr <- vertices_pr %>% 
+  mutate(pagerank = pagerank/sum(pagerank)) %>%
+  arrange(desc(pagerank))
+vertices_pr
+```
+
 ### Ejercicio
 
 
