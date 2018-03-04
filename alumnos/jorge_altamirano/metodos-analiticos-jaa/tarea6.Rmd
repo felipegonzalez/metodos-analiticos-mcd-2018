@@ -1,0 +1,73 @@
+---
+title: 'Tarea 6: 2018/03/05'
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r include=FALSE}
+library(sparklyr)
+library(tidyverse)
+```
+
+```{r}
+config <- spark_config()
+config$`sparklyr.shell.driver-memory` <- "32G"
+config$sparklyr.cores.local <- 4
+config$spark.memory.fraction <- 0.9
+sc <- spark_connect(master="local", 
+              # version = "2.1.0",
+              config = config,
+              spark_home = "/home/rstudio/.cache/spark/spark-2.2.0-bin-hadoop2.7")
+spark_set_checkpoint_dir(sc, './checkpoint')
+```
+
+```{r}
+muestra_nf <- readRDS('../../../datos/netflix/dat_muestra_nflix.rds')
+pelis_nombres <- read_csv('../../../datos/flujos/movies_title_fix.csv', 
+                          col_names = FALSE, na = c("", "NA", "NULL"))
+names(pelis_nombres) <- c('peli_id','año','nombre')
+set.seed(28882)
+valida_usuarios <- sample(unique(muestra_nf$usuario_id), 20000)
+valida_pelis <- sample(unique(muestra_nf$peli_id), 2000)
+dat_2 <- muestra_nf %>%
+  mutate(valida_usu = usuario_id %in% valida_usuarios) %>%
+  mutate(valida_peli = peli_id %in% valida_pelis)
+
+# En validación van aquellas evaluaciones de las películas y
+# usuario que seleccionamos
+dat_valida <- filter(dat_2, valida_usu & valida_peli)
+# En entrenamiento va el resto: algunas evaluaciones de usuarios
+# seleccionados van en entrenamiento, por ejemplo (para películas
+# no seleccionadas en validación)
+dat_entrena <- filter(dat_2, !valida_usu | !valida_peli)
+dat <- dat_entrena %>% 
+      as_data_frame %>% 
+      select(peli_id, usuario_id, calif)
+dat_tbl <- copy_to(sc, dat, overwrite = TRUE)
+dat_tbl
+```
+
+# {.tabset}
+
+## Pregunta 1
+
+- Intenta usar unos 20- 30 factores latentes para el ejemplo
+de descenso estocástico. Puede ser que tengas que cambiar el 
+parámetro de regularización para obtener mejor desempeño. ¿Cómo
+se comparan los errores de entrenamiento y validación en cada caso?
+
+## Pregunta 2
+
+- En el ejemplo de descenso estocástico, escoge algunas películas
+adicionales y calificalas con tus propios gustos (o algún prototipo
+de gustos que se te ocurrra). Examina las recomendaciones que produces.
+
+## Pregunta 3
+
+- Haz algunos experimentos con el
+parámetro de regularización en el ejemplo de mínimos cuadrados
+alternados (por ejemplo 0.001, 0.1, 1.0). ¿Qué observas en el error
+de validación?
