@@ -1,0 +1,13 @@
+---
+title: "Sesión 5: 2018/02/19"
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r include=FALSE}
+library(tidyverse)
+```
+
