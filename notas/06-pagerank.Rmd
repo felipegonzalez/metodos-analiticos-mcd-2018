@@ -79,7 +79,7 @@ También es posible representar una red mediante una **matriz de adyacencia**.
 
 La matriz de adyacencia para una red es la matriz $A$ tal que
 $$A_{ij} = 1$$
-si existe una arista de $i$ a $j$. En el caso dirigido, $A$ es una
+si existe una arista de $i$ a $j$. En el caso no dirigido, $A$ es una
 matriz simétrica.
 
 ```{r}
@@ -90,7 +90,7 @@ matriz_ad
 Es más conveniente representar estas matrices como matrices ralas,
 como veremos más adelantes.
 
-**Nota de R**: utilizamos el paquete *tidygraph* y **ggraph** para hacer manipulaciones de gráficas graficación. Estos paquetes son extensiones
+**Nota de R**: utilizamos el paquete *tidygraph* y **ggraph** para hacer manipulaciones de gráficas y graficación. Estos paquetes son extensiones
 del paquete  *igraph*, que es el que contiene los algoritmos de visualización, procesamiento
 y resumen de redes.
 
@@ -261,7 +261,7 @@ graficar_red_nd(red_4)
 ### Medida de centralidad: *Betweeness*.
 
 La medida de centralidad *betweeness* de un nodo $i$ se define como:
-$$c_b (u) = \sum_{j<k, u\neq j,u\neq i} g(j,k |u) / g(j,k),$$
+$$c_b (u) = \sum_{j<k, u\neq j,u\neq i} \frac{ g(j,k |u)}{ g(j,k)},$$
 donde
 
 - $g(j,k)$ es el número de caminos más cortos distintos entre $j$ y $k$ y 
@@ -425,20 +425,20 @@ Si $A$ es una matriz no negativa,  entonces:
 
 - Existe un valor
 propio real *no-negativo* $\lambda_0$ tal que $\lambda_0\geq |\lambda|$ para cualquier otro valor propio $\lambda$ de $A$. 
-- Al valor propio $\lambda_0$ está asociado a un vector propio $x$ con entradas no negativas. 
+- Al valor propio $\lambda_0$ está asociado a uno (o varios) vector propio $x$ con entradas no negativas. 
 ```
 
-Nota: Este teorema se puede entender observando que si $A$ es no-negativa, entonces
+Nota: Parte de este teorema se puede entender observando que si $A$ es no-negativa, entonces
 mapea el cono $\{(x_1,x_2,\ldots, x_m) | x_i \geq 0\}$ dentro de sí mismo,
 lo que implica que debe dejar invariante alguna dirección dentro de este cono.
 
 Si este vector propio no-negativo fuera único (hasta normalización) y distinto del
 vector 0, entonces esto nos daría un conjunto de medidas (únicas hasta normalización) $x$ para la importancia de los nodos:
 
-### Ejemplo 1
+#### Ejemplo 1 {-}
 
-```{r fig.width=4}
-par(mar=c(0,0,0,0)); plot(red_6, vertex.size=40)
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
+par(mar=c(0,0,0,0)); plot(red_6, vertex.size = 40)
 A_red <- igraph::get.adjacency(red_6)
 A_red
 ```
@@ -451,7 +451,7 @@ print(desc_A, digits = 2)
 
 Las medida de centralidad de eigenvector da entonces, en este caso:
 
-```{r, fig.width=4}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 x <- desc_A$vectors[,1]
 print(x, digits = 2)
 par(mar=c(0,0,0,0)); plot(red_6, vertex.size  = 100*x)
@@ -464,7 +464,7 @@ Sin embargo, puede ser que obtengamos más de un valor propio no negativo con
 vectores asociados no negativos, por ejemplo:
 
 
-```{r, fig.width=6, message=FALSE}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px", message =FALSE}
 red <- igraph::graph(c(1,2,2,3,3,1,2,4,5,6), directed = FALSE)
 par(mar=c(0,0,0,0)); plot(red, vertex.size=20)
 A_red <- igraph::get.adjacency(red)
@@ -485,16 +485,20 @@ ejemplo, la unicidad no sucede pues la red asociado no es conexa.
 
 ### Matrices irreducibles y gráficas fuertemente conexas {-}
 
-¿Cuándo podemos garantizar unicidad en la solución de $Ax=\lambda x$ con $\lambda >0?$, y $x$ un vector no-negativo distinto de 0?
+¿Cuándo podemos garantizar unicidad en la solución de $Ax=\lambda x$ con $\lambda >0?$ y $x$ un vector no-negativo distinto de 0?
 
-Sea $A$ la matriz de adyacencia de una gráfica no dirigida.
+Sea $A$ la matriz de adyacencia de una gráfica **no dirigida**.
   
 -  Si la gráfica asociada a $A$ es fuertemente conexa (existen caminos entre cualquier par de vértices) entonces decimos que $A$ es **irreducible**.
 - Podemos dar también una definición de irreducibilidad sólo en términos
 de $A$: $A$ es irreducible cuando para toda $i,j$ existe $m\geq 0$ tal
 que $(A^m)_{i,j} > 0$.
 
-*Nota*: discute por qué estas dos definiciones son equivaentes.
+*Nota*: discute por qué estas dos definiciones son equivalentes.
+
+Utilizaremos uno de los teoremas más importantes del
+álgebra lineal:
+
 
 ```{block2, type='resumen'}
 **Teorema de Perron-Frobenius**
@@ -522,13 +526,11 @@ install.packages('igraphdata')
 library("igraphdata")
 data("UKfaculty")
 ukf.und <- igraph::as.undirected(UKfaculty) 
-head(dat.1 <- igraph::get.data.frame((ukf.und)))
-dat.1$from <- dat.1$from 
-dat.1$to <- dat.1$to
+head(dat_1 <- igraph::get.data.frame((ukf.und)))
 grupo <- igraph::get.vertex.attribute(UKfaculty, 'Group')
-nodos <- data.frame(id=1:length(grupo))
+nodos <- data.frame(id = 1:length(grupo))
 
-visNetwork(nodos, dat.1, width = "100%") %>%
+visNetwork(nodos, dat_1, width = "100%") %>%
   visPhysics(solver ='forceAtlas2Based', 
              forceAtlas2Based = list(gravitationalConstant = -10),
              stabilization = TRUE)
@@ -538,7 +540,7 @@ visNetwork(nodos, dat.1, width = "100%") %>%
 
 Ahora calculamos centralidad de eigenvector.
 
-```{r, fig.width=5, fig.asp=0.7}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 A <- igraph::get.adjacency(ukf.und)
 desc_A <- eigen(as.matrix(A))
 desc_A$values
@@ -557,7 +559,7 @@ colores_1 <- colores(length(e_vector))
 nodos <- data.frame(id=1:length(vec), value = e_vector, 
                     color = colores_1[rank(e_vector)])
 
-visNetwork(nodos, dat.1 %>% select(-weight), 
+visNetwork(nodos, dat_1 %>% select(-weight), 
            width = "100%") %>%
   visPhysics(solver ='forceAtlas2Based', 
              stabilization = TRUE) %>%
@@ -567,7 +569,6 @@ visNetwork(nodos, dat.1 %>% select(-weight),
 Podemos calcular también usando gggraph:
 
 ```{r}
-
 uk_tbl <- ukf.und %>% as_tbl_graph() %>%
   activate(nodes) %>%
   mutate(nombre = 1:nrow(as_data_frame(.))) %>%
@@ -579,13 +580,6 @@ ggraph(uk_tbl, layout = 'fr') +
 ```
 
 
-
-### Ejercicio {#ejemplo}
-
-Usa Gephi para calcular la centralidad de eigenvector/betweeness de tu red de amigos (es no dirigida).
-
-- Bajar tu red: http://snacourse.com/getnet
-- Gephi: https://gephi.org
 
 
 
@@ -601,23 +595,19 @@ Estos conceptos pueden generalizarse para gráficas dirigidas, cuando hay un con
 
 Consideremos en particular cómo se calcula la centralidad de eigenvector para una red dirigida.
 
-```{r, fig.width=4}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 set.seed(28011)
-red.6 <- igraph::erdos.renyi.game(5, p.or.m=0.5, directed=T)
+red_6 <- igraph::erdos.renyi.game(5, p.or.m=0.5, directed=T)
 par(mar=c(0,0,0,0))
-plot(red.6, vertex.size=40)
+plot(red_6, vertex.size=40)
 ```
 
 Su matriz de adyacencia es no simétrica
 ```{r}
-A <- igraph::get.adjacency(red.6)
+A <- igraph::get.adjacency(red_6)
 A
 ```
 
-```{r}
-centralidad <- igraph::evcent(red.6, directed = T)
-print(centralidad$vector/sum(centralidad$vector), digits = 2)
-```
 
 Para este ejemplo, las ecuaciones de importancia son como sigue. Para el nodo 1,
 $$\lambda x_1 = x_2 + x_4 + c_5$$
@@ -631,12 +621,11 @@ $$A^t x = \lambda x$$
 
 En el ejemplo anterior,
 ```{r}
-v.salida <- as.numeric(eigen(t(as.matrix(A)))$vectors[,1])
-print(-v.salida/(sum(-v.salida)), digits = 2 )
+desc_A <- eigen(t(as.matrix(A)))
+v <- desc_A$vectors[,1]
+print(as.numeric(v / sum(v)), digits = 2)
 ```
 
-
-### Perron Frobenius: 
 
 ¿Cuándo podemos garantizar unicidad en la solución de $A^tx=\lambda x$ con $\lambda > 0$?
 
@@ -649,9 +638,11 @@ $m>0$ tal que $(A^m)_{i,j}>0$.
 
 Y podemos igualmente aplicar Perron-Frobenius, de donde concluimos: 
 
-- Si $A$ es irreducible, entonces $\lambda_0 > 0$ es un eigenvector simple de A, un vector propio asociado $x$ tiene entradas positivas, y no existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$
+```{block2 , type='resumen'}
+Si $A$ es irreducible, entonces $\lambda_0 > 0$ es un eigenvector simple de A, un vector propio asociado $x$ tiene entradas positivas, y no existe ningún otro vector propio con entradas no negativas que no sea paralelo a $x$
+  ```
 
-- Podemos definir una medida única de centralidad módulo una constante multiplicativa.
+Y entonces podemos definir una medida única de centralidad módulo una constante multiplicativa.
 
 
 ### Ejemplo: $A$ no irreducible {-}
@@ -659,32 +650,32 @@ Y podemos igualmente aplicar Perron-Frobenius, de donde concluimos:
 En este caso podemos no tener vectores propios no positivos (algunos
 nodos resultan con peso 0), cuando no es fuertemente conexa:
 
-```{r, fig.width = 4}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red <- igraph::graph(c(1,2,2,3,3,4,4,3), directed = TRUE)
-par(mar=c(0,0,0,0)); plot(red, vertex.size=10)
-A.red <- as.matrix(igraph::get.adjacency(red))
-A.red
-eigen(t(A.red))
+par(mar=c(0,0,0,0)); plot(red, vertex.size = 40)
+A_red <- as.matrix(igraph::get.adjacency(red))
+A_red
+eigen(t(A_red))
 ```
 
 Podemos tener valores propios no simples con distintos
 vectores propios no negativos (si la gráfica es disconexa):
 
-```{r, fig.width = 4}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red <- igraph::graph(c(1,2,2,3,3,1,4,5,5,4), directed = TRUE)
 par(mar=c(0,0,0,0)); plot(red, vertex.size = 20)
-A.red <- as.matrix(igraph::get.adjacency(red))
-A.red
-eigen(t(A.red))
+A_red <- as.matrix(igraph::get.adjacency(red))
+A_red
+eigen(t(A_red))
 ```
 
 O ningún valor propio positivo:
-```{r, fig.width = 4}
-red <- igraph::graph(c(1,2,2,3), directed = TRUE)
-par(mar=c(0,0,0,0)); plot(red, vertex.size=20)
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
+red <- igraph::graph(c(1, 2, 2, 3), directed = TRUE)
+par(mar=c(0,0,0,0)); plot(red, vertex.size = 20)
 A_red <- as.matrix(igraph::get.adjacency(red))
 A_red
-print(eigen(t(A.red)), digits=2)
+print(eigen(t(A_red)), digits = 2)
 ```
 
 
@@ -707,9 +698,10 @@ Intentaremos hacer algo similar a la centralidad de eigenvector, pero usando la 
 
 ### Ejemplo {-}
 
-```{r, fig.width = 6}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red_p <- igraph::graph(c(1,2,1,4,1,3,2,1,2,4,3,1,4,3,2,3))
-plot(red_p, vertex.size=20, edge.curved=T,edge.arrow.size=0.5)
+par(mar=c(0,0,0,0))
+plot(red_p, vertex.size=40, edge.curved=T, edge.arrow.size=0.5)
 ```
 
 La matriz de adyacencia no necesariamente es simétrica, pues la gráfica es dirigida:
@@ -769,8 +761,9 @@ vec_1
 round(vec_1/sum(vec_1), 2)
 ```
 
-```{r, fig.width=6}
-plot(red_p, vertex.size=60*vec_1, 
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
+par(mar=c(0,0,0,0))
+plot(red_p, vertex.size=100*vec_1, 
                           edge.curved=T, edge.arrow.size=0.5)
 ```
 
@@ -786,10 +779,10 @@ que toda la importancia de 3 se comunica al nodo 1.
  
 - Si existen **callejones sin salida** la matriz $M$ no es estocástica, pues tiene un renglón de ceros - no podemos aplicar la teoría de arriba. Por ejemplo, la siguiente matriz no tiene un valor propio igual a 1 (conclusión invalidada: hay un valor propio igual a 1):
 
-```{r}
-red.p <- igraph::graph(c(1,2,2,1,1,3))
-par(mar=c(0,0,0,0)); plot(red.p, vertex.size=30, edge.curved=T,edge.arrow.size=0.5)
-A <- igraph::get.adjacency(red.p)
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
+red_p <- igraph::graph(c(1,2,2,1,1,3))
+par(mar=c(0,0,0,0)); plot(red_p, vertex.size=30, edge.curved=T,edge.arrow.size=0.5)
+A <- igraph::get.adjacency(red_p)
 M <- t(scale(t(as.matrix(A)), center=FALSE, scale=apply(A,1,sum)))
 M
 M[3, ]  <- 0
@@ -798,7 +791,7 @@ eigen(t(M))
 
 - Si existen **trampas de telaraña** (spider traps) entonces la matriz $M$ es estocástica, pero las soluciones concentran todo la importancia en la trampa (en este caso consiste de los nodos 1 y 2) (conclusión invalidada: el vector de importancias es positivo).
 
-```{r}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red_p <- igraph::graph(c(1,2,2,1,3,1,3,4,4,5,5,3))
 par(mar=c(0,0,0,0)); plot(red_p, vertex.size=30, edge.curved=T,edge.arrow.size=0.5)
 A <- igraph::get.adjacency(red_p)
@@ -808,18 +801,19 @@ eigen(t(M))
 
 - La red puede ser **disconexa**.  Por ejemplo, cuando hay dos componentes irreducibles, existe más de un vector propio asociado al valor propio 1 (conclusión invalidada: la solución es única), así que hay tantas soluciones como combinaciones lineales de los eigenvectores que aparecen:
 
-```{r}
-red.p <- igraph::graph(c(1,2,2,3,3,1,4,5,5,6,6,5,6,4))
-par(mar=c(0,0,0,0)); plot(red.p, vertex.size=30, edge.curved=T,edge.arrow.size=0.5)
-A <- igraph::get.adjacency(red.p) %>% as.matrix
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
+red_p <- igraph::graph(c(1,2,2,3,3,1,4,5,5,6,6,5,6,4))
+par(mar=c(0,0,0,0)); plot(red_p, vertex.size=30,
+                          edge.curved=T,edge.arrow.size=0.5)
+A <- igraph::get.adjacency(red_p) %>% as.matrix
 M <- t(scale(t(A), center=FALSE, scale=apply(A,1,sum)))
 M
 sol <- eigen(t(M))
 round(sol$values,2)
-vec.1 <- sol$vectors[,3]
-vec.2 <- sol$vectors[,4]
-vec.1
-vec.2
+vec_1 <- sol$vectors[,3]
+vec_2 <- sol$vectors[,4]
+vec_1
+vec_2
 ```
 
 
@@ -895,7 +889,7 @@ La respuesta es que solamente con el supuesto de conexidad fuerte  no podemos co
 
 #### Ejemplo {-}
 
-```{r}
+```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red_p <- igraph::graph(c(1,2,2,3,3,1))
 par(mar=c(0,0,0,0)); plot(red_p, vertex.size=30, edge.curved=T,edge.arrow.size=0.5)
 A <- igraph::get.adjacency(red_p)
@@ -966,7 +960,7 @@ cuando $n\to \infty$.
 Lo cual nos da el algoritmo básico para encontrar la importancia de Pagerank dada por la distribución de equilibrio:
 
 ```{block2, type='resumen'}
-** Método de potencias para pagerank simple**
+**Método de potencias para pagerank simple**
   
 Tomamos $v$ una distribución arbitraria (por ejemplo equidistribuida sobre los estados). Ponemos $v_1=v$ e iteramos
 $$v_{n+1} = M^t v_{n}$$
@@ -1027,7 +1021,7 @@ sol$values
 as.numeric(sol$vectors[,1])
 ```
 
-### Ejercicio {#ejemplo}
+#### Ejercicio {-}
 Verifica que la matriz $M_1$ construida arriba es en realidad una matriz estocástica.
 
 
@@ -1076,13 +1070,15 @@ x <- 1
 
 Normalizamos y usamos estructura rala:
 ```{r}
-mat.1 <- data.frame(i=i, j=j, x=x)
-mat.2 <- mat.1 %>% group_by(i) %>%
-  mutate(p = x/sum(x))
-M <-sparseMatrix(i=mat.2$i,j=mat.2$j,x=mat.2$p, dims=c(6012,6012))
+mat <- data.frame(i=i, j=j, x=x)
+mat_norm <- mat %>% group_by(i) %>%
+  mutate(p = x / sum(x))
+M <-sparseMatrix(i = mat_norm$i,
+                 j = mat_norm$j,
+                 x = mat_norm$p, 
+                 dims = c(6012,6012))
 dim(M)
 sum(M>0)/6012^2
-
 ```
 
 
@@ -1091,10 +1087,10 @@ Nótese que hacer los cálculos con la matriz rala es más eficiente:
 ```{r}
 library(microbenchmark)
 r <- rep(1, 6012)/6012
-M.t <- t(M)
-microbenchmark(r.1 <- M.t %*% r, times=10, unit = 'ms')
-MM <- as.matrix(M.t)
-microbenchmark(r.1 <- MM %*% r, times=10, unit = 'ms')
+M_t <- t(M)
+microbenchmark(r_1 <- M_t %*% r, times=10, unit = 'ms')
+MM <- as.matrix(M_t)
+microbenchmark(r_1 <- MM %*% r, times=10, unit = 'ms')
 ```
 
 
@@ -1104,11 +1100,11 @@ Así que podemos hacer nuestro algoritmo:
 r <- rep(1, 6012)/6012
 
 for(i in 1:10){
-  q <- 0.85*(M.t %*% r)[,1]
-  suma.q <- sum(q)
-  r.1 <- q + (1-suma.q)/6012
-  plot(r,r.1)
-  r <- r.1
+  q <- 0.85 * (M_t %*% r)[,1]
+  suma_q <- sum(q)
+  r_nuevo <- q + (1 - suma_q) / 6012
+  print(mean(abs(r_nuevo - r)))
+  r <- r_nuevo
 }
 ```
 
@@ -1174,8 +1170,23 @@ vertices_pr <- vertices_pr %>%
 vertices_pr
 ```
 
-### Ejercicio
+```{r}
+graph <- tab.1 %>%
+  as_tbl_graph()
+graph <- graph %>% activate(nodes) %>%
+  left_join(vertices_pr %>% mutate(name = as.character(id)))
+  
+```
 
+```{r, eval = FALSE}
+ggraph(graph, layout = 'graphopt', charge = 0.001, 
+       spring.constant = 1, niter=200) +
+  geom_edge_link(alpha=0.2) +
+  geom_node_point(aes(size = pagerank, alpha=pagerank), colour = 'salmon') +
+  theme_graph(base_family = 'sans')
+```
+
+### Ejercicio
 
 - A partir de la gráfica de USairports del paquete *igraphdata*, construye una gráfica de Gephi donde los nodos son aeropuertos y las aristas indican si hubo vuelos entre dos aeropuertos (con el peso igual al número de vuelos). Grafica grado y centralidad de eigenvector. Identifica los aeorpuertos con betweenness alto. Tip: construye la matriz de adyacencias, y luego una gráfica (*weighted=T*). Exporta esta gráfica en formato gml y cárgala en Gephi. Utiliza Force Atlas 2 para reordenar los nodos y controla el grueso de las aristas con uno de los *sliders* que están abajo de la gráfica.
 
