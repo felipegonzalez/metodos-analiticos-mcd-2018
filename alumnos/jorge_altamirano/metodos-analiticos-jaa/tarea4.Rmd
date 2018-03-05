@@ -152,7 +152,7 @@ generar_dist_1('chilang') %>% keep(bloom_filter$in_filter)
 2. Al tiempo n, la probabilidad de que un elemento del flujo completo esté en la muestra es uniforme k/n
 
 Tenemos exactamente $n\ 1\choose k\ 1$ muestras s que tienen al elemento del flujo. Dado que todas las muestras tienen la misma probabilidad:  
-$n-1\choose k\ 1$/$n\choose k$ = k/n
+$\frac{n-1\choose k-1}{n\choose k} = \frac{k}{n}$
 
 3. Repite los distintos tipos de resúmenes y suavizamientos que vimos arriba con una serie de tiempo simulada de distinta manera.
 

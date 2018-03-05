@@ -208,7 +208,7 @@ for(i in seq_along(diccionario)){
 }
 )</code></pre>
 <pre><code>##    user  system elapsed 
-##  97.728   0.003  98.224</code></pre>
+## 135.802   0.258 136.069</code></pre>
 <pre class="r"><code>format(object.size(bloom_filter$v), units = 'Mb')</code></pre>
 <pre><code>## [1] &quot;7.6 Mb&quot;</code></pre>
 <pre class="r"><code>sum(as.logical(bloom_filter$v))</code></pre>
@@ -251,7 +251,7 @@ generar_dist_1('chilangos') %&gt;% keep(bloom_filter$in_filter)</code></pre>
 <li>Al tiempo n, la probabilidad de que un elemento del flujo completo esté en la muestra es uniforme k/n</li>
 </ol>
 <p>Tenemos exactamente <span class="math inline">\(n\ 1\choose k\ 1\)</span> muestras s que tienen al elemento del flujo. Dado que todas las muestras tienen la misma probabilidad:<br />
-<span class="math inline">\(n-1\choose k\ 1\)</span>/<span class="math inline">\(n\choose k\)</span> = k/n</p>
+<span class="math inline">\(\frac{n-1\choose k-1}{n\choose k} = \frac{k}{n}\)</span></p>
 <ol start="3" style="list-style-type: decimal">
 <li>Repite los distintos tipos de resúmenes y suavizamientos que vimos arriba con una serie de tiempo simulada de distinta manera.</li>
 </ol>
