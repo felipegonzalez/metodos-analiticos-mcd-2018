@@ -809,11 +809,10 @@ A <- igraph::get.adjacency(red_p) %>% as.matrix
 M <- t(scale(t(A), center=FALSE, scale=apply(A,1,sum)))
 M
 sol <- eigen(t(M))
+sol
 round(sol$values,2)
-vec_1 <- sol$vectors[,3]
-vec_2 <- sol$vectors[,4]
-vec_1
-vec_2
+vec <- sol$vectors[,abs(sol$values-1) < 1e-8]
+Re(vec)
 ```
 
 
@@ -846,7 +845,7 @@ Denotamos por $X_1, X_2,\ldots$ la posición del navegador en cada momento del t
 conjunta de cualquier subconjunto $X_{s_1},X_{s_2},\ldots, X_{s_k}$ de variables. En este
 caso, la posición en $s+1$ sólo depende de la posición en el momento $s$, de forma
 que basta con especificar
-$$P(X_{s+1}=j\vert X_s=i), $$
+$$P(X_{s+1}=j\vert X_s=i) = P_{ij}, $$
 para cada par de páginas $i$ y $j$. 
 
 ### Matriz de transición
@@ -860,7 +859,7 @@ de ligas salientes de $i$.
 Es claro que $P$ es igual a la matriz $M$ que definimos con anterioridad. 
 
 
-### Distribución de equilibrio.
+### Distribución de equilibrio (versión simple).
 
 La matriz $P$ es estocástica. Si suponemos que $P$ es irreducible (la gráfica es fuertemente conexa), entonces por la teoría que vimos arriba
 existe un vector $\pi > 0$ tal que $P^t\pi = \pi$.
@@ -881,13 +880,17 @@ a navegar desde ahí, o quizá empezaríamos en un nodo fijo, por ejemplo, el 1.
 
 Una pregunta más interesante es entonces, 
 
-- Si el navegador pasa navegando una cantidad grande de tiempo,
-¿cuál es la probabilidad de encontrarlo en un momento dado en 
+- Supongamos que el navegador pasa navegando una cantidad grande de tiempo, comenzando en un nodo $i_0$ dado.
+¿Cuál es la probabilidad de encontrarlo en un momento dado en 
 el nodo $i$?
 
-La respuesta es que solamente con el supuesto de conexidad fuerte  no podemos contestar esta pregunta de manera simple.
+Solamente con el supuesto de conexidad fuerte (irreducibilidad) 
+no podemos contestar esta pregunta de manera simple.
 
 #### Ejemplo {-}
+
+Consideremos este ejemplo fuertemente conexo, con un ciclo de
+tamaño 3:
 
 ```{r fig.width=3, fig.asp=1, out.width="200px", out.height="200px"}
 red_p <- igraph::graph(c(1,2,2,3,3,1))
@@ -909,11 +912,18 @@ En el tiempo 3:
 ```{r}
 t(M) %*% t(M) %*% t(M) %*% c(1,0,0)
 ```
-y así sucesivamente, de manera que las probabilidades de visita a cada nodo dependen del tiempo.
+y así sucesivamente, de manera que las probabilidades de visita a cada nodo dependen del tiempo. La solución a nuestra pregunta de dónde
+estará el navegador aleatorio al tiempo $t$ no es tan simple de
+formular.
+
+En este ejemplo, vemos que el problema son estructuras periódicas
+en la red del navegador aleatorio. Veremos ahora cómo lidiar
+con este problema.
 
 
+### Matriz de transición a $k$ pasos.
 
-Recordamos que la matriz $P^k$ da las probabilidades de transición
+Recordamos que la matriz $(P)^k$ da las probabilidades de transición
 a $k$ pasos. 
 
 Por ejemplo, para $k=2$ tenemos la probabiildad de pasar de $i$ a $j$ en dos pasos es igual a (probabilidad total):
@@ -933,12 +943,12 @@ $P^2$ da las probabilidades de transición en 2 pasos.
 
 Como ejercicio, calcula e interpreta $P^2$ para el ejemplo anterior.
 
-
-
-### Cadenas aperiódicas
+```{block2, type='resumen'}
+**Cadenas aperiódicas**
+  
 Decimos que $P$ irreducible es aperiódica cuando
-$P^{k_0}>0$ para alguna $k_0$ suficientemente grande
-###
+$P^{k_0}>0$ para alguna $k_0$ suficientemente grande.
+```
 
 Nótese que en el ejemplo anterior $P$ no es aperiódica. Con esta condición (no importa en qué estado estamos al tiempo $k_0$ el navegador puede estar en cualquier estado), podemos dar una respuesta más simple a la pregunta acerca de las probabilidades de largo plazo de la cadena:
 
@@ -947,7 +957,6 @@ Si $P$ es una matriz irreducible y aperiódica, y $\pi$ es su distribución de e
 $$\lim_{n\to \infty} P(X_n=i) = \pi_i,$$
 independientemente de la distribución inicial.
 ```
-
 
 
 Otra manera de ver esto es como sigue:
@@ -970,14 +979,14 @@ hasta que $||v_{n+1} -v_{n}||<\epsilon.$
 Veremos que este algoritmo simple es escalable a problemas muy grandes, pues
 sólo involucra multiplicar por una matriz que típicamente es rala.
 
-### Solución de Pagerank: teletransportación/perturbación de la matriz $M$.
+### Pagerank: teletransportación/perturbación de la matriz $M$.
 
 Para que funcione este algoritmo, como vimos antes, tenemos
 que lidiar con los problemas que vimos arriba (spider traps, callejones sin salidas, falta de conexidad, periodicidad).
 
 La solución es relativamente simple: fijamos una $\alpha$ cercana a uno. A cada tiempo:
 
-- Con probabilidad $\alpha$, el navegador escoge alguno de las ligas de salida y brinca (como en el proceso original)
+- Con probabilidad $\alpha$, el navegador escoge alguno de las ligas de salida y brinca (como en el proceso original),
 - Sin embargo, con probabilidad $1-\alpha$, el navegador se teletransporta
 a un nodo escogido al azar (equiprobable), de **todos** los nodos posibles.
 - Si el navegador está en un callejón sin salida, siempre se teletransporta como en el inciso anterior.
@@ -990,7 +999,7 @@ Ahora construimos la matriz $M_1$ de este proceso. Sea $M$ la matriz original, q
 
 $$(M_1)_{i,j} = \alpha M_{ij} + (1-\alpha)\frac{1}{n}$$
 
-Esto es por probabilidad total: la probabilidad e i a j **dada** teletrasportanción es $1/n$, y la probabilidad de ir de i a j **dado** que no hubo teletransportación es $M_{ij}$ (que puede ser cero). La probabilidad total se calcula promediando estas dos probabilidades según la probabilidad de teletransportación o no.
+Esto es por probabilidad total: la probabilidad e i a j **dada** teletransportación es $1/n$, y la probabilidad de ir de i a j **dado** que no hubo teletransportación es $M_{ij}$ (que puede ser cero). La probabilidad total se calcula promediando estas dos probabilidades según la probabilidad de teletransportación o no.
 
 
 Así que si $e$ es un vector de unos, $ee^t$ es una matriz cuadrada que contiene unos, perturbamos tomando:
@@ -1024,13 +1033,12 @@ as.numeric(sol$vectors[,1])
 #### Ejercicio {-}
 Verifica que la matriz $M_1$ construida arriba es en realidad una matriz estocástica.
 
+---
 
-### Callejones sin salida
+Finalmente, en los renglones de $M$ que son ceros (**callejones sin salida**), ponemos simplemente teletransportación equiprobable a todos los estados.
 
-Finalmente, en los renglones de $M$ que son ceros (callejones sin salida), ponemos simplemente teletransportación equiprobable a todos los estados.
-
-Veremos cómo no es buena idea preprocesar desde el principio la matriz $M$ para evitar estos casos (la matriz $M$ es típicamente rala, pues hay relativamente pocas ligas en cada página comparado con el total de nodos).
-
+No es buena idea preprocesar desde el principio la matriz $M$ para evitar estos casos (la matriz $M$ es típicamente rala, pues hay relativamente pocas ligas en cada página comparado con el total de nodos, y no queremos llenar los renglones igual a cero con 
+una cantidad fija). En lugar de eso, podemos hacer los siguiente:
 
 Supongamos entonces que queremos calcular $x' = M_1 x$, tomando en cuenta callejones sin salida. Podemos hacer, para $x$ distribución inicial:
 
@@ -1040,12 +1048,11 @@ implica que necesitamos sumar la misma cantidad a todas las entradas:
 $$\frac{1}{N}\sum_{j\,es\, callejon} x_j$$.
 - Por otra parte, para los que no son callejones, tenemos que sumar la cantidad fija
 $$(1-\alpha)\frac{1}{N}\sum_{j\, no\, es\, callejon} x_j$$
-- En cualquier caso, a todas las entradas se les suma una cantidad fija, y las componentes del vector resultante deben sumar uno.
+- En cualquier caso, a todas las entradas se les suma una cantidad fija
+$$\frac{1}{N}\sum_{j\,es\, callejon} x_j + (1-\alpha)\frac{1}{N}\sum_{j\, no\, es\, callejon} x_j,$$
+y las componentes del vector resultante deben sumar uno.
 - La estrategia de cálculo es entonces: una vez que tenemos $y$, simplemente ajustamos $x= y + (1-S)/N$, donde
 $S=\sum_i y_i$, es decir: sumamos una cantidad fija para asegurar que suman uno las componentes de $x$.
-
-
-
 
 
 
@@ -1060,11 +1067,11 @@ Consideramos las páginas de un solo sitio (universidad de Hollings):
 ```{r, message=FALSE}
 library(Matrix)
 library(dplyr)
-tab.1 <- read.table('../datos/data_hollings/hollins.txt')
-write.csv(tab.1, file='../datos/data_hollings/ejemplo_red_hollings.csv', row.names=FALSE)
-head(tab.1)
-i <- tab.1$V1
-j <- tab.1$V2
+tab_1 <- read.table('../datos/data_hollings/hollins.txt')
+write.csv(tab_1, file='../datos/data_hollings/ejemplo_red_hollings.csv', row.names=FALSE)
+head(tab_1)
+i <- tab_1$V1
+j <- tab_1$V2
 x <- 1
 ```
 
@@ -1100,10 +1107,10 @@ Así que podemos hacer nuestro algoritmo:
 r <- rep(1, 6012)/6012
 
 for(i in 1:10){
-  q <- 0.85 * (M_t %*% r)[,1]
+  q <- 0.85 * (M_t %*% r)
   suma_q <- sum(q)
   r_nuevo <- q + (1 - suma_q) / 6012
-  print(mean(abs(r_nuevo - r)))
+  print(sum(abs(r_nuevo - r)))
   r <- r_nuevo
 }
 ```
@@ -1111,7 +1118,7 @@ for(i in 1:10){
 
 ```{r}
 nombres.pag <- read.table('../datos/data_hollings/nombres_paginas.txt')
-nombres.pag$pagerank <- r
+nombres.pag$pagerank <- as.numeric(r)
 arrange(nombres.pag, desc(pagerank))  %>% head(10)
 #write.csv(nombres.pag[,c('Label'),drop=FALSE], file='pagerank_hollings.csv', row.names=FALSE, col.names=FALSE)
 ordenada <- arrange(nombres.pag, desc(pagerank))
@@ -1146,18 +1153,29 @@ library(sparklygraphs)
 sc <- spark_connect(master = "local")
 ```
 
+Copiamos las tablas a spark, creamos un dataframe con los 
+vértices y otro con las aristas:
+
 ```{r}
-hollins_tbl <- copy_to(sc, tab.1 %>% rename(from = V1, to = V2), "hollins", overwrite = TRUE)
+hollins_tbl <- copy_to(sc, tab_1 %>% rename(from = V1, to = V2), "hollins", overwrite = TRUE)
 vertices_tbl <- sdf_bind_rows(
-  hollins_tbl %>% distinct(from) %>% transmute(id = from),
-  hollins_tbl %>% distinct(to) %>% transmute(id = to)
+  hollins_tbl %>% distinct(from) %>% rename(id = from),
+  hollins_tbl %>% distinct(to) %>% rename(id = to)
 ) %>% distinct()
-aristas_tbl <- hollins_tbl %>% transmute(src = from, dst = to)
+aristas_tbl <- hollins_tbl %>% rename(src = from, dst = to)
 ```
+
+Convertimos a un objeto de spark GraphFrame y aplicamos
+pagerank:
 
 ```{r}
 hollings_pagerank <- gf_graphframe(vertices_tbl, aristas_tbl) %>%
   gf_pagerank(reset_prob = 0.15, max_iter = 10L)
+```
+
+Finalmente extraemos los resultados y los recolectamos en R:
+
+```{r}
 vertices_pr <- gf_algo_result(hollings_pagerank)$vertices %>% collect()
 arrange(vertices_pr, desc(pagerank)) 
 ```
@@ -1170,8 +1188,11 @@ vertices_pr <- vertices_pr %>%
 vertices_pr
 ```
 
+Esta gráfica es grande y es más difícil de visualizar de forma
+provechosa. Puedes empezar intentando:
+
 ```{r}
-graph <- tab.1 %>%
+graph <- tab_1 %>%
   as_tbl_graph()
 graph <- graph %>% activate(nodes) %>%
   left_join(vertices_pr %>% mutate(name = as.character(id)))
@@ -1184,6 +1205,14 @@ ggraph(graph, layout = 'graphopt', charge = 0.001,
   geom_edge_link(alpha=0.2) +
   geom_node_point(aes(size = pagerank, alpha=pagerank), colour = 'salmon') +
   theme_graph(base_family = 'sans')
+```
+
+Y también podemos usar Gephi. En este caso, exportamos
+la gráfica a gml (un formato estándar para gráficas), y podemos importarla en Gephi.
+
+```{r}
+graph_1 <- igraph::as.igraph(graph)
+igraph::write_graph(graph_1, file = 'hollings.gml', format = 'gml')
 ```
 
 ### Ejercicio
