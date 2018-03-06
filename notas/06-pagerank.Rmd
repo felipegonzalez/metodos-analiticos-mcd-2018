@@ -361,28 +361,24 @@ nodos conectados  debe tener $(1/2,1/2)$ como importancias.
 
 De acuerdo a la idea mencionada arriba, calculamos entonces cómo se ve la suma de las importancias de nodos adyacentes a cada nodo. Para el nodo uno,
 
-$$\frac{y_1}{\lambda} = x_2 + x_3 + x_4$$
-
-donde $\lambda = \sum_i  y_i$ es la constante de normalización. También podemos
-escribir como
-
-$${y_1} = \lambda(x_2 + x_3 + x_4)$$
+$${y_1} = x_2 + x_3 + x_4$$
 
 
-para el nodo 2 (despejando $\lambda$)
 
-$$y_2 = \lambda(x_1 + x_5)$$
+para el nodo 2 
+
+$$y_2 = x_1 + x_5$$
 
 y para los siguientes nodos tendríamos
-$$y_3 = \lambda x_1$$
-$$y_4 = \lambda x_1$$
-$$y_5 = \lambda x_2$$.
+$$y_3 =  x_1$$
+$$y_4 =  x_1$$
+$$y_5 = x_2$$.
 
 Este sistema lo podemos escribir de forma matricial, usando
 la matriz de adyacencia, como
 
 \[ y = 
-\lambda \left (
+\left (
 \begin{array}{rrrrr}
  0 & 1 & 1 & 1 & 0 \\ 
  1 & 0 & 0 & 0 & 1 \\ 
@@ -398,8 +394,9 @@ la matriz de adyacencia, como
 
 $$x = (x_1,\ldots, x_5)={\frac{1}{\lambda}}(y_1,\ldots,y_5)=\frac{1}{\lambda}y$$
 
-En resumen, $x\geq 0$ debe satisfacer, para alguna $\lambda > 0$, la
-ecuación ($A$ es simétrica):
+Donde $\lambda >0 $ es el factor de normalización. En resumen, $x\geq 0$ debe satisfacer, para alguna $\lambda > 0$, la
+ecuación ($A$ es simétrica), y sustituyendo las dos ecuaciones
+de arriba:
 $$A^t x = \lambda x,$$
 
 es decir, $x$ es un vector propio de la matriz de adyacencia con valor propio positivo.
@@ -610,7 +607,7 @@ A
 
 
 Para este ejemplo, las ecuaciones de importancia son como sigue. Para el nodo 1,
-$$\lambda x_1 = x_2 + x_4 + c_5$$
+$$\lambda x_1 = x_2 + x_4 + x_5$$
 para el nodo 5, por ejemplo, es
 $$\lambda x_5 = x_1 + x_2 + x_3$$
 y así sucesivamente.
@@ -1178,6 +1175,7 @@ Finalmente extraemos los resultados y los recolectamos en R:
 ```{r}
 vertices_pr <- gf_algo_result(hollings_pagerank)$vertices %>% collect()
 arrange(vertices_pr, desc(pagerank)) 
+spark_disconnect(sc)
 ```
 
 
