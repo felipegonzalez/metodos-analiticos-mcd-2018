@@ -756,7 +756,7 @@ de independencia, poniendo
 
 $$HL(I\to j) = \frac{n(\{i,j\})}{Q_\delta (X_{i,j})},$$
 
-donde $Q_\delta$ es tal que $P(X_{i,j} > Q_\delta (X_{i,j}))\approx \delta$.
+donde $Q_\delta$ es tal que $P(X_{i,j} < Q_\delta (X_{i,j}))\approx \delta$.
 Tomamos por ejemplo $\delta=0.99$. De esta forma, $HL>1$ sólo cuando
 el conteo observado $n(\{i,j\})$ está en la cola superior del conteo
 bajo la hipótesis nula. Esto toma en cuenta la variabilidad de los
