@@ -388,7 +388,7 @@ calc_firmas <- function(mat_df, permutaciones){
     firmas <- list()
     num_hashes <- ncol(permutaciones)
     firmas <- sapply(1:ncol(mat_df), function(r) rep(Inf, num_hashes))
-    for(r in 1:nrow(df)){
+    for(r in 1:nrow(mat_df)){
         indices <- mat_df[r,] > 0
         firmas[, indices] = pmin(firmas[, indices], permutaciones[r, ])
     }
