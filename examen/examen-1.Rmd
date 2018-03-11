@@ -1,0 +1,51 @@
+---
+title: "Examen parcial 1, Métodos Analíticos 2018"
+output: html_document
+---
+
+**Instrucciones**: enviar un documento con código, salidas
+y explicaciones a felipexgonzalez@gmail.com con
+*subject* `examen-ma-2018`, a más tardar el lunes 19 de marzo.
+Los equipos son de 2 personas máximo. **Escoge sólo 2 
+de los siguientes ejercicios**:
+
+
+## Ejercicio 1: Correos de Enron
+
+En este ejemplo construiremos una aplicación para devolver rápidamente
+correos similares a uno dado, en el sentido de que contienen palabras similares. Utilizaremos minhashing/LSH.
+
+Utilizaremos los datos de correos de Enron de <https://archive.ics.uci.edu/ml/datasets/Bag+of+Words>. El formato está explicado  en el archivo que acompaña los datos (docword.enron y vocab.enron). Considera a las palabras como tejas.
+
+1. Construye una matriz de firmas (de longitud 16) de minhashing para esta colección. Utiliza la matriz de firmas para encontrar mails similares al 900 (más de 50% de similitud de Jaccard) ¿Qué palabras comparten estos documentos?
+
+2. (LSH) Utiliza 8 bandas de 2 hashes cada una para obtener pares candidatos para similitud. A partir de los candidatos en las cubetas correspondientes, devuelve los 20 mejores candidatos (si existen) para los documentos 100, 105, 1400. Recuerda calcular la similitud exacta para los pares candidatos que consideres. 
+
+3. En cada caso, describe el grupo de candidatos mostrando
+las palabras más comunes que ocurren en ellos.
+
+
+## Ejercicio 2: Recomendación
+
+Utilizaremos datos de [movielens](<https://movielens.org>), 
+que están en <https://grouplens.org/datasets/movielens/20m/>: 20 million ratings and 465,000 tag applications applied to 27,000 movies by 138,000 users. 
+
+1. Construye una muestra de entrenamiento y una de validación
+2. Utiliza descenso estocástico o mínimos cuadrados alternados para encontrar factores latentes.
+3. Evalúa el modelo de factores latentes que ajustaste usando la muestra de validación y ajusta parámetros si es necesario para mejorar el desempeño.
+4. Explica cómo hacer predicciones a partir del modelo (predicción de la calificación 1-5). ¿Qué películas recomendarías para el usuario usuario 4000 y el usuario 6000, y usuario 1333? (que no haya visto).
+
+Nota: si tienes problemas de memoria, por ejemplo, piensa en estrategias para resolverlo. Puedes correrlo en una máquina más grande, o intentar muestrar una fracción relativamente grande de usuarios.
+
+## Ejercicio 3: Conteo probabilístico
+
+
+1. Utiliza el algoritmo de hyperloglog para contar el número de
+usuarios distintos en los datos del ejercicio anterior, considerando que el flujo de datos son los ratings (ordénalos primero por timestamp). 
+Utiliza el primer millón de observaciones.
+Haz una gráfica donde el eje horizontal es el número de elementos del flujo vistos y el eje
+vertical es la estimación de hyperloglog de usuarios únicos para cada momento.
+
+2. Compara la estimación final de hyperloglog con el número
+de usuarios únicos (primer millón de observaciones ordenadas
+por timestamp).
