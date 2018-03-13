@@ -1,0 +1,285 @@
+---
+title: 'Tarea 6: 2018/03/05'
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r include=FALSE}
+library(sparklyr)
+library(tidyverse)
+library(Rcpp)
+library(Matrix)
+```
+
+# {.tabset}
+
+## Pregunta 1
+
+- Intenta usar unos 20- 30 factores latentes para el ejemplo
+de descenso estocástico. Puede ser que tengas que cambiar el 
+parámetro de regularización para obtener mejor desempeño. ¿Cómo
+se comparan los errores de entrenamiento y validación en cada caso?
+
+```{r}
+Rcpp::sourceCpp('../../../src/factorizacion_mat/descenso_estocastico.cpp')
+Rcpp::sourceCpp('../../../src/factorizacion_mat/calc_error_bias.cpp')
+```
+
+```{r}
+# entrenamiento
+set.seed(1182)
+muestra_nf <- readRDS('../../../datos/netflix/dat_muestra_nflix.rds')
+pelis_nombres <- read_csv('../../../datos/flujos/movies_title_fix.csv', 
+                          col_names = FALSE, 
+                          na = c("", "NA", "NULL")) %>%
+  invisible
+names(pelis_nombres) <- c('peli_id','año','nombre')
+valida_usuarios <- sample(unique(muestra_nf$usuario_id), 20000)
+valida_pelis <- sample(unique(muestra_nf$peli_id), 2000)
+medias_pelis <- muestra_nf %>% 
+    group_by(peli_id) %>% 
+    summarise(media_peli = mean(calif), num_calif_peli = length(calif))
+medias_pelis <- left_join(medias_pelis, pelis_nombres, 
+                          by = c("peli_id", "peli_id"))
+dat_2 <- muestra_nf %>%
+  mutate(valida_usu = usuario_id %in% valida_usuarios) %>%
+  mutate(valida_peli = peli_id %in% valida_pelis)
+dat_valida <- filter(dat_2, valida_usu & valida_peli)
+dat_entrena <- filter(dat_2, !valida_usu | !valida_peli)
+```
+
+```{r}
+#permutamos para las rondas de descenso estocástico
+permutacion <- sample(1:length(dat_entrena$usuario_id), 
+                      length(dat_entrena$usuario_id))
+i <- dat_entrena$usuario_id[permutacion]
+j <- dat_entrena$peli_id[permutacion]
+y <- dat_entrena$calif[permutacion]
+# validación
+i_val <- dat_valida$usuario_id
+j_val <- dat_valida$peli_id
+y_val <- dat_valida$calif
+
+############## 2 sub
+# 2 usuarios más
+i_usuario_1 <- rep(100001, 14)
+i_usuario_2 <- rep(100002, 14)
+i_usuario_3 <- rep(100003, 14)
+i_usuario_4 <- rep(100004, 14)
+
+nombres_evaluar <- data_frame(nombre = 
+                    c('Ghost', 'Pretty Woman', 'Driving Miss Daisy',
+                      'The Fast and the Furious', 'Meet the Fockers',
+                     'Independence Day', 'Top Gun',
+                     'Being John Malkovich', 'A Clockwork Orange', 
+                     'Fight Club', 'Pulp Fiction',
+                     'The Terminator', 'Eyes Wide Shut', 
+                     'The Shining'))
+dim(nombres_evaluar)
+evals_1 <- c(1, 2, 2, 4, 3, 4, 4, 2, 4, 5, 5, 5, 5, 5)
+evals_2 <- 6 - evals_1
+nombres_evaluar$evals <- evals_1
+nombres_evaluar
+```
+
+```{r}
+j_evaluar <- medias_pelis %>% semi_join(nombres_evaluar) %>% pull(peli_id)
+i <- c(i, i_usuario_1, i_usuario_2)
+j <- c(j, j_evaluar, j_evaluar)
+y <- c(y, evals_1, evals_2)
+X <- sparseMatrix(i, j, x = y, dims=c(max(i), 17770))
+dim(X)
+```
+
+```{r}
+set.seed(2805)
+U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
+V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
+U <- U_0
+V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
+mu <- mean(y)
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0) -  mean(y)
+print(sqrt(calc_error(i, j, y, U, V, mu, a, b)))
+```
+
+### Lambda Mat 1, Lambda Sesgos 1
+
+```{r}
+for(iter in 1:15){
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
+              gamma = 0.003, lambda_mat = 1, lambda_sesgos = 1,
+              n_iter = 1, num_peli, num_usu)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
+  sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
+                        iter,
+                        error_entrena, error_valida) %>% print
+
+}
+```
+
+### Lambda Mat 0.1, Lambda Sesgos 1
+
+```{r}
+U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
+V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
+U <- U_0
+V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
+mu <- mean(y)
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0) -  mean(y)
+for(iter in 1:15){
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
+              gamma = 0.003, lambda_mat = 0.1, lambda_sesgos = 1,
+              n_iter = 1, num_peli, num_usu)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
+  sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
+                        iter,
+                        error_entrena, error_valida) %>% print
+
+}
+```
+
+### Lambda Mat 1, Lambda Sesgos 0.1
+
+```{r}
+U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
+V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
+U <- U_0
+V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
+mu <- mean(y)
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0) -  mean(y)
+for(iter in 1:15){
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
+              gamma = 0.003, lambda_mat = 1, lambda_sesgos = 0.1,
+              n_iter = 1, num_peli, num_usu)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
+  sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
+                        iter,
+                        error_entrena, error_valida) %>% print
+
+}
+```
+
+### Lambda Mat 0.1, Lambda Sesgos 0.1
+
+```{r}
+U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
+V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
+U <- U_0
+V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
+mu <- mean(y)
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0) -  mean(y)
+for(iter in 1:15){
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
+              gamma = 0.003, lambda_mat = 0.1, lambda_sesgos = 0.1,
+              n_iter = 1, num_peli, num_usu)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
+  sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
+                        iter,
+                        error_entrena, error_valida) %>% print
+
+}
+```
+
+## Pregunta 2
+
+- En el ejemplo de descenso estocástico, escoge algunas películas
+adicionales y calificalas con tus propios gustos (o algún prototipo
+de gustos que se te ocurrra). Examina las recomendaciones que produces.
+
+Con el usuario del ejemplo:
+```{r}
+usuario_3_u <- U[100003, ]
+prefs_1 <- mu + a[100003] + b + V %*% usuario_3_u %>% as.numeric
+# filter(pelis_nombres, str_detect(nombre,'Eyes Wide Shut'))
+# filter(pelis_nombres, str_detect(nombre,'The Shining'))
+prefs <- data_frame(prefs = prefs_1, peli_id = 1:17770) %>% 
+  left_join(medias_pelis, by = 'peli_id') %>%
+  arrange(desc(prefs)) %>% 
+  filter(num_calif_peli > 500) %>%
+  select(nombre, prefs) %>% top_n(100, prefs) 
+# prefs
+DT::datatable(prefs)
+```
+
+Con mi usuario
+
+```{r}
+usuario_3_u <- U[100003, ]
+prefs_1 <- mu + a[100003] + b + V %*% usuario_3_u %>% as.numeric
+# filter(pelis_nombres, str_detect(nombre,'Eyes Wide Shut'))
+# filter(pelis_nombres, str_detect(nombre,'The Shining'))
+prefs <- data_frame(prefs = prefs_1, peli_id = 1:17770) %>% 
+  left_join(medias_pelis, by = 'peli_id') %>%
+  arrange(desc(prefs)) %>% 
+  filter(num_calif_peli > 500) %>%
+  select(nombre, prefs) %>% top_n(100, prefs) 
+# prefs
+DT::datatable(prefs)
+```
+
+
+## Pregunta 3
+
+- Haz algunos experimentos con el
+parámetro de regularización en el ejemplo de mínimos cuadrados
+alternados (por ejemplo 0.001, 0.1, 1.0). ¿Qué observas en el error
+de validación?
+
+### Lambda Mat 0.8, Lambda Sesgos 0.001
+
+```{r}
+U_0 <- matrix(rnorm(4 * max(i), 0, 0.01), ncol = 4)
+V_0 <- matrix(rnorm(4 * 17770, 0, 0.01), ncol = 4)
+U <- U_0
+V <- V_0
+num_usu <- rowSums(X>0) + 1
+num_peli <- colSums(X>0) + 1
+mu <- mean(y)
+a <- rowSums(X)/rowSums(X>0) - mean(y)
+a[is.nan(a)] <- 0
+b <- colSums(X)/colSums(X>0) -  mean(y)
+for(iter in 1:15){
+  # nota: la función descenso_gradiente (C++) no hace copias de U,V,a,b
+  # cambia in-place estos parámetros
+  salida <- descenso_estocastico(i, j, y, U, V, mu, a, b, 
+              gamma = 0.003, lambda_mat = 0.8, lambda_sesgos = 0.001,
+              n_iter = 1, num_peli, num_usu)
+  error_entrena <- sqrt(calc_error(i, j, y, U, V, mu, a, b))
+  error_valida <- sqrt(calc_error(i_val, j_val, y_val, U, V, mu, a, b))
+  sprintf("Iteración: %i, Error entrena: %.4f, Error valida: %.4f", 
+                        iter,
+                        error_entrena, error_valida) %>% print
+
+}
+```

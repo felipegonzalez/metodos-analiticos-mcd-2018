@@ -1,0 +1,109 @@
+---
+title: 'Tarea 1: 2018/01/22'
+output:
+  html_document:
+    df_print: paged
+---
+
+_175904 - Jorge III Altamirano Astorga_
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(arules)
+library(tidygraph)
+library(ggraph)
+library(arulesViz)
+```
+
+## Lectura y a priori
+
+Leer los datos y generar los _apriori_
+
+```{r}
+datos <- read_csv("../../../datos/recetas/srep00196-s3.csv") %>%
+  unclass %>%
+  as.data.frame
+lista_mb2 <-datos[,2:33] %>% t %>% as.data.frame %>% as.list
+names(lista_mb2) <- datos[,1] %>% unlist
+ap2 <- apriori(datos[,2:33],
+        list(supp = 0.005, target = 'frequent itemsets'))
+ap2
+```
+
+## Frecuencias de los ingredientes
+
+```{r}
+lista_mb2c <- lapply(lista_mb2, as.character)
+canastas2_nest <- data_frame(id = 1:length(lista_mb2c),
+                      articulos = lista_mb2c,
+                      stringsAsFactors=FALSE) 
+canastas2 <- canastas2_nest %>% 
+  unnest
+freq_ingredients <- canastas2 %>%
+  group_by(articulos) %>%
+  summarise(n  = n()) %>%
+  mutate(prop = n / nrow(canastas2_nest)) %>%
+  arrange(desc(n))
+freq_ingredients <- freq_ingredients[-c(1),]
+#DT::datatable
+(freq_ingredients %>%
+  mutate_if(is.numeric, funs(round(., 3))))
+```
+
+## Hyperlift
+
+```{r}
+agregar_hyperlift <- function(reglas, trans){
+  quality(reglas) <- cbind(quality(reglas),
+    hyper_lift = interestMeasure(reglas, measure = "hyperLift",
+    transactions = trans))
+  reglas
+}
+b_reglas2 <- apriori(datos[,2:33],
+                    list(support = 0.004,
+                         confidence = 0.1,
+                         minlen = 2,
+                         target='rules',
+                         ext = TRUE))
+b_reglas2 <- agregar_hyperlift(b_reglas2, datos[,2:33])
+b_reglas_lift2 <- subset(b_reglas2,
+                        hyper_lift > 3.75 & confidence > 0.1)
+reglas_f2 <- subset(b_reglas_lift2, size(b_reglas_lift2)==2)
+df_reglas2 <- reglas_f2 %>% DATAFRAME %>% rename(from=LHS, to=RHS) %>% as_data_frame
+df_reglas2$weight <- log(df_reglas2$hyper_lift)
+graph_1 <- as_tbl_graph(df_reglas2) %>%
+  mutate(centrality = centrality_degree(mode = "all")) 
+
+ggraph(graph_1, layout = 'fr', start.temp=100) +
+  geom_edge_link(aes(alpha=lift), 
+                 colour = 'red',
+                 arrow = arrow(length = unit(4, 'mm'))) + 
+  geom_node_point(aes(size = centrality, colour = centrality)) + 
+  geom_node_text(aes(label = name), size=4,
+                 colour = 'gray20', repel=TRUE) +
+  theme_graph()
+```
+
+```{r}
+plot(b_reglas2, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+```{r}
+plot(b_reglas2, measure=c('lift','hyper_lift'), shading = 'support')
+```
+
+```{r}
+filtradas_hl <- subset(b_reglas2, hyper_lift > 2)
+filtradas_lift <- subset(b_reglas2, lift > 3.7)
+qqplot(quality(filtradas_hl)$support, 
+       quality(filtradas_lift)$support, xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Soporte')
+```
+
+```{r}
+qqplot(quality(filtradas_hl)$support, 
+       quality(filtradas_lift)$support, xlab = 'Hyper-lift',
+       ylab = 'Lift', main = 'Soporte')
+```
+

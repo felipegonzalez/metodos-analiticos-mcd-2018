@@ -1,0 +1,281 @@
+---
+title: ""
+output: html_document
+---
+
+## Lorem
+
+En este ejemplo veremos como usar LSH de una manera simple para encontrar registros que se refieren al mismo elemento, pero pueden diferir en cómo están registrados (entity matching).
+
+#### Datos
+
+Los datos para este ejempo particular trata con dos fuentes bibliográficas (DBLP, ACM) de artículos y conferencias de cómputo. La carpeta del repositorio es datos/similitud/entity-matching.
+
+```{r}
+library(tidyverse)
+acm <- read_csv('../../../datos/similitud/entity_matching/ACM.csv')
+dbl <- read_csv('../../../datos/similitud/entity_matching/DBLP2.csv')
+```
+
+```{r}
+head(acm)
+head(dbl)
+nrow(acm)
+nrow(dbl)
+
+```
+
+**Pregunta:** ¿si intentas una aproximación por fuerza bruta, cuántas comparaciones tendrías que hacer?
+
+Asumiendo que queremos comparar una sola variable entre los artículos/conferencias contenidos en cada dataset, por ejemplo, encontrar los que tengan títulos similares, ocupamos comparar cada título por lo menos 1 vez contra todos los demás títulos:
+```{r}
+#Para acm.csv
+choose(2294,2)
+
+#Para dbl.csv
+choose(2616,2)
+```
+
+Si quisieramos unir las dos listas y comparar los títulos de ambas entre ellos, sería
+```{r}
+choose(2294 + 2616, 2)
+```
+
+#### Shingling y hashing
+
+Vamos a poner todos los documentos en una sola lista. Aunque al final encontremos elementos de la misma fuente en la misma cubeta, podemos filtrar estos. En este caso escogemos 20 hashes agrupados en 5 bandas, y shingles de tamaño 4, y usamos sólo título y autor.
+
+```{r}
+acm_1 <- acm %>% select(title, authors) %>% 
+        mutate(texto = paste(title, authors, sep = "    "))
+dbl_1 <- dbl %>% select(title, authors) %>% 
+         mutate(texto = paste(title, authors, sep = "    "))
+```
+
+**Pregunta**: ¿por qué incluimos algún espacio en blanco entre título y autor?
+Estamos usando tejas, como los titulos y nombres de autores llevan espacios, queremos aceptar estos espacios tambien en los inicios y finales de tejas.
+
+```{r}
+shingle_chars <- function(string, lowercase = FALSE, k = 4){
+  # produce shingles (con repeticiones)
+  if(lowercase) {
+    string <- str_to_lower(string)
+  }
+  shingles <- seq(1, nchar(string) - k + 1) %>%
+    map_chr(function(x) substr(string, x, x + k - 1))
+  shingles
+}
+```
+
+```{r}
+library(textreuse)
+minhasher <- minhash_generator(20)
+nombres_acm <- paste0("acm-doc-", 1:length(acm_1$texto))
+nombres_dbl <- paste0("dbl-doc-", 1:length(dbl_1$texto))
+nombres <- c(nombres_acm, nombres_dbl)
+texto <- c(acm_1$texto, dbl_1$texto)
+names(texto) <- nombres
+corpus <- TextReuseCorpus(text = texto,
+                          minhash_func = minhasher,
+                          tokenizer = shingle_chars, k = 4,
+                          progress = FALSE, skip_short = FALSE)
+```
+
+```{r}
+lsh_conf <- lsh(corpus, bands = 5) 
+```
+
+**Pregunta**: Haz una gráfica mostrando qué porcentaje de cada nivel de similitud tiene probabilidad de ser capturado para este problema. Explica en qué casos esto sería razonable, y si consideras apropiado cambia este número.
+
+```{r}
+graficar_curvas <- function(df_br, colour = TRUE){
+  r <- df_br$r
+  b <- df_br$b
+  datos_graf <- data_frame(s = seq(0, 1, 0.01))
+  curvas_similitud <- data_frame(b = b, r =r) %>%
+                    group_by(r, b) %>%
+                    mutate(datos = map2(r, b, function(r, b){
+                      datos_graf %>% 
+                      mutate(prob = 1 - (1 - s ^ r) ^b)
+                    })) %>%
+                    unnest
+  graf_salida <- ggplot(curvas_similitud, 
+                        aes(x = s, y = prob, 
+                            colour = as.factor(interaction(b,r)))) +
+                 geom_line(size=1.1) + 
+                 labs(x = 'similitud', y= 'probablidad de ser candidato',
+                      colour = 'b.r') 
+  if(colour){
+    graf_salida + scale_colour_manual(values=cb_palette)
+  }
+                 
+  graf_salida
+}
+```
+
+Originalmente teníamos k = 20 minhashes, los cuales dividimos en b = 5 bandas, por lo que las bandas eran de tamanaño r = 4 por k = br
+
+```{r}
+graficar_curvas(data_frame(b = 222, r = 4)) + 
+                 geom_vline(xintercept = 0.7)
+```
+
+Quiero una probabilidad alta de que sean candidatos, es decir, que coincidan en al menos una banda (coinciden todos los hashes de la banda), entonces escogere una similitud de .7, que me da una probabilidad .75 de ser candidatos.
+
+#### Evaluación de candidatos
+
+```{r}
+?lsh_compare
+```
+
+
+```{r}
+#Regresa los posibles candidatos (probabilidad de ser candidato > 0)
+candidatos <- lsh_candidates(lsh_conf)
+
+#Toma a los candidatos y calcula su similitud
+candidatos <- lsh_compare(candidatos, corpus, jaccard_similarity)
+```
+
+
+```{r}
+candidatos <- candidatos %>% arrange(desc(score))
+candidatos
+```
+
+Podemos ver el contenido de un texto de esta manera:
+
+```{r}
+corpus[["acm-doc-1012"]]$content
+```
+
+**Pregunta**: ¿Cuántas comparaciones tuviste qué hacer (cálculos de similitud)?
+2,506 pero esto ha sido de la funcion lsh_compare, no ha filtrado falsos positivos
+
+**Pregunta**: Filtra esta tabla para que solo contenga pares que vienen de diferentes tablas (acm y dbl). Considera ahora los elementos con siimilitud uno. ¿Se refieren al mismo artículo en las dos fuentes?
+```{r}
+#Comparamos los primeros 7 caracteres de las columnas a y b, si son iguales ponemos un 1 en una nueva columna, de no serlo ponemos 0
+candidatos$mismo_origen <-if_else(substr(candidatos$a, start = 1, stop = 7) == substr(candidatos$b, start = 1, stop = 7), true = 1, false = 0) 
+```
+
+```{r}
+candidatos
+```
+
+```{r}
+#Filtramos donde el score sea 1 y la columna "mismo_origen" tenga un 0
+filter(candidatos, score == 1 & mismo_origen == 0)
+```
+
+```{r}
+#Checamos los pares para saber si se refieren al mismo articulo
+corpus[["acm-doc-1012"]]$content
+corpus[["dbl-doc-1767"]]$content
+```
+
+```{r}
+#Checamos los pares para saber si se refieren al mismo articulo
+corpus[["acm-doc-1015"]]$content
+corpus[["dbl-doc-2332"]]$content
+```
+
+```{r}
+#Checamos los pares para saber si se refieren al mismo articulo
+corpus[["acm-doc-1034"]]$content
+corpus[["dbl-doc-2491"]]$content
+```
+
+```{r}
+#Checamos los pares para saber si se refieren al mismo articulo
+corpus[["acm-doc-729"]]$content
+corpus[["dbl-doc-62"]]$content
+```
+
+Todos los que revisamos manualmente coincidieron
+
+**Pregunta**: Ahora considera los elementos con similitud más baja que capturaste. Examina varios casos y concluye si hay pares que no se refieren al mismo artículo, y por qué.
+
+```{r}
+#Filtramos donde la columna "mismo_origen" tenga un 0 y ordenamos de menor a mayor para ir viendo varios casos
+filter(candidatos, mismo_origen == 0) %>%
+  arrange(score)
+```
+
+```{r}
+#Este es un par con score .05, coinciden en "relational"" data unicamente
+corpus[["acm-doc-2085"]]$content
+corpus[["dbl-doc-1099"]]$content
+```
+
+
+```{r}
+#Este es un par con score .33, coincide en un autor y algunas palabras como "web" y "of"
+corpus[["acm-doc-1350"]]$content
+corpus[["dbl-doc-1254"]]$content
+```
+
+```{r}
+#Este es un par con score .17, coincide en la palabra query processing
+corpus[["acm-doc-2098"]]$content
+corpus[["dbl-doc-1664"]]$content
+```
+
+```{r}
+#Este es un par con score .55, mismo articulo, el orden de los autores esta invertido
+corpus[["acm-doc-2080"]]$content
+corpus[["dbl-doc-1910"]]$content
+```
+
+```{r}
+#Este es un par con score .46, diferenctes articulos, aunque sean del mismo tema, mismo autores
+corpus[["acm-doc-21"]]$content
+corpus[["dbl-doc-892"]]$content
+```
+
+Existen varios pares que no se refieren al mismo articulo, pero coinciden en palabras del título o uno o más autores
+
+**Pregunta**: propón un punto de corte para la tabla de arriba, según tus observaciones de la pregunta anterior.
+```{r}
+#Filtramos donde el score sea .5 y agarramos los primeros elementos, tres autores coinciden y parece ser un tema bastante similar
+tabla <- filter(candidatos, mismo_origen == 0) %>%
+  filter(score > 0.5) %>%
+  arrange(score) 
+
+corpus[[(tabla$a[1])]]$content
+corpus[[(tabla$b[1])]]$content
+```
+
+```{r}
+#Filtramos donde el score sea .55 y agarramos los primeros elementos, parece ser el mismo articulo, con una detalle diferente
+tabla <- filter(candidatos, mismo_origen == 0) %>%
+  filter(score > 0.55) %>%
+  arrange(score) 
+
+corpus[[(tabla$a[1])]]$content
+corpus[[(tabla$b[1])]]$content
+```
+
+```{r}
+#Filtramos donde el score sea .56 y agarramos los primeros elementos, parece ser el mismo articulo
+tabla <- filter(candidatos, mismo_origen == 0) %>%
+  filter(score > 0.56) %>%
+  arrange(score) 
+
+corpus[[(tabla$a[1])]]$content
+corpus[[(tabla$b[1])]]$content
+```
+
+```{r}
+#Filtramos donde el score sea .54 y agarramos los primeros elementos, articulos similares de los mismos autores
+tabla <- filter(candidatos, mismo_origen == 0) %>%
+  filter(score > 0.54) %>%
+  arrange(score) 
+
+corpus[[(tabla$a[1])]]$content
+corpus[[(tabla$b[1])]]$content
+```
+
+A partir de .55 parece ser un buen punto de corte
+
+**Pregunta**: considerando tus hallazgos, ¿cómo cambiarías el número de hashes y bandas para mejorar tus resultados? ¿en qué sentido los mejoras?
+Aumentando el numero de hashes aumentamos la pendiente y aumentando las bandas ayudamos tambien, aunque esto incrementa el costo computacional, debemos considerar este intercambio.
