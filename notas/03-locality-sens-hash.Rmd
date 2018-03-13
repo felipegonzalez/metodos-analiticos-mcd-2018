@@ -707,9 +707,9 @@ discriminar mejor.
 
 ### Ejercicio {-}
 Supongamos que tenemos una familia $(0.2, 0.6, 0.8, 0.4)$ sensible
-a la localidad. Si combinamos con conjunción 5 de estas funciones,
+a la localidad. Si combinamos con conjunción 4 de estas funciones,
 obtenemos una familia
-$$(0.2, 0.6, 0.41, 0.025)$$
+$$(0.2, 0.6, 0.41, 0.026)$$
 La proporción de falsos positivos es chica, pero la de falsos negativos
 es grande. Si tomamos 8 de estas funciones (cada una compuesta de
 cuatro funciones de la familia original), obtenemos una familia
