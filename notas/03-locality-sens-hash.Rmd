@@ -712,9 +712,9 @@ obtenemos una familia
 $$(0.2, 0.6, 0.41, 0.026)$$
 La proporción de falsos positivos es chica, pero la de falsos negativos
 es grande. Si tomamos 8 de estas funciones (cada una compuesta de
-cuatro funciones de la familia original), obtenemos una familia
+cuatro funciones de la familia original) y hacemos conjunción, obtenemos una familia
 
-$$(0.2, 0.6, 0.96, 0.08)$$
+$$(0.2, 0.6, 0.98, 0.19)$$
 
 En esta nueva familia, tenemos que hacer 40 veces más trabajo para
 tener esta amplificación.
