@@ -1,0 +1,131 @@
+# N-gramas y modelos de lenguaje
+
+En esta sección consideraremos el uso de n-gramas para
+construir modelos de lenguaje. Los **modelos de lenguaje** son
+una parte central de varias tareas de NPL (procesamiento de
+lenguaje natural), como reconocimiento de lenguaje hablado, 
+reconocimiento de lenguaje escrito, traducción automática, 
+corrección de ortografía, sistemas de predicción de escritura,
+etc (ver [@jurafsky], capítulo 4).
+
+
+## Modelo de canal ruidoso.
+
+Para entender más este problema consideramos el modelo del canal ruidoso:
+
+```{block2, type='resumen'} 
+**Canal ruidoso**
+  
+En el modelo del canal ruidoso tratamos mensajes recibidos como si fueran *distorsionadas* al pasar por un canal de comunicación ruidoso (por ejemplo, escribir en el celular). El canal ruidoso introduce ruido en la forma de sustituciones, permutaciones, y otros efectos de palabras correctas.
+
+La tarea que queremos resolver con este modelo es 
+inferir la palabra o texto correctos a partir del mecanismo
+de distorsión y de un modelo del lenguaje.
+```
+
+
+En notación de probabilidad, si observamos el mensaje distorsionado $x$, quisiéramos calcular, 
+para cada mensaje correcto $w$ la probabilidad
+
+$$P(w|x).$$
+
+Propondríamos entonces como corrección el texto $w^*$ que maximiza esta probabilidad condicional:
+
+$$w^* = argmax_w P(w|x).$$
+
+¿Cómo construimos este modelo? Tenemos que
+
+$$P(w|x) = \frac{P(x|w)P(w)}{P(x)},$$
+
+así que podemos escribir ($x$ es constante)
+
+$$ w^* = argmax_w P(x|w)P(w).$$
+
+Esta forma tiene dos partes importantes:
+
+1. **Verosimilitud**: la probabilidad $P(x|w)$ de observar el mensaje distorsionado $x$ dado que se pretendía escribir el mensaje $w$. Este el el **modelo de errores**, o el **modelo del canal**, que nos dice cómo ocurren errores $x$ cuando se pretende escribir cada mensaje $w$.
+
+2. **Inicial** o **previa**: La probabilidad $P(w)$ de observar el mensaje $w$ en el contexto actual. Esto depende más del lenguaje que del canal, y le llamamos el **modelo del lenguaje**.
+
+#### Ejemplos {-}
+
+Supongamos que recibimos el mensaje $x=$"Estoy a días minutos". Esta
+es una frase con baja probabilidad de ocurrir en español. En primer lugar, encontrariamos que $P(w)$ es más grande para $w_1=$"Estoy a veinte minutos", $w_2=$"Estoy a diez minutos", o incluso $w_3$= "No voy a llegar". 
+
+Cuando consideramos el modelo del canal $P(x|w)$, sin embargo, vemos que $P(x|w_2)$ es relativamente más alto (porque
+ sabemos cómo funciona un autocorrector)
+que $P(x|w_1)$, o $P(x|w_3)$. $P(x|w_3)$ en particular es muy bajo,
+porque es poco posible que el canal distosione "No voy a llegar" 
+a "Estoy a días minutos". El máximo de $P(x|w)P(w)$ ocurre
+cuando $w=$"Estoy a diez minutos".
+
+#### Ejemplos {-}
+
+Piensa cómo sería el modelo de canal ruidoso $P(x|w)$ si nuestro problema fuera reconocimiento de frases habladas o escritas.
+
+---
+
+## Modelos de lenguaje: n-gramas
+
+Más adelante podemos ver qué tipo de modelos para errores
+podemos usar (por ejemplo, para errores de ortografía). Por
+el momento, estudiaremos la construcción de las probabilidades
+$P(w)$, donde $w$ es una sucesión de palabras.
+
+Para construir modelos de lenguaje, necesitamos una colección
+grande de ejemplos del lenguaje que nos interesa modelar. En
+los siguientes ejemplos, utilizaremos una colección de
+noticias cortas en español (de España).
+
+
+```{r, message = FALSE, warning = FALSE}
+library(tidyverse)
+periodico <- read_lines(file='../datos/noticias/ES_Newspapers.txt',
+                        progress = FALSE)
+length(periodico)
+periodico[1:2]
+```
+
+Consideremos cómo construiríamos las probabilidades $P(W)$. Si
+$W=w_1 w_2 w_3 \cdots w_n$ donde $w_i$ son las palabras que contienen
+la frase. Dada la variedad de frases que potencialmente hay en el lenguaje,
+no tiene mucho sentido intentar estimar directamente estas probabilidades contando. Es decir,
+si tomamos un corpus (aún cuando sea muy grande), la mayor parte de las frases posibles (y 'correctas') tendrán probabilidad cero.
+
+Para atacar este problema consideramos la regla del producto:
+
+$$P(w_1 w_2 w_3 \cdots w_n) = P(w_1)p(w_2|w_1)p(w_3|w_1 w_2) \cdots
+p(w_n|w_1 w_2 w_3 \cdots w_{n-1})$$
+Y observamos entonces que basta con calcular las probabilidades
+condicionales
+$$p(w|w_1\cdots w_m)$$
+para cualquier conjunto de palabras $w,w_1,\ldots, w_m$. Es decir, basta considerar el problema de predecir la siguiente palabra que 
+aparece después de una sucesión $w_1\cdots w_m$. Por ejemplo,
+si tenemos la frase "como tengo examen entonces voy a ....", la probabilidad
+de observar "estudiar" o "dormir" debe ser más alta que la de "gato".
+
+Calcular todas estas condicionales contando tampoco es factible. Pero
+podemos hacer una simplificación: : podemos suponer
+que la predicción será suficientemente buena si limitamos el contexto de la siguiente
+palabra. Por ejemplo, podríamos considerar calcular solamente las probabilidades
+$$P(w),P(w|w_1), P(w|w_1w_2)$$
+y entonces simplificar (**modelo de trigramas**):
+$$P(w_1\cdots w_n) = P(w_1)P(w_2|w_1)P(w_3|w_1w_2)  P(w_4|w_2w_3) \cdots P(w_n| w_{n-2} \cdots w_{n-1}).$$
+En este caso, consideramos dependencia hasta dos palabras atrás.
+
+Más simple, podemos usar el **modelo de bigramas**
+$$P(w_1\cdots w_n) = P(w_1)P(w_2|w_1)P(w_3|w_2)  P(w_4|w_3) \cdots P(w_n|w_{n-1}).$$
+
+y esta última expresión da la probabilidad estimada de una frase dada.  Este modelo del lenguaje es una avance sobre el modelo más simple,
+ que es el de **unigramas**:
+
+$$P(w_1\cdots w_n) = P(w_1)P(w_2)P(w_3)  P(w_4) \cdots P(w_n).$$
+Estos **modelos de n-gramas** son más factibles de construir,
+y dependiendo del problema, unigramas, bigramas, trigramas, etc. 
+pueden dar modelos suficientemente buenos. Tenemos ahora 
+qué decidir:
+
+- Cómo estimar las probabilidades $P(w|w_1\cdtos w_{n-1}) (n-gramas) usando una colección de textos.
+
+
+
