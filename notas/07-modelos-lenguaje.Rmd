@@ -224,6 +224,12 @@ para hacer los cálculos:
 ¿Cómo se estimarían las probabilidades para el modelo de unigramas
 y trigramas?
 
+#### Ejercicio {-}
+Considera la colección de textos "un día muy soleado", 
+"un día muy lluvioso", "un ejemplo muy simple de bigramas". Estima
+las probabilidades $P(muy)$, $P(día | un)$, $P(simple | muy)$ usando
+conteos.
+
 ### Corpus y vocabulario
 
 En todos los ejemplos vistos arriba, vemos que necesitamos definir qué son
@@ -290,7 +296,7 @@ esta manera todas las probabilidades condicionales
 que buscamos calcular son de la forma $P(w|a,b)$
 
 
-### Ejemplo
+#### Ejemplo {-}
 
 Comenzamos por limpiar nuestra colección de texto, creando también  *tokens* adicionales para signos de puntuación:
 
@@ -322,6 +328,13 @@ bigrams_ejemplo <- ejemplo %>%
 knitr::kable(bigrams_ejemplo)
 ```
 
+
+### Notas de periódico: modelo de n-gramas simples.
+
+En los siguientes ejemplos, utilizaremos una colección de
+noticias cortas en español (de España).
+
+
 ```{r, message = FALSE, warning = FALSE}
 library(tidyverse)
 periodico <- read_lines(file='../datos/noticias/ES_Newspapers.txt',
@@ -342,7 +355,7 @@ demostraciones (puedes correrlo con todo el corpus):
 
 ```{r}
 set.seed(123)
-periodico_m <- periodico_df %>% sample_n(1e4)
+periodico_m <- periodico_df %>% sample_n(1e5)
 ```
 
 Y calculamos las frecuencias de todos los unigramas:
@@ -384,15 +397,16 @@ la palabra *la* o la palabra *el*?
 mod_tri %>% arrange(desc(num)) %>% head(100) %>% knitr::kable()
 ```
 
+### Cálculo de probabilidad de textos
 
-
-### Evaluación de probabilidad de frases
+Podemos ahora evaluar la probabilidad de ocurrencia de 
+textos utilizando las frecuencias que calculamos arriba:
 
 ```{r}
 n_gramas <- list(unigramas = mod_uni,
                  bigramas  = mod_bi,
                  trigramas = mod_tri)
-log_prob <- function(textos, reg = 10000, n = 2){
+log_prob <- function(textos, n_gramas, reg = 0, n = 2){
   df <- data_frame(id = 1:length(textos), txt = textos) %>%
          mutate(txt = normalizar(txt))
   token_nom <- paste0('w_n_', rev(seq(1:n)) - 1)
@@ -413,9 +427,9 @@ textos <- c("xxay kacii ejemplo uus.",
             "Es este ejemplo un.",
            "Este es un ejemplo.",
            "Esta frase es normal.")
-log_prob(textos, n = 1)
-log_prob(textos, n = 2)
-log_prob(textos, n = 3)
+log_prob(textos, n_gramas, n = 1)
+log_prob(textos, n_gramas, n = 2)
+log_prob(textos, n_gramas, n = 3)
 ```
 
 
@@ -424,9 +438,121 @@ log_prob(textos, n = 3)
 - Todos los modelos dan probabilidad 0 a la frase con palabras inventadas.
 - El modelo de unigramas claramente no captura estructura en el orden de palabras. Las primeras dos frases tienen probabilidad de ocurrir en 
 el lenguaje muy distinta, pero este modelo les da la misma probabilidad.
-- El modelo de bigramas da probabilidad 0 a las segunda frase (lo cual es factible), y también da una probabilidad relativamente a la tercera frase.
+- El modelo de bigramas da probabilidad 0 a la primera frase, y también da una probabilidad relativamente baja a la segunda frase.
 - El modelo de trigramas, sin embargo, da probabilidad 0 a la última frase, lo cual parece incorrecto: en el caso de los periódicos, no encontró ninguna frase que comenzara de este modo, pero más bien debería
 tener una probabilidad chica.
+
+### Evaluación de modelos: generación de texto
+
+Una primera idea de qué tan bien funcionan estos modelos es generando
+frases según la probabilidad que estimamos.
+
+#### Ejemplo: unigramas
+
+Generamos algunas frases bajo el modelo de unigramas. Podemos construir
+una frase comenzando con el token $<s>$, y paramos cuando encontramos
+$</s>$. Cada token se escoge al azar según las probablidades $P(w)$.
+
+```{r}
+calc_siguiente_uni <- function(texto, n_gramas){
+  u <- runif(1)
+  unigramas_s <- arrange(n_gramas[[1]], log_p)
+  prob_acum <- cumsum(exp(unigramas_s$log_p))
+  palabra_no <- match(TRUE, u < prob_acum)
+  as.character(unigramas_s[palabra_no, "w_n_0"])
+}
+texto <- "_s_"
+fin <- FALSE
+set.seed(12315)
+while(!fin){
+  siguiente <- calc_siguiente_uni(texto, n_gramas)
+  texto <- c(texto, siguiente)
+  if(siguiente == "_ss_"){
+    fin <- TRUE
+  }
+}
+paste(texto, collapse = " ")
+```
+
+
+#### Ejemplo: bigramas
+
+```{r}
+calc_siguiente_bi <- function(texto, n_gramas){
+  u <- runif(1)
+  n <- length(texto)
+  anterior <- texto[n]
+  siguiente_df <- filter(n_gramas[[2]], w_n_1 == anterior) %>% 
+    arrange(log_p)
+  palabra_no <- match(TRUE, u < cumsum(exp(siguiente_df$log_p)))
+  as.character(siguiente_df[palabra_no, "w_n_0"])
+}
+texto <- "_s_"
+set.seed(43)
+for(i in 1:40){
+  siguiente <- calc_siguiente_bi(texto, n_gramas)
+  texto <- c(texto, siguiente)
+  if(siguiente == "_ss_"){
+    texto <- c(texto, "_s_")
+  }
+}
+paste(texto, collapse = " ")
+```
+
+
+#### Ejemplo: trigramas
+
+```{r}
+calc_siguiente_tri <- function(texto, n_gramas){
+  u <- runif(1)
+  n <- length(texto)
+  contexto <- texto[c(n,n-1)]
+  siguiente_df <- filter(n_gramas[[3]], w_n_1 == contexto[1], w_n_2 == contexto[2]) %>% 
+    arrange(log_p)
+  palabra_no <- match(TRUE, u < cumsum(exp(siguiente_df$log_p)))
+  as.character(siguiente_df[palabra_no, "w_n_0"])
+}
+texto <- c("_s_", "_s_")
+set.seed(411)
+for(i in 1:50){
+  siguiente <- calc_siguiente_tri(texto, n_gramas)
+  texto <- c(texto, siguiente)
+  if(siguiente == "_ss_"){
+    texto <- c(texto, "_s_")
+  }
+}
+paste(texto, collapse = " ")
+```
+
+**Observación**: en este ejemplo vemos cómo los textos parecen más textos reales
+cuando usamos n-gramas más largos. 
+
+### Evaluación de modelos: perplejidad
+
+ En general,
+la mejor manera de hacer la evaluación de un modelo de lenguaje es en el contexto
+de su aplicación (es decir, el desempeño en la tarea final para el que construimos
+nuestro modelo): por ejemplo, si se trata de corrección de ortografía, qué tan bien
+se desempeña el corrector de ortografía.
+
+Sin embargo también podemos hacer una evaluación intrínseca del modelo considerando
+muestras de entrenamiento y prueba. Una medida usual en este contexto
+es la **perplejidad**.
+
+```{block2, type='resumen'}
+Sea $P(W)$ un modelo del lenguaje. Supongamos que observamos
+un texto $W=w_1 w_2\cdots\w_n$ (una cadena larga, que puede incluír varios separadores
+$</s>, <s>$). La **perplejidad** del modelo sobre este texto es igual a
+
+```
+
+
+
+
+
+
+
+
 
 ## Suavizamiento de conteos
 
@@ -446,14 +572,14 @@ donde $V$ es el tamaño del vocabulario (el número de palabras únicas).
 
 
 ```{r}
-V <- nrow(frec_unigramas)
+V <- nrow(mod_uni)
 V
 textos <- c("xxay kacii ejemplo uus.",
             "Es este ejemplo un.",
            "Este es un ejemplo.",
            "Esta frase es normal.")
-log_prob(textos, n = 1, a = 1, reg = V)
-log_prob(textos, n = 2, a = 1, reg = V)
-log_prob(textos, n = 3, a = 1, reg = V)
+log_prob(textos, n = 1, reg = V)
+log_prob(textos, n = 2, reg = V)
+log_prob(textos, n = 3, reg = V)
 ```
 
