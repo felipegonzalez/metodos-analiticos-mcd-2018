@@ -2,3 +2,4 @@ notas-metodos-analiticos-2018.Rmd
 logs
 *.log
 /*.rds
+/*_cache
