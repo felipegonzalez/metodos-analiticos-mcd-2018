@@ -98,7 +98,7 @@ a "Estoy a días minutos". Por otro lado $P(W_4)$ también
 es muy bajo, pues la frase $W_4$ tiene probabilidad muy baja de 
 ocurrir.
 
-#### Ejemplos {-}
+#### Ejercicio {-}
 
 Piensa cómo sería el modelo de canal ruidoso $P(X|W)$ si nuestro problema fuera reconocimiento de frases habladas o escritas.
 
@@ -136,11 +136,11 @@ chico (palabras cercanas) y no es necesario considerar la frase completa.
 
 Consideramos entonces la regla del producto:
 
-$$P(w_1 w_2 w_3 \cdots w_n) = P(w_1)p(w_2|w_1)p(w_3|w_1 w_2) \cdots
-p(w_n|w_1 w_2 w_3 \cdots w_{n-1})$$
+$$P(w_1 w_2 w_3 \cdots w_n) = P(w_1)P(w_2|w_1)P(w_3|w_1 w_2) \cdots
+P(w_n|w_1 w_2 w_3 \cdots w_{n-1})$$
 Y observamos entonces que basta con calcular las probabilidades
 condicionales
-$$p(w|w_1\cdots w_m)$$
+$$P(w|w_1\cdots w_m)$$
 para cualquier conjunto de palabras $w,w_1,\ldots, w_m$. 
 A estas $w,w_1,\ldots, w_m$ palabras que ocurren justo antes de $w$ les
 llamamos el *contexto* de $w$ en la frase. Por la regla
@@ -308,10 +308,10 @@ normalizar <- function(oracion){
   texto <- gsub("[«»]", "", texto) 
   texto <- gsub(";", " _punto_coma_ ", texto) 
   texto <- gsub("\\:", " _dos_puntos_ ", texto) 
-  texto <- gsub("\\,", " _coma_ ", texto) 
+  texto <- gsub("\\,[^0-9]", " _coma_ ", texto) 
   paste("_s_ _s_ ", texto)
 }
-corpus_mini <- c("Este es un ejemplo: el perro corre, el gato escapa. Este es un número 3.1416, otro número es 123.",
+corpus_mini <- c("Este es un ejemplo: el perro corre, el gato escapa. Este es un número 3.1416, otro número es 1,23.",
            "Este   es otro ejemplo.  " )
 normalizar(corpus_mini)
 ```
@@ -324,7 +324,8 @@ ejemplo <- data_frame(txt = corpus_mini) %>%
                 mutate(txt = normalizar(txt)) 
 bigrams_ejemplo <- ejemplo %>% 
                    unnest_tokens(bigramas, txt, token = "ngrams", 
-                                 n = 2)
+                                 n = 2) %>%
+                   group_by(bigramas) %>% tally()
 knitr::kable(bigrams_ejemplo)
 ```
 
@@ -355,7 +356,8 @@ demostraciones (puedes correrlo con todo el corpus):
 
 ```{r}
 set.seed(123)
-periodico_m <- periodico_df %>% sample_n(1e5)
+muestra_ind <- sample(1:nrow(periodico_df), 1e5)
+periodico_m <- periodico_df[muestra_ind, ]
 ```
 
 Y calculamos las frecuencias de todos los unigramas:
@@ -397,7 +399,7 @@ la palabra *la* o la palabra *el*?
 mod_tri %>% arrange(desc(num)) %>% head(100) %>% knitr::kable()
 ```
 
-### Cálculo de probabilidad de textos
+### Cálculo de probabilidad de textos y suavizamiento simple
 
 Podemos ahora evaluar la probabilidad de ocurrencia de 
 textos utilizando las frecuencias que calculamos arriba:
@@ -406,7 +408,7 @@ textos utilizando las frecuencias que calculamos arriba:
 n_gramas <- list(unigramas = mod_uni,
                  bigramas  = mod_bi,
                  trigramas = mod_tri)
-log_prob <- function(textos, n_gramas, reg = 0, n = 2){
+log_prob <- function(textos, n_gramas, n = 2, laplace = FALSE, delta = 0.001){
   df <- data_frame(id = 1:length(textos), txt = textos) %>%
          mutate(txt = normalizar(txt))
   token_nom <- paste0('w_n_', rev(seq(1:n)) - 1)
@@ -415,8 +417,13 @@ log_prob <- function(textos, n_gramas, reg = 0, n = 2){
                 token = "ngrams", n = n) %>%
                 separate(ngrama, token_nom, " ") %>%
                 left_join(n_gramas[[n]], by = token_nom)
-  log_probs <- df_tokens[["log_p"]]
-  log_probs[is.na(log_probs)] <- log(1/reg)
+  if(laplace){
+    V <- nrow(n_gramas[[1]])
+    log_probs <- log(df_tokens[["num"]] + delta) - log(df_tokens[["denom"]] + delta*V )
+    log_probs[is.na(log_probs)] <- log(1/V)
+  } else {
+    log_probs <- df_tokens[["log_p"]]
+  }
   log_probs <- split(log_probs, df_tokens$id)
   sapply(log_probs, mean)
 }
@@ -441,6 +448,55 @@ el lenguaje muy distinta, pero este modelo les da la misma probabilidad.
 - El modelo de bigramas da probabilidad 0 a la primera frase, y también da una probabilidad relativamente baja a la segunda frase.
 - El modelo de trigramas, sin embargo, da probabilidad 0 a la última frase, lo cual parece incorrecto: en el caso de los periódicos, no encontró ninguna frase que comenzara de este modo, pero más bien debería
 tener una probabilidad chica.
+
+---
+
+Esta última observación es importante: cuando no encontramos en nuestros conteos
+un bigrama (o trigrama, etc.) dado, la probabilidad asignada es 0. 
+
+Aunque para algunas frases esta asignación es correcta (una texto que no puede
+ocurrir en el lenguaje), muchas veces esto se debe a que los datos son ralos: la mayor
+parte de la frases posibles no son observadas en nuestro corpus, y es erróneo
+asignarles probabilidad 0. Más en general, cuando los conteos de bigramas son
+chicos, sabemos que nuestra estimación por máxima verosimilitud tendrá varianza 
+alta.
+
+Existen **técnicas de suavizamiento** (que veremos más adelante) para ayudar
+con esta dificultad. El método más simple es el **suavizamiento de Laplace**,
+en el que simplemente agregamos una cantidad $\delta$ a los conteos de unigramas, bigramas, etc.
+
+Para unigramas, agregamos $\delta$ a cada posible unigrama. Si el tamaño del vocabulario
+es $V$, y el conteo total de *tokens* es $N$, el nuevo conteo de *tokens* será entonces
+$N+\delta V$, y la probabilidad suavizada será entonces:
+
+$$P_{L}(w) = \frac{N(w) + \delta}{N + \delta V}$$
+Para bigramas, agregamos 1 a cada posible bigrama. La estimación original es
+$$P(w|a) = \frac{N(aw)}{N(a)} = \frac{N(aw)}{\sum_{z\in V} N(az)}$$
+De modo que la estimación suavizada es
+$$P_{L}(w|a) = \frac{N(aw)+\delta}{\sum_{z\in V} N(az)+\delta}= \frac{N(aw) + \delta}{N(z)+ \delta V} = $$
+Para trigramas,
+$$P_{L}(w|ab) = \frac{N(abw)+\delta}{\sum_{z\in V} N(abz)+\delta}= \frac{N(abw) + \delta}{N(ab)+ \delta} = $$
+y así sucesivamente.
+
+**Observación**: este método es útil para introducir la idea de
+suavizamiento, pero existen otros mejores que veremos más adelante
+(ver sección 4.5 de [@jurafsky]), que no requieren escoger el parámetro $\delta$.
+
+
+
+```{r}
+textos <- c("xxay kacii ejemplo uus.",
+            "Es este ejemplo un.",
+           "Este es un ejemplo.",
+           "Esta frase es normal.")
+log_prob(textos, n_gramas, n = 1, laplace = TRUE)
+log_prob(textos, n_gramas, n = 2, laplace = TRUE)
+log_prob(textos, n_gramas, n = 3, laplace = TRUE)
+```
+
+Nótese que este suavizamiento cambia considerablemente las probabilides estimadas,
+incluyendo algunas de ellas con conteos altos (esta técnica dispersa demasiada
+probabilidad sobre conteos bajos).
 
 ### Evaluación de modelos: generación de texto
 
@@ -541,45 +597,69 @@ es la **perplejidad**.
 
 ```{block2, type='resumen'}
 Sea $P(W)$ un modelo del lenguaje. Supongamos que observamos
-un texto $W=w_1 w_2\cdots\w_n$ (una cadena larga, que puede incluír varios separadores
-$</s>, <s>$). La **perplejidad** del modelo sobre este texto es igual a
-
+un texto $W=w_1 w_2\cdots\w_N$ (una cadena larga, que puede incluír varios separadores
+$</s>, <s>$). La **log-perplejidad** del modelo sobre este texto es igual a
+$$LP(W) = -\frac{1}{N} \log P(w_1 w_2 \cdots w_N),$$
+  que también puede escribirse como
+$$LP(W) = -\frac{1}{N} \sum_{i=1}^N \log P(w_i|w_1 w_2 \cdtos w_{i-1})$$
+La perplejidad es igual a
+$$PP(W) = e^{LP(W)},$$ 
+que es la medida más frecuentemente reportada.
 ```
 
+**Observaciones**: 
 
+- La log perplejidad es similar a la devianza (negativo de log-verosimilitud)
+de los datos (palabras) observadas $W$ bajo el modelo $P$.
+- Cuanto más grande es $P(W)$ bajo el modelo, menor es la perplejidad.
+- Mejores modelos tienen valores más bajos de perplejidad.
 
+Bajo el modelo de bigramas, por ejemplo, tenemos que
 
+$$LP(W) = -\frac{1}{N} \sum_{i=1}^N \log P(w_i|w_{i-1})$$
 
+Y para el modelo de trigramas:
+$$LP(W) = -\frac{1}{N} \sum_{i=1}^N \log P(w_i|w_{i-2}w_{i-1})$$
 
+```{block2, type='resumen'}
+La selección de modelos la hacemos calculando la perplejidad en una
+muestra de textos de prueba, que no fueron utilizados para
+entrenar los modelos.
+```
 
+---
 
+#### Ejemplo {-}
 
-## Suavizamiento de conteos
+Podemos usar nuestra función anterior para calcular la perplejidad. Para
+los datos de entrenamiento vemos que la perplejidad es mejor para
+los modelos más complejos:
 
-Como vimos arriba, el método de conteos es deficiente pues típicamente
-pone probabilidad 0 a frases que pueden ocurrir en el lenguaje (es decir,
-los datos del corpus típicamente son ralos en el espacio de posibles
-frases del lenguaje). Una primera solución simple es suavizar los
-conteos.
+```{r}
+periodico_entrena <- periodico[muestra_ind]
+textos <- periodico_entrena[1:1000]
+texto_prueba <- paste(textos, collapse = " ")
+exp(-log_prob(texto_prueba, n_gramas, n = 1, laplace = T))
+exp(-log_prob(texto_prueba, n_gramas, n = 2, laplace = T))
+exp(-log_prob(texto_prueba, n_gramas, n = 3, laplace = T))
+```
 
-Para bigramas, usamos
-
-$$P(w|z) = \frac{N(zw) + 1}{N(z)+V}$$
-
-donde $V$ es el tamaño del vocabulario (el número de palabras únicas).
-
+Y para la muestra de prueba:
 
 
 
 ```{r}
-V <- nrow(mod_uni)
-V
-textos <- c("xxay kacii ejemplo uus.",
-            "Es este ejemplo un.",
-           "Este es un ejemplo.",
-           "Esta frase es normal.")
-log_prob(textos, n = 1, reg = V)
-log_prob(textos, n = 2, reg = V)
-log_prob(textos, n = 3, reg = V)
+periodico_prueba <- periodico[-muestra_ind]
+textos <- periodico_prueba[1:1000]
+texto_prueba <- paste(textos, collapse = " ")
+exp(-log_prob(texto_prueba, n_gramas, n = 1, laplace = T))
+exp(-log_prob(texto_prueba, n_gramas, n = 2, laplace = T))
+exp(-log_prob(texto_prueba, n_gramas, n = 3, laplace = T))
 ```
+
+Y vemos para este ejemplo que el mejor desempeño está dado por el modelo de bigramas, aunque no hemos hecho ningún ajuste ad-hoc del parámetro $\delta$. Como explicamos arriba,
+es preferible usar otros algoritmos de suavizamiento.
+
+
+### Suavizamiento de conteos
 
