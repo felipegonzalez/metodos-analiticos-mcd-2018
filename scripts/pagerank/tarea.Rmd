@@ -1,0 +1,127 @@
+---
+title: "Tarea: pagerank"
+output: html_notebook
+---
+
+Considera la siguiente gráfica:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggraph)
+library(igraph)
+```
+
+```{r}
+red <- igraph::graph(c('a','b','b','h','h','i','i','j','j','h',
+                    'b','c','c','a','d','e','e','f','f','d','a','e',
+                    'e','d','b','a','f','g','g','g'), directed = TRUE)
+plot(red)
+```
+
+1. Calcula la matriz de transición $M$ a partir de la matriz de adyacencia $A$. Verifica que los renglones de la matriz suman uno. **Ojo**: los renglones
+de la matriz de adyacencia y transición no necesariamente están ordenados
+por orden alfabético.
+
+```{r}
+
+```
+
+1. Identifica los nodos de esta red que son callejones sin salida (los callejones sin salida no tienen aristas de salida o solo tienen una arista que apunta a
+sí mismos). 
+
+2. Identifica trampas de telaraña en esta red.
+
+3. Utilizando las dos respuestas anteriores, ¿qué crees que pase cuando
+calculamos el pagerank de estos nodos? Piensa en cómo se distribuye la importancia
+en la red según la matriz de transición, y dónde va a terminar concentrándose la
+importancia.
+
+4. Verifica tu intuición calculando el vector propio asociado a $M^t$ con valor propio 1.
+
+```{r}
+
+```
+
+5. Ahora verificamos el resultado distribuyendo la importancia con la matriz
+$M^t$ comenzando con toda la importancia concentrada en el nodo a.
+
+
+- Explica por qué cuando iteramos una vez obtenemos la importancia distribuida
+igualmente en el nodo b y el nodo e:
+```{r}
+v <- c(1, rep(0,9))
+v
+t(M) %*% v
+```
+
+- ¿Cómo queda distribuida la importancia cuando hacemos 20 pasos como el anterior?
+
+```{r}
+
+```
+
+
+6. Elimina el nodo $g$ de la gráfica y repite el ejercicio anterior. Antes,
+intenta predecir cuáles van a ser las importancias de los nodos. Explica 
+por qué obtienes ceros en las importancias de pagerank.
+
+```{r}
+red_1 <- igraph::graph(c('a','b','b','h','h','i','i','j','j','h',
+                    'b','d','d','a','c','e','e','f','f','c','a','e',
+                    'e','c','b','a'), directed = TRUE)
+plot(red_1)
+```
+
+```{r}
+
+```
+
+7. Explica por qué en los dos ejemplos las importancias de pagerank asignadas no son
+satisfactorias para el problema de asignar importancia a páginas web.
+
+8. Considera ahora la gráfica
+
+```{r}
+red <- igraph::graph(c('a','b','b','h','h','i','i','j','j','h',
+                    'b','d','d','a','c','e','e','f','f','c','a','e',
+                    'e','c','b','a','f','g'), directed = TRUE)
+plot(red)
+```
+
+Esta gráfica tiene un callejón sin salida. Modifica la matriz de transición
+de esta gráfica para que sea una matriz estocástica (tip: modifica el 
+renglón correspondiente a g en la matriz de transición).
+
+```{r}
+
+```
+
+9.  Calcula las importancias ¿Se
+cumple el Teorema de Perron-Frobenius para su matriz de transición modificada?
+Explica los ceros que aparecen en la solución.
+
+```{r}
+```
+
+10. Ahora modifica la matriz de transición $M$ con probabilidad de
+teletransportación 0.15 ($\alpha = 0.85$). Calcula las importancias de Pagerank.
+Explica por qué es más satisfactoria esta solución que la anterior.
+
+
+```{r}
+
+```
+
+11. Comenzando con toda la importancia concentrada en el nodo a, itera
+multiplicando por la matriz modificada del inciso anterior. ¿Qué tan
+cerca estás de la solución del inciso anterior después de 30 iteraciones? (tip:
+recuerda normalizar los vectores para que sumen 1).
+
+```{r}
+
+```
+
+
+12. Explica por qué el enfoque de los dos incisos anteriores no es tan apropiado
+para gráficas muy grandes. Repasa el algoritmo de pagerank que vimos al final
+de la clase anterior.
