@@ -1122,7 +1122,9 @@ La evaluación de estas aplicaciones puede hacerse por ejemplo,
 con una lista de singular/plurales, de adjetivos/adverbios, masculino/femenino, etc (ver [@word2vec]).
 
 **Observación**: falta afinar los parámetros en este modelo.
-Considera un modelo mucho más grande como [este](http://crscardellino.me/SBWCE/) y repite las tareas mostradas.
+Puedes probar cambiando negative sampling (por ejemplo, incrementa a 40), el número de vectores (50-200, por ejemplo), e incrementando *window* y el número de iteraciones.
+
+Considera también un modelo preentrenado mucho más grande como [este](http://crscardellino.me/SBWCE/) y repite las tareas mostradas (el formato bin es estándar para la implementación que usamos de word2vec).
 
 
 
