@@ -1012,7 +1012,8 @@ Construimos un modelo con vectores de palabras de tamaño 100,
 skip-grams de tamaño 4, y ajustamos con muestreo negativo
 de tamaño 50:
 
-```{r modelow2v, message = FALSE, warning = FALSE}
+```{r modelow2v, message = FALSE, warning = FALSE, results=FALSE}
+
 if (!file.exists("noticias_vectors.bin")) {
   model <- train_word2vec("noticias_w2v.txt", "noticias_vectors.bin",
           vectors = 100, threads = 4, window = 4, cbow = 0,  
