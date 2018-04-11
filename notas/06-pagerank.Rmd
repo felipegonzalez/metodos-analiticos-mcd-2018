@@ -1213,7 +1213,9 @@ graph_1 <- igraph::as.igraph(graph)
 igraph::write_graph(graph_1, file = 'hollings.gml', format = 'gml')
 ```
 
-### Ejercicio
+### Tarea
 
-- A partir de la gráfica de USairports del paquete *igraphdata*, construye una gráfica de Gephi donde los nodos son aeropuertos y las aristas indican si hubo vuelos entre dos aeropuertos (con el peso igual al número de vuelos). Grafica grado y centralidad de eigenvector. Identifica los aeorpuertos con betweenness alto. Tip: construye la matriz de adyacencias, y luego una gráfica (*weighted=T*). Exporta esta gráfica en formato gml y cárgala en Gephi. Utiliza Force Atlas 2 para reordenar los nodos y controla el grueso de las aristas con uno de los *sliders* que están abajo de la gráfica.
+- Resuelve el ejercicio en *scripts/pagerank*
+
+- (Opcional) A partir de la gráfica de USairports del paquete *igraphdata*, construye una gráfica de Gephi donde los nodos son aeropuertos y las aristas indican si hubo vuelos entre dos aeropuertos (con el peso igual al número de vuelos). Grafica grado y centralidad de eigenvector. Identifica los aeorpuertos con betweenness alto. Tip: construye la matriz de adyacencias, y luego una gráfica (*weighted=T*). Exporta esta gráfica en formato gml y cárgala en Gephi. Utiliza Force Atlas 2 para reordenar los nodos y controla el grueso de las aristas con uno de los *sliders* que están abajo de la gráfica.
 
