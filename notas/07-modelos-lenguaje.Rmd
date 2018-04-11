@@ -656,11 +656,11 @@ es la **perplejidad**.
 
 ```{block2, type='resumen'}
 Sea $P(W)$ un modelo del lenguaje. Supongamos que observamos
-un texto $W=w_1 w_2\cdots\w_N$ (una cadena larga, que puede incluír varios separadores
+un texto $W=w_1 w_2\cdots w_N$ (una cadena larga, que puede incluír varios separadores
 $</s>, <s>$). La **log-perplejidad** del modelo sobre este texto es igual a
 $$LP(W) = -\frac{1}{N} \log P(w_1 w_2 \cdots w_N),$$
   que también puede escribirse como
-$$LP(W) = -\frac{1}{N} \sum_{i=1}^N \log P(w_i|w_1 w_2 \cdtos w_{i-1})$$
+$$LP(W) = -\frac{1}{N} \sum_{i=1}^N \log P(w_i|w_1 w_2 \cdots w_{i-1})$$
 La perplejidad es igual a
 $$PP(W) = e^{LP(W)},$$ 
 que es la medida más frecuentemente reportada en modelos de lenguaje.
@@ -1029,7 +1029,7 @@ El resultado son los vectores aprendidos de las palabras, por ejemplo
 as.numeric(model[["gol"]])
 ```
 
-## Espacio de representación de palabras
+## Espacio de representación de palabras {#esprep}
 
 Como discutimos arriba, palabras que se usan en contextos
 similares por su significado o por su función (por ejemplo, "perro" y "gato"") deben tener representaciones similares, pues su contexto tiende a ser similar. La distancia que usamos el similitud coseno.
@@ -1141,3 +1141,9 @@ analysis, respuesta de preguntas, traducción automática, recuperación
 de información, reconocimiento de entidades, etc. Word2vec también es usado para sistemas de recomendación (las palabras son artículos, las canastas son los textos).
 
 ## Tarea {-}
+
+1. Resuelve los ejercicios 4.2-4.6 de nuestra [referencia de esta sección](https://web.stanford.edu/~jurafsky/slp3/4.pdf).
+
+2. Baja el archivo *noticias_vectors.bin* (ver instrucciones en *doc/* en el repositorio), o ajusta un modelo word2vec como arriba hicimos.
+También puedes intentar con un modelo más grande como [en esta liga](http://crscardellino.me/SBWCE/).
+Haz algunos experimentos como los de la sección \@ref(esprep): palabras más similares, plurales/singulares, femenino/masculino. Identifica fallas y aspectos interesantes de estos modelos.
