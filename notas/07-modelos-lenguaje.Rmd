@@ -903,7 +903,7 @@ Consideremos que el texto de entrenamiento es
 En este caso, nuestro vocabulario consiste de los 8 tokens
 $<s>$, el, perro, gato, león, corre, caza $</s>$. Consideremos un
 modelo con $d=2$ (representaciones de palabras en 2 dimensiones),
-y consideramos un modelo de trigramas.
+y consideramos un modelo de bigramas.
 
 Nuestra primera capa es una matriz $C$ de tamaño $2\times 8$,
 es decir, un vector de tamaño 2 para cada palabra. Por ejemplo,
@@ -1174,21 +1174,26 @@ Para empezar, la función objetivo original (para un solo trigrama) es
 
 $$E = -\log \hat{P}(w_n|w_{n-1}w_{n+1}) = -y_w + \log\sum_j \exp(y_j),$$
 
-donde las $y_i$ son las salidas de la capa anterior. La dificultad está en el segundo término, que es sobre todo el vocabulario en incluye todos los parámetros del modelo.
+donde las $y_i$ son las salidas de la penúltima. La dificultad está en el segundo término, que es sobre todo el vocabulario en incluye todos los parámetros del modelo (hay que calcular las parciales de $y_j$'s
+sobre cada una de las palabras del vocabulario).
 
 
 La idea del muestreo negativo es que si observamos
 $w_n$ entre de $w_{n+1}$ y $w_{n-1}$, tomamos una muestra de $k$ palabras
 $v_1,\ldots v_k$ al azar
 (2-50, dependiendo del tamaño de la colección), y creamos $k$
-"trigramas falsos" $w_{n-2}w_{n-1}v_j$, $j=1\ldots,k$. Minimizamos
+"trigramas falsos" $w_{n-1} v_j w_{n+1}$, $j=1\ldots,k$. Minimizamos
 en lugar de la observación de arriba
 
-$$E = -\log\sigma(y_w) + \sum_k \log\sigma(y_k).$$
-
+$$E = -\log\sigma(y_w) + \sum_{j=1}^k \log\sigma(y_j),$$
+en donde queremos maximizar la probabilidad de que ocurra
+$w_n$ vs. la probabilidad de que ocurra alguna de las $v_j$.
 Es decir, solo buscamos optimizar parámetros para separar lo mejor
 que podamos la observación de $k$ observaciones falsas, lo cual implica que tenemos que mover un número relativamente chico de
-parámetros (en lugar de todos los parámetros de todas las palabras del vocabulario). Las palabras "falsas" se escogen según la probabilidad de unigramas.
+parámetros (en lugar de todos los parámetros de todas las palabras del vocabulario). 
+
+Las palabras "falsas" se escogen según una probabilidad ajustada
+de unigramas (se observó empíricamente mejor desempeño cuandoi escogemos cada palabra con probabilidad proporcional a $P(w)^{3/4}$, en lugar de $P(w)$, ver [@word2vec]).
 
 ### Ejemplo {-}
 
