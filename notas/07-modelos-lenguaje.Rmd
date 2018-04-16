@@ -1337,7 +1337,29 @@ Puedes probar cambiando negative sampling (por ejemplo, incrementa a 40), el nú
 
 Considera también un modelo preentrenado mucho más grande como [este](http://crscardellino.me/SBWCE/) y repite las tareas mostradas (el formato bin es estándar para la implementación que usamos de word2vec).
 
+---
 
+Podemos visualizar el espacio de representaciones reduciendo dimensionalidad. En este caso, utilizamos *tsne*:
+
+```{r, out.width = "800px", cache = TRUE}
+library(tsne)
+library(ggplot2)
+library(ggrepel)
+mat_vs <- model@.Data
+# solo calculamos para las 500 palabras más comunes
+num_palabras <- 500 
+set.seed(1203)
+vs_2 <- tsne(mat_vs[1:num_palabras, ], 
+             max_iter = 1000, perplexity = 50)
+```
+
+```{r}
+df_vs <- as.data.frame(vs_2) %>%
+  mutate(palabra = rownames(mat_vs[1:num_palabras, ]))
+ggplot(df_vs %>% sample_n(250), 
+  aes(x = V1, y = V2, label = palabra)) + 
+  geom_text_repel(size = 2, force = 0.3, segment.alpha = 0.5)
+```
 
 ## Usos de representaciones distribuidas
 
