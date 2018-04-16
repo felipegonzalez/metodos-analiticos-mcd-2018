@@ -865,11 +865,13 @@ Podemos entonces construir una red neuronal con 2 capas ocultas como sigue. Usem
 $$w_{n-2},w_{n-1} \to x = (C(w_{n-2}), C(w_{n-1})).$$
 
 
-2. En la siguiente capa oculta tenemos una matriz de pesos $H$ y la función logística (o tangente hiperbólica) $\sigma$, como en una red neuronal usual. En esta capa calculamos
+2. En la siguiente capa oculta tenemos una matriz de pesos $H$ y la función logística (o tangente hiperbólica) $\sigma (z) = \frac{e^z}{1+e^z}$, como en una red neuronal usual. 
+
+En esta capa calculamos
 $$z = \sigma (a + Hx),$$
 que resulta en un vector de tamaño $h$. 
 
-3. Finalmente, la capa de salida debe ser un vector de probabilidades
+3. La capa de salida debe ser un vector de probabilidades
 sobre todo el vocabulario $|V|$. En esta capa tenemos pesos $U$ y hacemos
 $$y = b + U\sigma (z),$$
 y finalmente usamos softmax para tener probabilidades que suman uno:
@@ -888,6 +890,205 @@ La representación en la referencia [@bengio] es:
 Esta idea original ha sido explotada con éxito, aunque sigue siendo
 muy intensivo en cómputo ajustar un modelo como este. Nótese que
 el número de parámetros es del orden de $|V|(nm+h)$, donde $|V|$ es el tamaño del vocabulario (decenas o cientos de miles), $n$ es 3 o 4 (trigramas, 4-gramas), $m$ es el tamaño de la representacion (cientos) y $h$ es el número de nodos en la segunda capa (también cientos o miles).  Esto resulta en el mejor de los casos en modelos con miles de millones de parámetros. Adicionalmente, hay algunos cálculos costosos, como el softmax (donde hay que hacer una suma sobre el vocabulario completo). En el paper original se propone **descenso estocástico**.
+
+### Ejemplo {-}
+Veamos un ejemplo chico de cómo se vería el paso
+feed-forward de esta red. Supondremos en este
+ejemplo que los sesgos $a,b$ son
+iguales a cero para simplificar los cálculos.
+
+Consideremos que el texto de entrenamiento es
+"El perro corre. El gato corre. El león corre. El león ruge."
+
+En este caso, nuestro vocabulario consiste de los 8 tokens
+$<s>$, el, perro, gato, león, corre, caza $</s>$. Consideremos un
+modelo con $d=2$ (representaciones de palabras en 2 dimensiones),
+y consideramos un modelo de bigramas.
+
+Nuestra primera capa es una matriz $C$ de tamaño $2\times 8$,
+es decir, un vector de tamaño 2 para cada palabra. Por ejemplo,
+podríamos tener
+```{r}
+set.seed(63)
+C <- round(matrix(rnorm(16, 0, 0.1), 2, 8), 2)
+colnames(C) <- c("_s_", "el", "perro", "gato", "león", "corre", "caza", "_ss_")
+rownames(C) <- c("d_1", "d_2")
+C
+```
+
+En la siguiente capa consideremos que usamos solamente 3 unidades. Como estamos considerando bigramas, necesitamos una entrada de tamaño 4 (representación de un bigrama, que son dos vectores de la matriz $C$)
+
+```{r}
+H <- round(matrix(rnorm(12, 0, 0.1), 3, 4), 2)
+H
+```
+
+Y la última capa es la del vocabulario. Son entonces 8 unidades,
+con 3 entradas cada una:
+
+```{r}
+U <- round(matrix(rnorm(24, 0, 0.1), 8, 3), 2)
+rownames(U) <- c("_s_", "el", "perro", "gato", "león", "corre", "caza", "_ss_")
+U
+```
+
+Ahora consideremos cómo se calcula el objetivo con los
+datos de entrenamiento. El primer trigrama es (\_s\_, el, perro). La primera
+capa entonces devuelve los dos vectores correspondientes a cada
+palabra (concatenado):
+
+```{r}
+capa_1 <- c(C[, "_s_"], C[, "el"])
+capa_1
+```
+
+La siguiente capa es:
+
+```{r}
+sigma <- function(z){ 1 / (1 + exp(-z))}
+capa_2 <- sigma(H %*% capa_1)
+capa_2
+```
+
+Y la capa final da
+
+```{r}
+y <- U %*% capa_2
+y
+```
+
+Y aplicamos softmax para encontrar las probabilidades
+
+```{r}
+p <- exp(y)/sum(exp(y)) %>% as.numeric()
+p
+```
+
+Y la probabilidad es entonces
+
+```{r}
+p_1 <- p["perro", 1]
+```
+
+Cuya log probabilidad es
+
+```{r}
+log(p_1)
+```
+
+Ahora seguimos con el siguiente trigrama, que
+es "(el, perro, corre)". Necesitamos calcular la probabilidad
+de corre dado el contexto "el perro". Repetimos nuestro cálculo:
+
+```{r}
+capa_1 <- c(C[, "el"], C[, "perro"])
+capa_1
+capa_2 <- sigma(H %*% capa_1)
+capa_2
+y <- U %*% capa_2
+y
+p <- exp(y)/sum(exp(y)) %>% as.numeric()
+p
+```
+
+Y la probabilidad es entonces
+
+```{r}
+p_2 <- p["corre", 1]
+log(p_2)
+```
+
+Sumando, la log probabilidad es:
+
+```{r}
+log(p_1) + log(p_2)
+```
+
+y continuamos con los siguientes trigramas del texto de entrenamiento.
+Creamos una función
+
+```{r}
+feed_fow_p <- function(trigrama, C, H, U){
+  trigrama <- strsplit(trigrama, " ", fixed = TRUE)[[1]]
+  capa_1 <- c(C[, trigrama[1]], C[, trigrama[2]])
+  capa_2 <- sigma(H %*% capa_1)
+  y <- U %*% capa_2
+  p <- exp(y)/sum(exp(y)) %>% as.numeric()
+  p
+}
+
+feed_fow_trigrama <- function(trigrama, C, H, U) {
+  p <- feed_fow_p(trigrama, C, H, U)
+  trigrama_s <- strsplit(trigrama, " ", fixed = TRUE)[[1]]
+  log(p)[trigrama_s[3], 1]
+}
+```
+
+Y ahora aplicamos a todos los trigramas:
+
+```{r}
+texto_entrena <- "_s_ el perro corre _ss_ _s_ el gato corre _ss_ _s_ el león corre _ss_ _s_ el león caza _ss_"
+entrena_trigramas <- tokenizers::tokenize_ngrams(texto_entrena,n = 3)[[1]]
+entrena_trigramas
+```
+
+```{r}
+log_p <- sapply(entrena_trigramas, function(x) feed_fow_trigrama(x, C, H, U))
+sum(log_p)
+```
+
+Ahora piensa como harías más grande esta verosimilitud. Observa
+que "perro", "gato" y "león"" están comunmente seguidos de "corre".
+Esto implica que nos convendría que hubiera cierta similitud
+entre los vectores de estas tres palabras, por ejemplo:
+
+```{r}
+C_1 <- C
+indices <- colnames(C) %in%  c("perro", "gato", "león")
+C_1[1, indices] <- 3.0
+C_1[1, !indices] <- -1.0
+C_1
+```
+
+La siguiente capa queremos que extraiga el concepto "animal" en la palabra anterior, o algo
+similar, así que podríamos poner en la unidad 1:
+
+```{r}
+H_1 <- H
+H_1[1, ] <- c(0,0,5,0)
+H_1
+```
+
+Nótese que la unidad 1 de la segunda capa se activa 
+cuando la primera componente de la palabra anterior es alto.
+En la última capa, podríamos entonces poner
+
+```{r}
+U_1 <- U
+U_1["corre", ] <- c(5, -1, -1)
+U_1
+```
+
+que captura cuando la primera unidad se activa. Ahora el cálculo
+completo es:
+
+```{r}
+log_p <- sapply(entrena_trigramas, function(x) feed_fow_trigrama(x, C_1, H_1, U_1))
+sum(log_p)
+```
+
+Compara las probabilidades:
+
+```{r}
+feed_fow_p("el perro corre", C, H, U)
+feed_fow_p("el gato corre", C_1, H_1, U_1)
+```
+
+
+```{r}
+feed_fow_p("perro corre _ss_", C, H, U)
+feed_fow_p("gato corre _ss_", C_1, H_1, U_1)
+```
 
 
 ## Representación de palabras
@@ -971,23 +1172,28 @@ La siguiente simplificación consiste en cambiar la función objetivo. En word2v
 Para empezar, la función objetivo original (para un solo trigrama) es
 
 
-$$E` = -\log \hat{P}(w_n|w_{n-1}w_{n+1}) = -y_w + \log\sum_j \exp(y_j).$$
+$$E = -\log \hat{P}(w_n|w_{n-1}w_{n+1}) = -y_w + \log\sum_j \exp(y_j),$$
 
-La dificultad está en el segundo término, que es sobre todo el vocabulario en incluye todos los parámetros del modelo.
+donde las $y_i$ son las salidas de la penúltima. La dificultad está en el segundo término, que es sobre todo el vocabulario en incluye todos los parámetros del modelo (hay que calcular las parciales de $y_j$'s
+sobre cada una de las palabras del vocabulario).
 
 
 La idea del muestreo negativo es que si observamos
 $w_n$ entre de $w_{n+1}$ y $w_{n-1}$, tomamos una muestra de $k$ palabras
 $v_1,\ldots v_k$ al azar
 (2-50, dependiendo del tamaño de la colección), y creamos $k$
-"trigramas falsos" $w_{n-2}w_{n-1}v_j$, $j=1\ldots,k$. Minimizamos
+"trigramas falsos" $w_{n-1} v_j w_{n+1}$, $j=1\ldots,k$. Minimizamos
 en lugar de la observación de arriba
 
-$$E = -\log\sigma(y_w) + \sum_k \log\sigma\exp(-y_k).$$
-
+$$E = -\log\sigma(y_w) + \sum_{j=1}^k \log\sigma(y_j),$$
+en donde queremos maximizar la probabilidad de que ocurra
+$w_n$ vs. la probabilidad de que ocurra alguna de las $v_j$.
 Es decir, solo buscamos optimizar parámetros para separar lo mejor
 que podamos la observación de $k$ observaciones falsas, lo cual implica que tenemos que mover un número relativamente chico de
-parámetros (en lugar de todos los parámetros de todas las palabras del vocabulario). Las palabras "falsas" se escogen según la probabilidad de unigramas.
+parámetros (en lugar de todos los parámetros de todas las palabras del vocabulario). 
+
+Las palabras "falsas" se escogen según una probabilidad ajustada
+de unigramas (se observó empíricamente mejor desempeño cuandoi escogemos cada palabra con probabilidad proporcional a $P(w)^{3/4}$, en lugar de $P(w)$, ver [@word2vec]).
 
 ### Ejemplo {-}
 
@@ -1131,7 +1337,31 @@ Puedes probar cambiando negative sampling (por ejemplo, incrementa a 40), el nú
 
 Considera también un modelo preentrenado mucho más grande como [este](http://crscardellino.me/SBWCE/) y repite las tareas mostradas (el formato bin es estándar para la implementación que usamos de word2vec).
 
+---
 
+Podemos visualizar el espacio de representaciones reduciendo dimensionalidad. En este caso, utilizamos *tsne*:
+
+```{r, out.width = "800px", cache = TRUE}
+library(tsne)
+library(ggplot2)
+library(ggrepel)
+mat_vs <- model@.Data
+# solo calculamos para las 500 palabras más comunes
+num_palabras <- 500 
+set.seed(1203)
+vs_2 <- tsne(mat_vs[1:num_palabras, ], 
+             max_iter = 1000, perplexity = 50)
+```
+
+```{r}
+df_vs <- as.data.frame(vs_2) %>%
+  mutate(palabra = rownames(mat_vs[1:num_palabras, ]))
+ggplot(df_vs %>% sample_n(250), 
+  aes(x = V1, y = V2, label = palabra)) +
+  geom_point(colour = 'red', alpha = 0.3) +
+  geom_text_repel(size = 2, force = 0.3, segment.alpha = 0.5) 
+  
+```
 
 ## Usos de representaciones distribuidas
 

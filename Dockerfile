@@ -22,7 +22,18 @@ RUN install2.r --error \
 	textreuse \
 	hash \
 	text2vec \
-	ggraph
+	ggraph \
+	tsne
 
 
+RUN \
+  apt-get update && \
+  apt-get install -y python python-dev python-pip 
 
+RUN \
+  pip install --upgrade tensorflow && \
+  pip install --upgrade keras scipy h5py pyyaml requests Pillow
+
+RUN r -e 'devtools::install_github("rstudio/reticulate")'
+RUN r -e 'devtools::install_github("rstudio/tensorflow")'
+RUN r -e 'devtools::install_github("rstudio/keras")'

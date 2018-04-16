@@ -1,0 +1,275 @@
+# Aplicaciones de procesamiento de lenguaje
+
+En esta parte consideramos aplicaciones de procesamiento de lenguaje natural usando las ideas que vimos anteriormente.
+
+## Reconocimiento de lenguaje: ngramas
+
+En este ejercicio construiremos un identificador de lenguaje 
+que distinga inglés, francés, italiano, portugués, español y turco. 
+Colecciones estándar de frases
+en varios lenguajes pueden encontrarse en http://corpora.uni-leipzig.de . Revisa el contenido de estos archivos.
+
+```{r}
+library(tidyverse)
+archivos <- utils::unzip('../datos/id_lenguaje/corpus_id_lenguaje.zip',
+             list = TRUE) 
+archivos_tar <- filter(archivos, str_detect(Name, "^[a-z].*tar$"))
+archivos_tar$Name
+```
+
+Extraemos el contenido de los archivos tar y seleccionamos
+los archivos que contienen las oraciones:
+
+```{r}
+descomp <- lapply(archivos_tar$Name,
+  function(archivo) {
+    utils::untar(
+    tarfile = paste0('../datos/id_lenguaje/', archivo), 
+    exdir = '../datos/id_lenguaje/descomp')
+  }) 
+archivos_d <- 
+  list.files(path = '../datos/id_lenguaje/descomp', 
+             full.names = TRUE) %>%
+  keep(function(x) str_detect(x, "sentences"))
+```
+
+Por ejemplo, tenemos:
+
+```{r}
+leer_oraciones <- function(archivo, n_max = -1, skip = 0){
+  oraciones <- read_lines(archivo, n_max = n_max, skip = skip)
+  oraciones %>% str_replace_all("^[0-9]*[\t]", "")
+}
+
+leer_oraciones(archivos_d[2], n_max = 3)
+```
+
+```{block2, type='resumen'}
+Identificar un lenguaje puede hacerse con **n-gramas de caracteres**.
+Calculamos la probabilidad de cada lenguaje a partir de un modelo
+del lenguaje a partir de las secuencias de caracteres que contiene.
+```
+
+Las primeras funciones que necesitamos son tokenizador en caracteres,
+que podemos escribir sin dificultad:
+
+```{r}
+library(tidytext)
+token_chr <- function(textos, n = 3L){
+  caracteres <- str_split(textos, pattern = '') %>%
+      map(function(x) { c(rep('_', n - 1), x) })
+  n_gramas <- tokenizers:::generate_ngrams_batch(caracteres, 
+              ngram_max = n, ngram_min = n, ngram_delim = '')
+  n_gramas
+}
+token_chr("Un día soleado.")
+```
+
+Y ahora escribimos la función que produce los conteos en
+un conjunto de entrenamiento. En este ejemplo, utilizamos
+un "vocabulario" de caracteres fijo (que aparecen más de un número
+*f_min* de veces). Los caracteres que no están en el vocabulario
+los sustituimos con $<unk>$, que en este caso denotamos como $*$
+
+```{r}
+conteo_chr <- function(archivo, n = 4L, n_max = n_max, f_min = 3){
+  df <- data_frame(txt = leer_oraciones(archivo, n_max = n_max))
+  # escoger letras en vocabulario (más de f_min apariciones)
+  vocabulario <- df %>% unnest_tokens(input = txt, output = n_grama,
+                                      token = token_chr, n = 1) %>%
+                 group_by(n_grama) %>% tally() %>% arrange(n)
+  vocab_v <- filter(vocabulario, n > f_min) %>% pull(n_grama)
+  V <- length(vocab_v)
+  # sustituir todos los caracteres que no estén en vocab_v
+  pattern <- paste(c("[^", vocab_v, "]"), collapse = '')
+  conteo <- df %>%
+           mutate(txt = str_replace_all(txt, pattern = pattern, '*' )) %>%
+           unnest_tokens(input = txt, output = n_grama, 
+                         token = token_chr, n = n) %>%
+           separate(n_grama, sep = n - 1, into = c('w_0', 'w_1')) %>%
+           group_by(w_0, w_1) %>%
+           summarise(num = length(w_1)) %>%
+           group_by(w_0) %>%
+           mutate(denom = sum(num)) %>%
+           arrange(desc(num)) %>%
+           mutate(log_p = log(num + 1) - log(denom + V)) # suavizamiento de Laplace
+  list(conteo = conteo, vocab = vocab_v, n = n)
+}
+```
+
+Ahora hacemos los conteos para las primeras 7 mil frases (el resto
+lo usamos para evaluar modelos)
+
+```{r}
+frances <- conteo_chr(archivos_d[2], n_max = 7000)
+ingles <- conteo_chr(archivos_d[1], n_max = 7000)
+frances$conteo %>% head(100)
+ingles$conteo %>% head(100)
+```
+
+
+Necesitaremos una función para evaluar la probabilidad de una
+frase dado cada modelo (nota que sería buena idea refactorizar esta
+función junto la función anterior):
+
+```{r}
+log_p <- function(modelo){
+  n <- modelo$n
+  vocab <- modelo$vocab
+  V <- length(vocab)
+  pattern <- paste(c("[^", vocab, "]"), collapse = '')
+  log_p_mod <- function(frases){
+     dat <- data_frame(txt = frases) %>%
+            mutate(txt = str_replace_all(txt, pattern = pattern, '*')) %>%
+            unnest_tokens(input = txt, output = n_grama, 
+                         token = token_chr, n = n) %>%
+            separate(n_grama, sep = n - 1, into = c('w_0', 'w_1')) %>%
+            left_join(modelo$conteo %>% select('w_0','denom'), by ='w_0') %>%
+            left_join(modelo$conteo %>% select('w_0','w_1','num'), by = c('w_0','w_1')) %>%
+            mutate(denom = ifelse(is.na(denom), V, denom + V)) %>%
+            mutate(num = ifelse(is.na(num), 1, num + 1)) %>%
+            mutate(log_p = log(num) - log(denom))
+     mean(dat$log_p)
+  }
+}
+frances_log_p <- log_p(frances)
+ingles_log_p <- log_p(ingles)
+```
+
+Y evaluamos la probabilidad de una frase bajo cada modelo:
+
+```{r}
+frances_1 <- frances_log_p("C'est un bon exemple")
+ingles_1 <- ingles_log_p("C'est un bon exemple")
+prob_no_norm <- exp(c(fr = frances_1, en = ingles_1))
+prob_no_norm
+```
+
+Si estamos solamente comparando inglés con francés, podemos
+normalizar las probabilidades obtenidas:
+
+```{r}
+prob_norm <- prob_no_norm/sum(prob_no_norm)
+round(prob_norm, 3)
+```
+
+```{r}
+frances_1 <- frances_log_p('This is a good example')
+ingles_1 <- ingles_log_p('This is a good example')
+prob_no_norm <- exp(c(fr = frances_1, en = ingles_1))
+prob_norm <- prob_no_norm/sum(prob_no_norm)
+round(prob_norm, 3)
+```
+
+Finalmente, podemos ahora evaluar los modelos con los conjuntos de
+prueba (puedes cambiar el tamaño de los n-gramas y el filtro de caracteres
+desconocidos para ver cómo se desempeñan):
+
+```{r}
+frances_prueba <- leer_oraciones(archivos_d[2], skip = 7000)
+ingles_prueba <- leer_oraciones(archivos_d[1], skip = 7000)
+frances_log_p(frances_prueba)
+ingles_log_p(ingles_prueba)
+```
+
+
+### Ejercicio {-}
+- Construye un modelo para cada lenguaje disponible en los datos.
+- Calcula la matriz de confusión para el clasificador que escoge el lenguaje
+con la probabilidad más alta.
+
+
+## Análisis de sentimiento
+
+En este ejemplo usamos la idea de  *word embeddings* para encontrar la
+polaridad de reseñas de películas. Este ejemplo es tomado de [aquí](https://keras.rstudio.com/articles/examples/imdb_fasttext.html). La 
+idea de este clasificador es como sigue:
+
+- Usamos una arquitectura similar a la de continuous-bag-of-words, pero
+sobre todas las palabras de cada reseña.
+- Esto quiere decir que encontraremos una representación vectorial para
+cada palabra que ocurre en las reseñas
+- Como la arquitectura es cbow, no nos importa el orden de las palabras
+- Podríamos también usar información de [ngramas de orden más alto]((https://keras.rstudio.com/articles/examples/imdb_fasttext.html): en este
+caso, consideramos solamente unigramas.
+
+
+
+```{r}
+library(keras)
+# Usaremos bigramas, con un máximo de 20 mil features en total (unigramas y
+# bigramas)
+ngram_range <- 2
+maxlen <- 400 # primeras 400 palabras de cada reseña
+max_features <- 20000 # número de palabras usadas
+embedding_dims <- 50 #dimensión de embedding
+# entrenamiento: tamaño de lote 32, con 5 pasadas de los datos
+batch_size <- 32
+epochs <- 5
+```
+
+Cargamos los datos
+
+```{r, cache = TRUE}
+imdb_data <- dataset_imdb(num_words = max_features)
+word_index <- dataset_imdb_word_index()
+```
+
+En este ejemplo, las reseñas ya están tokenizadas, y las palabras
+se les ha asignado un código numérico:
+
+```{r}
+print(length(imdb_data$train$x))
+imdb_data$train$x[[2]]
+imdb_data$train$y[2]
+# Pad sequences
+```
+
+```{r}
+imdb_data$train$x <- pad_sequences(imdb_data$train$x, maxlen = maxlen)
+imdb_data$test$x <- pad_sequences(imdb_data$test$x, maxlen = maxlen)
+dim(imdb_data$train$x)
+dim(imdb_data$test$x)
+```
+
+
+Ahora definimos nuestro modelo. En la primera capa, calculamos
+el embedding. La siguiente capa promedia los vectores que encontramos
+en cada reseña, y finalmente tenemos una capa densa en donde
+se calcula la probabilidad de que la reseña sea positiva:
+
+```{r}
+model <- keras_model_sequential()
+model %>%
+  layer_embedding(
+    input_dim = max_features, output_dim = embedding_dims, 
+    input_length = maxlen
+    ) %>%
+  layer_global_average_pooling_1d() %>%
+  layer_dense(1, activation = "sigmoid")
+```
+
+Ajustamos el modelo y lo evaluamos:
+```{r}
+model %>% compile(
+  loss = "binary_crossentropy",
+  optimizer = "adam",
+  metrics = "accuracy"
+)
+
+fit <- model %>% fit(
+  imdb_data$train$x, imdb_data$train$y, 
+  batch_size = batch_size,
+  epochs = epochs,
+  validation_data = list(imdb_data$test$x, imdb_data$test$y)
+)
+plot(fit)
+```
+
+
+### Ejercicio {-}
+- Prueba ajustar este modelo agregando bigramas (ver liga mostrada arriba).
+- Es posible aprender la representación de palabras usando word2vec (en lugar de directamente), y luego utilizar esta representación para ajustar regresión logística o una red neuronal.
+
+
+
