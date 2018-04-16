@@ -1357,8 +1357,10 @@ vs_2 <- tsne(mat_vs[1:num_palabras, ],
 df_vs <- as.data.frame(vs_2) %>%
   mutate(palabra = rownames(mat_vs[1:num_palabras, ]))
 ggplot(df_vs %>% sample_n(250), 
-  aes(x = V1, y = V2, label = palabra)) + 
-  geom_text_repel(size = 2, force = 0.3, segment.alpha = 0.5)
+  aes(x = V1, y = V2, label = palabra)) +
+  geom_point(colour = 'red', alpha = 0.3) +
+  geom_text_repel(size = 2, force = 0.3, segment.alpha = 0.5) 
+  
 ```
 
 ## Usos de representaciones distribuidas
