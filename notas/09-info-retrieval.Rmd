@@ -1,0 +1,15 @@
+# Recuperación de información
+
+En recuperación de información (IR), tenemos una **colección de documentos** (veremos texto en esta sección). Una persona tiene alguna tarea o **necesidad de información**, y quiere utilizar la colección para resolver su tarea o su pregunta. Formula una 
+**consulta** al sistema de recuperación, y obtiene una colección de resultados (documentos recuperados) que esperamos sean **relevantes** para contestar su pregunta.
+
+El desempeño del sistema de recuperación puede ser medido de distintas formas. Una de las más usuales es usar *precisión* y *recall**:
+
+- Precisión: fracción de documentos recuperados que son relevantes a la búsqueda
+- Recall o sensibilidad: fracción de los documentos relevantes que son recuperados.
+
+Evitamos usar medidas como \% de correctos, pues en cada búsqueda típicamente la fracción de documentos relevantes es pequeña, y el número de documentos recuperados también es relativamente chico. Esto quiere decir, por ejemplo, que un sistema que recupera documentos al azar típicamente tiene un \% alto de correctos, pues la mayor parte de los documentos no relevantes no son recuperados.
+
+
+
+
