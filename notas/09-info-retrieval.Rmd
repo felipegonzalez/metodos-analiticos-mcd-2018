@@ -35,7 +35,7 @@ los renglones de términos:
 
 #### Ejemplo {-}
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 if(!require(tm)){
   install.packages("tm")
 }
@@ -102,8 +102,13 @@ En primer lugar, mostramos la estructura estándar que se utiliza
 para recuperacion de documentos: el índice invertido. 
 
 El índice invertido agrupa, para cada término $t$, todos los
-id's de los documentos que lo contienen. En nuestro ejemplo, podemos
-hacer:
+id's de los documentos que lo contienen. 
+
+
+#### Ejemplo{-}
+
+Veamos dos maneras de calcular el índice invertido (en estos ejemplos
+hacemos el cálculo en memoria, pues nuestros datos son chicos):
 
 ```{r}
 df_frases <- data_frame(id = 1:length(frases), frase = frases) %>%
@@ -176,8 +181,6 @@ encontrar la intersección de forma más eficiente. Ver [@manning], capítulo 1.
 por ejemplo, estar particionado en varios nodos de un cluster. Cada nodo contiene el índice de un subconjunto de documentos. Cuando hacemos una consulta se envía a todos los nodos, y cada uno de ellos devuelve documentos candidatos para ser agregados y presentados al usuario. Ver por ejemplo [Elasticsearch](https://www.elastic.co),
 y el capítulo 4 de ([@manning]).
 
-
-## Definición de vocabulario
 
 ## Modelo de espacio vectorial
 
@@ -288,9 +291,9 @@ frases
 Ahora haremos prueba con nuestro corpus de fragmentos de noticias
 
 ```{r}
-periodico <- read_lines(file = '../datos/noticias/ES_Newspapers.txt',
+periodico_original <- read_lines(file = '../datos/noticias/ES_Newspapers.txt',
                         progress = FALSE)
-length(periodico)
+length(periodico_original)
 ```
 
 Nuestra función para normalizar textos será:
@@ -300,11 +303,11 @@ normalizar <- function(texto, vocab = NULL){
   texto <- tolower(texto)
   texto <- gsub("-", " ", texto) # separar palabras con guión
   texto <- gsub("\\.[^0-9]", " ", texto) # quitar puntos
-  texto <- gsub("[«»;\\:\\.,'\"()]", " ", texto)
+  texto <- gsub("[«»;\\:\\.,'\"()¿?!¡\\-\\/]", " ", texto)
   texto <- gsub("\\s+", " ", texto)
   texto
 }
-periodico <- normalizar(periodico)
+periodico <- normalizar(periodico_original)
 periodico[c(1,5,7)]
 ```
 
@@ -313,7 +316,7 @@ periodico[c(1,5,7)]
 
 ```{r, message = FALSE, warning = FALSE}
 vs <- VectorSource(periodico)
-corpus_noticias <- VCorpus(vs)
+corpus_noticias <- VCorpus(vs, readerControl = list(language = "es"))
 td_noticias <- TermDocumentMatrix(corpus_noticias, 
       control = list(weighting = weightTf, wordLengths = c(2, Inf))) 
 vocabulario_noticias <- td_noticias$dimnames$Terms
@@ -323,13 +326,23 @@ td_noticias_tf <- weightSMART(td_noticias, spec = "nnc")
 Y vamos a hacer un query:
 
 ```{r}
+procesar_query <- function(query, vocabulario, normalizar_fun){
+  query <- normalizar_fun(query)
+  vs <- VectorSource(query)
+  corpus_q <- VCorpus(vs)
+  td_sparse <- TermDocumentMatrix(corpus_q, 
+      control = list(weighting = weightTf,
+           wordLengths = c(2, Inf),
+           dictionary = vocabulario)) #usar vocabulario fijo
+  td_sparse
+}
 calc_sim <- function(vec, td_noticias){
   norm_2 <- sqrt(col_sums(vec^2))
   cross_prod <- crossprod_simple_triplet_matrix(vec, td_noticias)
   print(length(norm_2))
   cross_prod /norm_2
 }
-vec <- procesar_query("comida cocina", vocabulario_noticias)
+vec <- procesar_query("comida cocina", vocabulario_noticias, normalizar)
 similitudes <- calc_sim(vec, td_noticias_tf)
 recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
 head(recuperados, 20)
@@ -339,7 +352,7 @@ Los resultados se ven razonables. Sin embargo, si utilizamos este sistema,
 podríamos intentar también la consulta
 
 ```{r}
-vec <- procesar_query("la comida y la cocina", vocabulario_noticias)
+vec <- procesar_query("la comida y la cocina", vocabulario_noticias, normalizar)
 similitudes <- calc_sim(vec, td_noticias_tf)
 recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
 head(recuperados, 10)
@@ -419,7 +432,7 @@ td_noticias_tfidf <- weightSMART(td_noticias, spec='ntc')
 ```
 
 ```{r}
-vec <- procesar_query("la comida y la cocina", vocabulario_noticias)
+vec <- procesar_query("la comida y la cocina", vocabulario_noticias, normalizar)
 similitudes <- calc_sim(vec, td_noticias_tfidf)
 recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
 head(recuperados, 20)
@@ -440,5 +453,86 @@ Denotamos como xxx.yyy a un sistema dado. Por ejemplo, un sistema que usa frecue
 
 - El método más popular es ntc.ntc, aunque también se utilizan otros como lnc.ltc.
 
+## Definición del diccionario
+
+En esta parte discutimos distintas posibilidades para el paso de tokenización.
+
+### Stopwords (términos comunes)
+
+En algunos casos puede ser conveniente eliminar del todo palabras *stopword*
+(palabras que tienden a ocurrir en casi todos los textos, como artículos, preposiciones, conjunciones, etc.) La idea es que estos términos no ayudan
+en las búsquedas, y pueden reducir el tamaño del índice invertido (o de la matriz
+de pesos términos-documentos).
+
+En sistemas más avanzados y recientes, las stopwords no se eliminan muchas
+veces para conservar el significado de consultas como "viajes a Londres": en este
+caso, también necesitamos incluir en nuestro índice invertido las posiciones donde aparecen las palabras (ver [@manning], sección 2.4)
+
+### Normalización
+
+En la normalización, buscamos crear clases de equivalencia entre tokens que aparecen en nuestro texto, que deben ser considerados como equivalentes en las búsquedas. Las normalizaciones más comunes son (todas pueden ayudar o dañar el desempeño):
+
+- Reducir todos los tokens a minúsculas (de forma que no importa si los términos ocurren al principio de una frase). En general es buena idea, aunque en algunos casos pueden hacerse forma más refinada (por ejemplo, la ciudad Pisa y el verbo pisa).
+
+- Corregir ortografía. También es posible hacer corrección de ortografía para mejorar el resultado de consultas. Este paso se puede hacer solamente para las consultas, por ejemplo.
+
+- Quitar acentos. Esto tiene la ventaja de poder dar buenas respuestas a consultas que tienen faltas de ortografía. Por otro lado, también introduce ambiguedades.
 
 
+
+### Stemming 
+
+En el paso de *stemming* intentamos reducir los tokens a palabras raíz. Por ejemplo, si alguien busca "frutas", la  búsqueda debería incluir también términos como "fruta", "frutería", etc. Una consulta como "comiendo frutas" debería regresar resultados como "comer fruta", "comer frutas".
+
+Existen *stemmers* automáticos que intentan aproximar la palabra raíz de cada forma que observamos. En español, podemos usar el *Snowball stemmer*, que es relativamente simple (ver [esta liga](http://snowball.tartarus.org/algorithms/spanish/stemmer.html)).
+
+```{r}
+stemDocument("Esos meses comíamos muchas frutas", language = "spanish")
+stemDocument("Ese mes comí mucha fruta", language = "spanish")
+stemDocument("comenzar comenzábamos comienzo comienzos biblioteca bibliotecario", language = "spanish")
+```
+
+Pero el stemming puede también afectar el desempeño: por ejemplo, si queremos
+buscar "investigación de operaciones", el stemmer no necesariamente ayuda a
+encontrar resultados relevantes;
+
+```{r}
+stemDocument("investigación operaciones", language = "spanish")
+stemDocument("operar investigadores", language = "spanish")
+```
+
+**Observación**: 
+
+- Es importante recordar que típicamente, todas las transformaciones que hacemos
+al construir el índice deben de repetirse para las consultas
+
+#### Ejemplo {-}
+
+Agregamos stemming:
+
+```{r, message = FALSE, warning = FALSE}
+normalizar_stem <- function(texto, vocab = NULL){
+  texto <- tolower(texto)
+  texto <- gsub("-", " ", texto) # separar palabras con guión
+  texto <- gsub("\\.[^0-9]", " ", texto) # quitar puntos
+  texto <- gsub("[«»;\\:\\.,'\"()¿?!¡\\-\\/]", " ", texto)
+  texto <- gsub("\\s+", " ", texto)
+  stemDocument(texto, language = "spanish")
+}
+periodico <- normalizar_stem(periodico_original)
+vs <- VectorSource(periodico)
+corpus_noticias <- VCorpus(vs, readerControl = list(language = "es"))
+td_noticias <- TermDocumentMatrix(corpus_noticias, 
+      control = list(weighting = weightTf, wordLengths = c(2, Inf))) 
+vocabulario_noticias <- td_noticias$dimnames$Terms
+sample(vocabulario_noticias, 50)
+td_noticias_tfidf <- weightSMART(td_noticias_stem, spec = "ntc")
+```
+
+
+```{r}
+vec <- procesar_query("la comida y la cocina", vocabulario_noticias, normalizar_stem)
+similitudes <- calc_sim(vec, td_noticias_tfidf)
+recuperados <- periodico_original[order(similitudes[1,], decreasing = TRUE)[1:100]] 
+head(recuperados, 20)
+```
