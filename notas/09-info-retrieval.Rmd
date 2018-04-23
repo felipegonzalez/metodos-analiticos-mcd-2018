@@ -526,7 +526,7 @@ td_noticias <- TermDocumentMatrix(corpus_noticias,
       control = list(weighting = weightTf, wordLengths = c(2, Inf))) 
 vocabulario_noticias <- td_noticias$dimnames$Terms
 sample(vocabulario_noticias, 50)
-td_noticias_tfidf <- weightSMART(td_noticias_stem, spec = "ntc")
+td_noticias_tfidf <- weightSMART(td_noticias, spec = "ntc")
 ```
 
 
