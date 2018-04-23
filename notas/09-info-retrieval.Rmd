@@ -11,5 +11,190 @@ El desempeño del sistema de recuperación puede ser medido de distintas formas.
 Evitamos usar medidas como \% de correctos, pues en cada búsqueda típicamente la fracción de documentos relevantes es pequeña, y el número de documentos recuperados también es relativamente chico. Esto quiere decir, por ejemplo, que un sistema que recupera documentos al azar típicamente tiene un \% alto de correctos, pues la mayor parte de los documentos no relevantes no son recuperados.
 
 
+## Recuperación booleana
+
+El enfoque más simple es recuperación booleana: una *consulta* es un documento (típicamente corto) que incluye ciertas palabras $q_1,q_2,\ldots, q_m$. Buscamos entonces todos los documentos
+que incluyen *todas* estas palabras. 
+
+Más en general, una consulta puede ser una expresión booleana en palabras. Por ejemplo:
+
+- deportes **y** atletismo **pero no** olimpiada
+- deportes **o** atletismo
+
+En principio podríamos hacer una búsqueda lineal (grep) sobre todos los documentos, y regresar todos los que evalúan la búsqueda a verdadero. Este enfoque es poco escalable en el número de documentos (en cada búsqueda hay que recorrer la colección completa) y no existe un concepto de orden en los resultados obtenidos.
+
+## Matrices de incidencias términos-documentos
+
+Podemos construir un índice para evitar hacer pases de los documentos cada vez que tenemos un nueva consulta. Una manera de hacerlo es construyendo la
+matriz $M$ de términos documentos, donde
+$M_{td} = 1$
+si el término $t$ está en el documento $d$, y $M_{td}=0$ en otro caso.
+
+Con esta matriz, consultas booleanas pueden ser calculadas usando
+los renglones de términos:
+
+#### Ejemplo {-}
+
+```{r}
+if(!require(tm)){
+  install.packages("tm")
+}
+library(tm)
+library(tidyverse)
+library(tidytext)
+```
+
+Consideramos la siguiente colección de documentos:
+
+```{r, tidy=FALSE}
+frases <- c('el perro y el gato viven en la casa',
+            'el perro juega con la pelota',
+            'la pelota es amarilla',
+            'el gato juega con la pelota y el perro juega con el gato')
+```
+
+Construimos una matriz binaria que indica qué términos
+aparecen en qué documentos
+
+```{r}
+vs <- VectorSource(frases)
+corpus <- VCorpus(vs)
+td_sparse <- TermDocumentMatrix(corpus, 
+      control = list(weighting = weightBin,
+           wordLengths = c(2, Inf))) 
+td_mat <- as.matrix(td_sparse)
+td_mat
+```
+
+Si queremos hacer una consulta, por ejemplo de "gato **y** perro **pero no** casa", por ejemplo, podemos hacer lógica booleana
+con los vectores de términos:
+
+```{r}
+consulta <- as.logical(td_mat["perro", ])
+frases[consulta]
+consulta <- consulta & td_mat["gato", ]
+frases[consulta]
+consulta <- consulta & !td_mat["casa", ]
+frases[consulta]
+```
+---
+
+**Observaciones**: 
+
+- Como hemos visto en otros casos, no conviene 
+usar una matriz densa. Típicamente la matriz de términos documentos es grande (podría ser fácilmente de cientos de miles por millones, por ejemplo) y rala (relativamente pocos 1's), por lo que es mejor usar una matriz rala
+
+```{r}
+td_sparse
+str(td_sparse)
+```
+
+- Veremos en la siguiente sección una forma más flexible y eficiente de hacer estas búsquedas binarias.
+
+- Ventajas de las búsquedas binarias: para usuarios avanzados es una técnica útil. Es fácil entender exactamente que documentos son los recuperados. 
+
+- Desventajas: Menos útil cuando no sabemos exactamente qué estamos buscando. No hay una medida de ordenamiento de los resultados. No utiliza frecuencia de aparición de los términos, lo cual puede ser un indicador de relevancia.
+
+
+## Índice invertido
+
+En primer lugar, mostramos la estructura estándar que se utiliza 
+para recuperacion de documentos: el índice invertido. 
+
+El índice invertido agrupa, para cada término $t$, todos los
+id's de los documentos que lo contienen. En nuestro ejemplo, podemos
+hacer:
+
+```{r}
+df_frases <- data_frame(id = 1:length(frases), frase = frases) %>%
+  unnest_tokens(palabras, frase) %>% 
+  group_by(id, palabras) %>%
+  summarise(term_frec = length(palabras)) %>%
+  group_by(palabras) %>%
+  mutate(doc_frec = length(id))
+ii_lista <- split(df_frases, df_frases$palabras) %>% 
+  map(function(df){ select(ungroup(df), -palabras) %>% ungroup })
+ii_lista
+```
+
+Y también podríamos hacer (usando la tabla hash de los *environments* de R):
+
+```{r}
+crear_indice <- function(frases){
+  indice <- new.env(hash = TRUE)
+  for(i in 1:length(frases)){
+    tokens <- tokenizers::tokenize_words(frases[i], simplify = TRUE)
+    tokens_f <- factor(tokens)
+    tokens_conteo <- tabulate(tokens_f)
+    nombres <- levels(tokens_f)
+    for(j in 1:length(tokens_conteo)){
+      token <- nombres[j]
+      indice[[token]] <- c(indice[[token]], 
+                           list(c('doc' = i, 'frec_doc' = tokens_conteo[j]))) 
+    }
+  }
+  indice
+}
+ii_env <- crear_indice(frases)
+ii_env$el
+```
+
+```{block2, type='resumen'}
+Para construir un **índice invertido** de una colección de textos, 
+
+1. Limpiamos la colección de textos (eliminar puntuación, HTML, etc).
+2. Tokenizamos los textos, convirtiendo cada documento en una colección de tokens (usando como separadores espacios en blanco y/o puntuación).
+3. Hacemos preprocesamiento de los tokens (por ejemplo, pasar a minúsculas, lematizar, eliminar stopwords). También podemos agregar términos como sinónimos 
+(si aparece *brincar*, agregar también *saltar*. etc).
+4. Creamos el índice invertido, que consiste de un diccionario indexado por los términos, y término apunta a los indentificadores de los documentos que contienen este término (el diccionario puede estar en memoria, y contener apuntadores a archivos de disco donde estan los doc_id)
+```
+
+Para hacer búsquedas con el índice invertido de conjunciones de términos,
+encontramos los términos, e intersectamos las listas de doc_id\'s.
+
+#### Ejemplo {-}
+
+Supongamos que buscamos perro **y** gato
+
+```{r}
+perro_y_gato <- intersect(ii_lista[["perro"]] %>% pull(id), 
+                ii_lista[["gato"]] %>% pull(id))
+frases[perro_y_gato]
+```
+
+---
+
+**Observaciones**
+
+- Como los id\'s están ordenados, es posible 
+encontrar la intersección de forma más eficiente. Ver [@manning], capítulo 1.
+- Piensa cómo sería el procesamiento de consultas cuando hay *AND*, *OR*, y *NOT*
+
+**Más acerca del índice invertido**
+
+- Para una colección grande de documentos, el índice invertido puede tener gran tamaño, y el desempeño en recuperación debe ser bueno. El índice invertido puede,
+por ejemplo, estar particionado en varios nodos de un cluster. Cada nodo contiene el índice de un subconjunto de documentos. Cuando hacemos una consulta se envía a todos los nodos, y cada uno de ellos devuelve documentos candidatos para ser agregados y presentados al usuario. Ver por ejemplo [Elasticsearch](https://www.elastic.co),
+y el capítulo 4 de ([@manning]).
+
+
+## Definición de vocabulario
+
+## Modelo de espacio vectorial
+
+Como discutimos arriba, el método de recuperación booleano tiene el defecto
+de que no produce ningún ordenamiento de los resultados. Podríamos considerar
+intentar algo como usar similitud de Jaccard entre documentos recuperados pero
+esto no va a funcionar muy bien: en primer lugar, la consulta es de tamaño fijo,
+pero los documentos pueden variar mucho en tamaño. El coeficiente de jaccard
+tendería a dar menor similitud para documentos más largos. En segundo
+lugar, documentos con más alta frecuencia de los términos consultados son
+típicamente más relevantes a la consulta, y el coeficiente de Jaccard no toma en cuenta el número de ocurrencias.
+
+Un primer paso es ponderarar cada término en un documento dependiendo
+del número de veces que el término aparece en el documento.
+
+### Ponderación por frecuencia de términos
+
+
 
 
