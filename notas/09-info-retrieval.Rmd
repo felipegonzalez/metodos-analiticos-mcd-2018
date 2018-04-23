@@ -183,8 +183,7 @@ y el capítulo 4 de ([@manning]).
 
 Como discutimos arriba, el método de recuperación booleano tiene el defecto
 de que no produce ningún ordenamiento de los resultados. Podríamos considerar
-intentar algo como usar similitud de Jaccard entre documentos recuperados pero
-esto no va a funcionar muy bien: en primer lugar, la consulta es de tamaño fijo,
+intentar algo como usar similitud de Jaccard entre documentos recuperados y consulta, pero esto no va a funcionar muy bien: en primer lugar, la consulta es de tamaño fijo,
 pero los documentos pueden variar mucho en tamaño. El coeficiente de jaccard
 tendería a dar menor similitud para documentos más largos. En segundo
 lugar, documentos con más alta frecuencia de los términos consultados son
@@ -195,6 +194,251 @@ del número de veces que el término aparece en el documento.
 
 ### Ponderación por frecuencia de términos
 
+En primer lugar, tomamos en cuenta la **frecuencia de términos** dentro de los documentos. Definimos $tf_{i,d}$ como el número
+de veces que aparece el término (palabra) $i$ en el documento $d$. Podemos definir el peso de un término dentro de un documento de varias maneras:
+
+1. Frecuencia $$ w_{i,d} = tf_{i,d}$$
+
+2. Log-frecuencia 
+
+\begin{equation}
+w_{i,d}=\left\{
+\begin{array}{lr}
+1+ \log (tf_{i,d}) & tf_{i,d}>0\\
+0 & tf_{id}=0
+\end{array}
+\right.
+\end{equation}
+
+
+3. Frecuencia normalizada $$ w_{i,d} = \frac{tf_{id}}{\max_j tf_{jd}}$$
+
+Denotamos por $w_d$ el vector que contiene las frecuencias para cada término:
+$$w_d = (w_{1,d}, w_{2,d},\ldots, w_{m, d}).$$
+
+
+Nótese que los primeros dos tienen la propiedad de dar más importancia, generalmente,
+a documentos más grandes, pues los términos tienden a aparecer más veces en ellos (a la inversa
+de lo que vimos antes). Esto no necesariamente es indeseable. La segunda opción modera el crecimiento de estos conteos a través del logaritmo.
+
+Idea: usar distancia de coseno de los vectores de frecuencias (en lugar de 1s o 0s). Esto hace más
+similares documentos en los que un mismo término aparece varias veces.
+
+Con esto podemos dar nuestra primera medida de similitud entre documentos
+(o entre un documento $d$ y una consulta $q$):
+
+$$sim(q, d) = \frac{< w_{q}, w_d>}{||w_d||||w_q||},$$
+que es igual a
+$$sim(q, d) = \frac{\sum_i w_{i,q} w_{i,d}} {\sqrt{\sum_i w_{i,q}^2}\sqrt{\sum_i w_{i,d}^2}},$$
+que es el producto punto de los vectores $w_q$ y $w_d$ después de normalizarlos.
+
+Observación: nótese que para calcular distancia coseno entre los documentos de una colección y un documento *query*, basta:
+
+1. Calcular la matriz términos documentos ponderada por frecuencia, y normalizada para que cada columna tenga tamaño 1.
+2. Calcular el vector de frecuencias normalizado para el query.
+3. Multiplicar este último vector por la matriz términos documentos.
+
+El vector resultante da las distancias coseno entre el documento y el *query*.
+
+#### Ejemplo {-}
+
+Para nuestro minicorpus anterior:
+```{r, warning=FALSE, message=FALSE}
+library(Matrix)
+vs <- VectorSource(frases)
+vs
+corpus <- VCorpus(vs)
+td_sparse <- TermDocumentMatrix(corpus, 
+      control = list(weighting = weightTf, wordLengths = c(2, Inf))) 
+inspect(td_sparse)
+```
+
+```{r, warning = FALSE, message = FALSE}
+vocabulario <- td_sparse$dimnames$Terms
+vocabulario
+```
+
+```{r}
+library(slam)
+procesar_query <- function(query, vocabulario){
+  vs <- VectorSource(query)
+  corpus_q <- VCorpus(vs)
+  td_sparse <- TermDocumentMatrix(corpus_q, 
+      control = list(weighting = weightTf,
+           wordLengths = c(2, Inf),
+           dictionary = vocabulario)) #usar vocabulario fijo
+  td_sparse
+}
+vec <- procesar_query("gato perro", vocabulario)
+inspect(vec)
+```
+
+Ahora podemos calcular las similitudes coseno:
+
+```{r}
+sim_cos <- function(x, y){
+  sum(x*y) / (sqrt(sum(x^2)) * sqrt(sum(y^2)))
+}
+similitudes <- sapply(1:ncol(td_sparse), function(j) {sim_cos(td_sparse[, j], vec)  })
+similitudes
+frases
+```
+
+#### Ejemplo {-}
+Ahora haremos prueba con nuestro corpus de fragmentos de noticias
+
+```{r}
+periodico <- read_lines(file = '../datos/noticias/ES_Newspapers.txt',
+                        progress = FALSE)
+length(periodico)
+```
+
+Nuestra función para normalizar textos será:
+
+```{r}
+normalizar <- function(texto, vocab = NULL){
+  texto <- tolower(texto)
+  texto <- gsub("-", " ", texto) # separar palabras con guión
+  texto <- gsub("\\.[^0-9]", " ", texto) # quitar puntos
+  texto <- gsub("[«»;\\:\\.,'\"()]", " ", texto)
+  texto <- gsub("\\s+", " ", texto)
+  texto
+}
+periodico <- normalizar(periodico)
+periodico[c(1,5,7)]
+```
+
+
+
+
+```{r, message = FALSE, warning = FALSE}
+vs <- VectorSource(periodico)
+corpus_noticias <- VCorpus(vs)
+td_noticias <- TermDocumentMatrix(corpus_noticias, 
+      control = list(weighting = weightTf, wordLengths = c(2, Inf))) 
+vocabulario_noticias <- td_noticias$dimnames$Terms
+td_noticias_tf <- weightSMART(td_noticias, spec = "nnc")
+```
+
+Y vamos a hacer un query:
+
+```{r}
+calc_sim <- function(vec, td_noticias){
+  norm_2 <- sqrt(col_sums(vec^2))
+  cross_prod <- crossprod_simple_triplet_matrix(vec, td_noticias)
+  print(length(norm_2))
+  cross_prod /norm_2
+}
+vec <- procesar_query("comida cocina", vocabulario_noticias)
+similitudes <- calc_sim(vec, td_noticias_tf)
+recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
+head(recuperados, 20)
+```
+
+Los resultados se ven razonables. Sin embargo, si utilizamos este sistema,
+podríamos intentar también la consulta
+
+```{r}
+vec <- procesar_query("la comida y la cocina", vocabulario_noticias)
+similitudes <- calc_sim(vec, td_noticias_tf)
+recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
+head(recuperados, 10)
+```
+
+Y los resultados son muy malos. La razón es que muchos documentos
+contienen la palabra *la*, y resultan en una similitud alta con la consulta.
+Sin embargo, la palabra *la* ocurren en una gran parte de los documentos,
+de modo que no discrimina mucho en nuestra búsqueda, y deberíamos ponderar
+más las palabras *cocina* y *comida*, que ocurren en una fracción menor y
+por lo tanto son más específicas a nuestra consulta.
+
+Hay varias cosas que podemos intentar: quitar *stopwords* (que no soluciona el problema todo) en el proceso de tokenización, o ponderar hacia abajo palabras
+que ocurren mucho en el corpus. En la siguiente sección vemos esta
+solución:
+
+## Frecuencia inversa en documentos.
+
+Ahora tenemos que considerar que los términos que ocurren poco (cuando coinciden con nuestras búsquedas), son mejores para discriminar que términos que ocurren mucho, de modo que distintos términos tienen que tener distintos pesos al ordenar los resultados.
+
+Si $df_i$ es el número de veces que aparece un término $i$ en la colección de documentos,  y $N$ es el total de documentos en la colección, definimos:
+la **frecuencia inversa de documentos** como
+$$idf_i = log\left(\frac{N}{df_i}\right)$$
+
+Y definimos los pesos finales **tf-idf** como sigue
+
+$$w_{i,d} = idf_i \times tf_{i,d}$$
+
+Puede intentarse también usar la frecuencia inversa sin logaritmo, pero la
+forma con logaritmo es más común
+
+
+
+Bajo este esquema de podneración por término y frecuencia inversa en documentos,
+la similitud entre un documento $d$ dado y un query $q$ está dada por
+
+$$\sim(q, d) = \frac{ \sum_{w\in q,d} tf_{w,q}tf_{w,d} (idf_w)^2 }{\sqrt{\sum_{i\ in q}(tf_{i,q} idf_i)^2 }\sqrt{\sum_{i \in d} (tf_{i,d} idf_i)^2 }}$$
+
+
+#### Ejercicio {-}
+Si hacemos un query de un solo término, ¿cómo afecta 
+agregar el idf al scoring de los resultados?
+
+- Respuesta: no afecta en nada. La razón es que el idf depende del término,
+y no del documento.
+
+- Sin embargo, para queries de más de un término, el idf puede ayudar mucho: por ejemplo, si buscamos *el perro*, la palabra *el* estará ponderada hacia abajo, pues ocurre mucho, y se valorarán más alto documentos que contengan la palabra *perro*.
+
+---
+
+#### Ejemplo {-}
+En nuestro minicorpus, las frecuencias inversas son
+```{r}
+n_i <- row_sums(td_mat > 0)
+idf <- log(ncol(td_mat)/n_i)
+data_frame(termino = names(n_i), n = n_i, idf = round(sort(idf), 3))
+```
+
+Y entonces la representación vectorial está dada por
+
+```{r}
+td_mat * idf
+```
+
+
+
+#### Ejemplo {-}
+
+Regresamos a nuestro ejemplo anterior. Este proceso donde dominan los términos 
+frecuentes "la" e "y":
+
+
+Y ahora ponderamos por la frecuencia inversa en documentos:
+
+```{r}
+td_noticias_tfidf <- weightSMART(td_noticias, spec='ntc')
+```
+
+```{r}
+vec <- procesar_query("la comida y la cocina", vocabulario_noticias)
+similitudes <- calc_sim(vec, td_noticias_tfidf)
+recuperados <- periodico[order(similitudes[1,], decreasing = TRUE)[1:100]] 
+head(recuperados, 20)
+```
+
+
+Nótese que en este ejemplo no multiplicamos las frecuencias inversas sobre documentos en el vector de *query*. 
+
+## Notación SMART
+
+Las alternativas que tenemos para nuestro sistema de recuperació́n de textos son, para documentos y queries:
+
+- Frecuencia de términos: frecuencia bruta (n) o logarítmica (l)
+- Frecuencia de documentos: ninguna (n), idf (t)
+- Normalización: ninguna (n), coseno (c)
+
+Denotamos como xxx.yyy a un sistema dado. Por ejemplo, un sistema que usa frecuencia logarítmica, sin frecuencia de documentos, con normalizació́n coseno para los documentos, y para los queries frecuencia logarítmica con idf y normalizació́n coseno es lnc.ltc
+
+- El método más popular es ntc.ntc, aunque también se utilizan otros como lnc.ltc.
 
 
 
