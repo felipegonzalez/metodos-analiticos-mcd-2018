@@ -3,7 +3,7 @@ Notas y material para el curso de Métodos Analíticos (ITAM, 2018).
 
 - [Notas](http://clever-mestorf-ee3f54.netlify.com). Estas notas son producidas
 en un contenedor (con [imagen base de rocker](https://www.rocker-project.org), y unos
-4G de memoria)  construido con el Dockerfile del repositorio:
+8G de memoria)  construido con el Dockerfile del repositorio:
 
 ```
 docker build -t ma-rstudio .
