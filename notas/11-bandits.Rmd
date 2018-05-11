@@ -68,7 +68,8 @@ cuando se hizo la intervención. La línea punteada es el contrafactual estimado
 Estas ideas son de el 
 método propuesto en [CausalImpact](https://github.com/google/CausalImpact), 
 [@causalimpact]. Se puede ver como una versión más sofisticada y poderosa 
-del método de diferencia de diferencias.
+del método de diferencia de diferencias. También puedes leer [@varian], una muy buena
+introducción a la estimación de efectos causales en marketing.
 
 ## Experimentos A/B
 
@@ -300,6 +301,8 @@ Una tragamonedas de $n$ brazos es un proceso aleatorio, donde:
 sentido nuestra recompensa?
 ```
 
+El material de esta sección está parcialmente basado en [@whitebandits]. También puedes
+revisar el código de libro (python, julia, r) en [este repositorio](https://github.com/johnmyleswhite/BanditsBook).
 
 #### Ejemplos {-}
 Probemos como lucirían los datos obtenidos de una tragamonedas, y cómo podríamos
@@ -310,11 +313,20 @@ crear_maquina_poisson <- function(lambda){
   # utilizamos recompensas poisson con distintas medias lambda
   n_brazos <- length(lambda)
   simular_maquina <- function(brazo){
-      rpois(length(brazo), lambda = lambda[brazo])
+      rpois(1, lambda = lambda[brazo])
+  }
+  simular_maquina
+}
+crear_maquina_bernoulli <- function(lambda){
+  # utilizamos recompensas poisson con distintas medias lambda
+  n_brazos <- length(lambda)
+  simular_maquina <- function(brazo){
+      rbinom(1, 1, p = lambda[brazo])
   }
   simular_maquina
 }
 sim_1 <- crear_maquina_poisson(lambda = c(1, 5, 8))
+
 ```
 
 Ahora empezamos a explorar:
@@ -570,7 +582,7 @@ usando las recompensas observadas.
 2. Muy al principio, el algoritmo epsilon-miope pierde más que el a-b. Esto es porque al principio
 está explotando un brazo muy malo. Una vez que explora los otros brazos, sin embargo, la explotación
 mejora y supera en costo al método a/b.
-3. Nótese que a largo plazo el algoritmo a/b superará en promedio al miope en recompensa promedio (una vez que dejamos de experimentar y ya identificamos correctamente la mejor opción). El algoritmo miope, sin embargo, si que explorando opciones malas una fracción del tiempo, lo cual quizá ya no sería necesario.
+3. Nótese que a largo plazo el algoritmo a/b superará en promedio al miope en recompensa promedio (una vez que dejamos de experimentar y ya identificamos correctamente la mejor opción). El algoritmo miope, por otro lado, sigue explorando opciones malas una fracción del tiempo, lo cual quizá ya no sería necesario.
 
 Podemos graficar también el acumulado, donde vemos de otra manera
 la brecha entre los dos métodos en cuanto a recompensa acumulada en el tiempo:
@@ -589,42 +601,360 @@ ggplot(df_resumen, aes(x=n, y = acumulado, group = tipo, colour = tipo)) +
 otra semilla para ver otras maneras en las que se pueden comportar estos algoritmos.
 - ¿Cuál es el riesgo de correr por muy poco tiempo la fase de experimentación en el algoritmo
 a/b?
-- ¿Cuál es el riesgo de correr demasiado tiempo la fase de expermientación en el algoritmo a/b?
+- ¿Cuál es el riesgo de correr demasiado tiempo la fase de experimentación en el algoritmo a/b?
 - ¿Cómo se vería en estas gráficas un algoritmo perfecto (ninguno tiene
 mejor recompensa acumulada en ningún tiempo)? Añade estos límites teóricos (que en la práctica
 no conociemos) a las gráficas de arriba.
 - Compara el desempeño del algoritmo miope con distintos valores de $\epsilon$.
 
+### Desventajas del algoritmo miope {-}
+
+- Al principio, el algoritmo miope pierde tiempo explotando opciones que muchas veces son malas
+(pues no hay información)
+- Al final, cuando tenemos más datos, el algoritmo miope pierde tiempo explorando opciones 
+que tienen mucha evidencia en su contra
+- En parte, esto se debe a que el algoritmo no toma en cuenta el error de estimación (tamaño de muestra). Pero también se debe a que el algoritmo, cuando entra en exploración, escoge
+con igual probabilidad todas las opciones.
+
+
 ## Algoritmo softmax
 
+En esta parte consideramos una primer mejora al algoritmo miope incorporando parte del
+esquema de experimentación a/b
+
+- Escogeremos ramas para explorar dependiendo de qué tan bien se han desempeñado en el pasado.
+- Usamos una idea de recocido simulado: al principio, no tomamos en cuenta tanto las recompensas observadas (pues tenemos poca muestra), pero conforme pasa el tiempo nos concentramos más en explotar
+las ramas que tienen desempeño promedio más alto.
+
+
+Para implementar la primera idea, supongamos que tenemos $k$ ramas, y al tiempo $n$ los promedios de recompensa para cada rama son
+$$\hat{r}_1, \hat{r}_2, \ldots, \hat{r}_k.$$
+La idea es escoger la rama $j$ con probabilidad
+
+$$p_j = \frac{\exp({\hat{r}_j})}{\sum_i \exp({\hat{r}_i})}$$
+Nótese que las $p_j$'s están entre 0 y 1 y suman 1. La probabilidad de un brazo es más
+grande cuanto más grande sea su recompensa relativamente a las otras ramas.
+
+Podemos hacer más flexible nuestra construcción de probabilidades agregando un parámetro $T>0$
+de temperatura, y poniendo
+$$p_j (T) = \frac{\exp({\hat{r}_j/T})}{\sum_i \exp({\hat{r}_i}/T)}$$
+
+#### Discusión {-}
+El efecto de $T$ es dispersar las probabilidades o concentrarlas en la mejor opción. Supogamos
+que tenemos cinco brazos con recompensa promedio en un momento dado de 1,4,5,2,1:
+
 ```{r}
-crear_softmax <- function(temperatura = 1, inicial = 1, sim_fun, recocido = F){
+r <- c(1, 4, 5, 2, 1)
+softmax <- function(r, tau){
+  exp(r/tau) / sum(exp(r/tau))
+}
+softmax_tau <- data_frame(tau = c(0.1, 0.7, 2, 5, 20)) %>%
+  mutate(df = map(tau, function(t){
+    data_frame(brazo = 1:length(r), p = softmax(r, t))
+  })) %>% unnest
+
+ggplot(softmax_tau, aes(x=brazo, y=p, fill=factor(tau), group=tau)) + 
+  geom_bar(position="dodge", stat = "identity") + facet_wrap(~tau)
+```
+
+---
+
+
+El parámetro $T$ debe ser fijado, y depende de la escala de las recompensas. Si las
+recompensas tienen una escala más grande (por ejemplo miles en lugar de decenas),
+es necesario hacer $T$ más grande para dispersar más las probabilidades.
+
+Ahora definimos el proceso para hacer más exploración al principio y más explotación al final.
+La idea viene del *recocido simulado*, donde al inicio hacemos la temperatura más alta (más exploración), y luego reducimos gradualmente la temperatura para ir explotando más 
+las mejores opciones. La idea es poner
+$$\tau_{n+1} = \frac{\tau_0}{\log(n)}$$
+
+De forma que cuando $n$ crece, la temperatura baja y hacemos más explotación (al principio
+la temperatura es infinita, lo que implica que escogemos al azar entre los brazos). 
+
+
+Ahora implementamos el algoritmo:
+
+```{r}
+crear_softmax <- function(temp_0 = 1, inicial = 1, sim_fun, recocido = F){
   n_brazos <- environment(sim_fun)$n_brazos
   conteos <- rep(0, n_brazos)
-  recompensas <- vector("list", n_brazos)
   sumas <- rep(0, n_brazos)
-  temperatura <- temperatura
+  iteracion <- 0
   fun <- function(){
+    iteracion <<- iteracion + 1
     if(recocido){
-      temperatura <<- temperatura / log(t + 0.0001)
+      temperatura <- temp_0 / log(iteracion + 0.0001)
     }
-    m <- max(sumas / temperatura)
-    exp_sumas <- exp(sumas / temperatura - m)
+    promedio <- sumas / (conteos + 1)
+    m <- max(promedio / temperatura)
+    exp_sumas <- exp(promedio / temperatura - m)
     probs <- exp_sumas / sum(exp_sumas)
     brazo <- sample(1:n_brazos, 1, prob = probs)
     sim <- sim_fun(brazo)
-    recompensas[[brazo]] <<- c(recompensas[[brazo]], sim)
     conteos[brazo] <<- conteos[brazo] + 1
     sumas[brazo] <<- sumas[brazo] + sim
-    mejor <<- which.max(sumas /conteos)
+    estado <- data_frame(n = iteracion,
+                         brazo = 1:n_brazos,
+                         conteos = conteos,
+                         sumas = sumas)
   }
   fun
 }
 ```
 
+
+
+```{r}
+set.seed(1332)
+smax_1 <- crear_softmax(temp_0 = 1.0, inicial = 3, recocido = TRUE, sim_fun = simular)
+smax_2 <- crear_softmax(temp_0 = 0.1, inicial = 3, recocido = TRUE, sim_fun = simular)
+smax_3 <- crear_softmax(temp_0 = 25.0, inicial = 3, recocido = TRUE, sim_fun = simular)
+metodos <- list(softmax_t_10 = smax_1, 
+                softmax_t_01 = smax_2, 
+                softmax_t_100 = smax_3)
+
+df_iteraciones <- lapply(1:500, function(i){
+  resultados <- lapply(1:length(metodos), function(i){ 
+    metodos[[i]]() %>% mutate(tipo = names(metodos)[i]) })
+  bind_rows(resultados)
+}) %>% bind_rows %>% as_tibble()
+tail(df_iteraciones, 200)
+```
+
+Y consideramos la recompensa promedio acumulada a cada momento
+del tiempo:
+```{r}
+resumen <- df_iteraciones %>% group_by(n, tipo) %>%
+  summarise(promedio_recompensa = sum(sumas) / sum(conteos))
+ggplot(resumen, aes(x=n, y= promedio_recompensa, colour = tipo, group = tipo)) + geom_line() +
+  geom_hline(yintercept = 10, colour = "red")
+```
+
+**Observaciones**:
+
+1. Nótese que el algoritmo con temperatura inicial muy baja no explora suficientemente, y rápidamente pasa a explotar un brazo subóptimo.
+2. El algoritmo con temperatura inicial muy alta sigue explorando, y empieza a utilizar la evidencia de los mejores brazos más tarde.
+3. El algoritmo como temperatura inicial 10 parece tener un buen balance: explora los suficiente
+para encontrar el mejor brazo y luego se concentra en explotarlo.
+
+### Desventajas del algoritmo softmax
+
+Este algoritmo es una mejora sobre los dos anteriores, pero es necesario escoger una
+temperatura inicial correcta. Esta temperatura inicial correcta depende de las distribuciones
+de recompensas de cada brazo (por ejemplo, si hay más varianza, necesitamos temperaturas más
+altas para que el algoritmo explore más tiempo). Pero inicialmente no necesariamente sabemos
+mucho acerca de estas recompensas.
+
+El problema sigue siendo que esta heurística no examina estadísticamente los datos
+que ha observado para decidir cuándo es tiempo de explorar, y qué explorar, y cuándo es
+tiempo de explotar. Es decir, necesitamos evaluar estadísticamente la evidencia que tenemos
+de cada brazo para tomar en cada paso la mejor decisión. Los siguientes dos algoritmos
+consideran este aspecto.
+
 ## El algoritmo de cota superior de confianza (UCB)
 
 Los algoritmos mostrados arriba tienen el defecto de que no toman en cuenta
 la incertidumbre que tenemos acerca de nuestra estimación de la recompensa
-promedio de cada brazo.
+promedio de cada brazo. Una buena ventaja de considerar esta incertidumbre es que
+la afinación de las probabilidades de exploración durante el algoritmo no deben
+ser ajustadas a mano (por ejemplo con la temperatura inicial, o la selección de $\epsilon$).
+
+Supogamos que todas las recompensas están entre 0 y 1 (quizá es necesario escalar). Ahora
+supongamos que al momento $t$ tenemos:
+
+- Hemos probado la palanca $k$ $n_{k,t}$ veces
+- El promedio de recompensa de cada palanca es $\bar{r}_{k,t}$
+
+Es más o menos claro que medidas de dispersión de las recompensas de cada palanca nos
+ayudaría a resolver este problema, pero también es necesario guardar más datos y procesarlos
+cuando hacemos el experimento. Sin embargo, podemos dar una cota burda para el verdadero
+valor medio $r_k$ de recompensa para la palanca $k$. 
+
+Para el siguiente teorema, consideramos un brazo particular con media observada $\bar{r}$,
+media real $r$, y número de observaciones $n$. Suponemos como dijimos antes que cada recompensa están entre 0 y 1.
+
+```{block2, type="resumen"}
+**Cotas de Hoeffding**
+  
+Sea $r_1,\ldots, r_n \in [0,1]$ variables aleatorios iid con $E(r_i) = r$. Entonces
+  
+$$P(\bar{r} \geq r + a) \leq \exp( -2na^2)$$, y
+
+$$P(\bar{r} \leq r - a) \leq \exp( -2na^2)$$
+```
+
+De este resultado podemos hacer un análisis optimista de las cotas superiores de ganancia. Si ponemos $\delta = \exp( -2na^2)$, despejando obtenemos
+
+$$P \left (r > \bar{r} + \sqrt{\frac{log(1/\delta)}{2n}}\right )\leq \delta$$
+Si fijamos una $\delta >0$, entonces para cada uno de los brazos, obtenemos una
+cota inferior para la recompensa promedio real de
+$$ c_{i,t} = \bar{r}_{i,t} + \sqrt{\frac{ log(1/\delta)}{2n_{i,t}}}$$
+La idea es entonces escoger el brazo cuya cota es más grande. Este es un punto 
+de vista **optimista**: si la cota es grande entonces decidimos explorar el brazo porque es
+prometedor - aunque no hay garantía de que podamos superar la cota.
+
+En principio podríamos correr el algoritmo con una $\delta$ fija, por ejemplo $\delta=0.10$.
+Veamos por qué esto no necesariamente es buena idea, pues puede ser que dejemos
+de explorar prematuramente, y eso nos haría perder muchas recompensas. Como esto puede pasar 
+es como sigue:
+
+- Imaginemos que en un momento dado $T$, el mejor brazo es $j$, con constante correpondiente $c_{j,T}$.
+- A partir de ese momento, empezamos a explotar $j$. La cota $c_{j,t}$ correspondiente a $j$ ser irá encogiendo hacia la media $\bar{r}_{j,t}$.
+- Ahora supongamos que la segunda mejor $k$ opción al tiempo $T$ tiene $c_{k,T} < {\bar{r}_{j,t}}$. Como la opción $j$ sigue ganando, nunca exploraremos $k$ otra vez.
+- Sin embargo, hay una probabilidad baja (menor a 10\%) de que de hecho la media verdadera
+$r_{k}$ de $k$ esté
+**por encima** de su cota $c_{k,T}$. De forma que debería seguir siendo un candidato a 
+explorar!
+
+Podemos resolver este problema reduciendo el valor de $\delta$ conforme el tiempo avanza.
+En el algoritmo UCB1 (Ver [@auerbandits]) ponemos
+
+
+$$ c_{i,t} = \bar{r}_{i,t} + \sqrt{\frac{ 2log(t)}{n_{i,t}}},$$
+
+de forma que la cota tiene probabilidad $\delta = t^{-4}$. Adiconalmente, esta selección
+particular permite tener cotas teóricas acerca de la máxima pérdida (también llamada *regret*)
+que incurrimos al usar este algoritmo.
+
+
+
+
+
+Implementamos el algoritmo UCB1 como sigue
+
+  
+```{r}
+crear_ucb <- function(inicial = 1, sim_fun, max = 1){
+  n_brazos <- environment(sim_fun)$n_brazos
+  conteos <- rep(0, n_brazos)
+  sumas <- rep(0, n_brazos)
+  iteracion <- 0
+  fun <- function(){
+    iteracion <<- iteracion + 1
+    cotas <- (sumas / max) / conteos  +  sqrt(2* log(iteracion) / conteos)
+    cotas[is.nan(cotas)] <- Inf
+    brazo <- which.max(cotas)
+    sim <- sim_fun(brazo)
+    conteos[brazo] <<- conteos[brazo] + 1
+    sumas[brazo] <<- sumas[brazo] + sim
+    estado <- data_frame(n = iteracion,
+                         brazo = 1:n_brazos,
+                         conteos = conteos,
+                         sumas = sumas)
+  }
+  fun
+}
+```
+
+
+
+```{r}
+set.seed(92329)
+sim_2 <- crear_maquina_bernoulli(lambda = c(0.01,  0.99, 0.2, 0.1,0.1))
+ucb <- crear_ucb(inicial = 1, sim_fun = sim_2)
+smax <- crear_softmax(temp_0 = 1.5, inicial = 1, recocido = TRUE, sim_fun = sim_2)
+miope <- crear_epsilon_miope(epsilon = 0.1, inicial = 1, sim_fun = sim_2)
+
+metodos <- list(ucb = ucb, 
+                softmax = smax, 
+                miope = miope)
+
+df_iteraciones <- lapply(1:500, function(i){
+  resultados <- lapply(1:length(metodos), function(i){ 
+    metodos[[i]]() %>% mutate(tipo = names(metodos)[i]) })
+  bind_rows(resultados)
+}) %>% bind_rows %>% as_tibble()
+```
+
+Y consideramos la recompensa promedio acumulada a cada momento
+del tiempo:
+```{r}
+resumen <- df_iteraciones %>% group_by(n, tipo) %>%
+  summarise(promedio_recompensa = sum(sumas) / sum(conteos))
+ggplot(resumen, aes(x=n, y= promedio_recompensa, colour = factor(tipo), group=tipo)) + geom_line()  +
+  geom_hline(yintercept = 0.99, colour = 'red')
+```
+
+Podemos correr varias simulaciones para ver cómo se comportan bajo distintos
+patrones de recompensas
+
+```{r}
+
+correr_algos <- function(metodos = metodos, t = 300){
+  ucb <- crear_ucb(inicial = 1, sim_fun = sim_2)
+  smax <- crear_softmax(temp_0 = 1, inicial = 3, recocido = TRUE, sim_fun = sim_2)
+  miope <- crear_epsilon_miope(epsilon = 0.1, sim_fun = sim_2)
+
+  metodos <- list(ucb = ucb, 
+                softmax = smax, 
+                miope = miope)
+  df_out <- lapply(1:t, function(i){
+    resultados <- lapply(1:length(metodos), function(i){ 
+        metodos[[i]]() %>% mutate(tipo = names(metodos)[i]) 
+    })
+    bind_rows(resultados) }) %>% bind_rows %>% as_tibble()
+  df_out
+}
+replicaciones <- data_frame(rep = 1:6) %>%
+  mutate(data = map(rep, function(rep) { correr_algos(metodos) })) %>% unnest
+```
+
+```{r}
+resumen <- replicaciones %>% group_by(n, tipo, rep) %>%
+  summarise(promedio_recompensa = sum(sumas) / sum(conteos))
+ggplot(resumen, aes(x=n, y= promedio_recompensa, colour = factor(tipo), group=tipo)) + geom_line()  +
+  geom_hline(yintercept = 0.99, colour = 'red') + facet_wrap(~rep)
+```
+
+**Observación**:
+
+- Podemos afinar el algoritmo miope y el softmax para tener mejor desempeño con estos datos.
+La ventaja de UCB1 es que no tenemos que afinar ningún parámetro, y 
+su desempeño es razonable sobre distintas corridas.
+
+## Otros aspectos de la experimentación y máquinas tragamonedas
+
+Hay varios aspectos que tenemos que cuidar cuando planeamos hacer experimentación online ([@whitebandits):
+
+1. ¿Nuestro código de experimentación y de evaluación está funcionando como debe?
+2. ¿Hemos escogido correctamente las métricas que queremos optimizar?
+3. ¿Existe información adicional de contexto (por ejemplo, tipo de usuarios) de la queremos
+aprender también? (por ejemplo, encontrar valor de los brazos según tipo de usuario).
+
+### Pruebas A/A {-}
+
+Una forma robusta de validar nuestro código y la infraestructura de experimentación es 
+correr experimentos A/A antes de nuestras tragamonedas o experimentos A/B. En un experimento
+A/A, aplicamos el tragamonedas, pero todos los tratamientos son iguales. Si corremos suficiente
+tiempo el experimento, debemos observar que los brazos convergen en desempeño promedio.
+
+Cuando esto no sucede, quiere decir existe un error en nuestra infraestructura de 
+experimentación. Estos problemas suceden en la práctica pues esa infraestura es típicamente
+no trivial, pues toca todos los puntos de nuestro sitio web. Ver por ejemplo el
+paper [trustworthy online controlled experiments five puzzling outcomes explained](http://notes.stephenholiday.com/Five-Puzzling-Outcomes.pdf). Puedes leer más
+acerca del diseño de la plataforma completa de experimentación en Google en [Overlapping Experiment Infrastructure: More, Better, Faster Experimentation](https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/36500.pdf).
+
+### Métricas de éxito defectuosas {-}
+
+La experimentación automatizada, bajo las métricas incorrectas de éxito, puede ser
+contraproducente. Por ejemplo, la degradación de resultados de búsqueda, en el corto plazo,
+puede producir:
+
+- Más clicks por usuario (una métrica posible de éxito), pues es más dificil encontrar los resultados que le interesa al usuario
+- Más clicks en anuncios (y más ganancias de publicidad), pues dada la pobreza de los resultados los usuarios recurren artificalmente a los anuncios de *paid search*.
+- Más clicks en artículos recomendados, por la misma razón.
+Todas estas son ganancias a corto plazo, pero a largo plazo dañan el negocio.
+
+### Tragamonedas contextuales
+
+Podemos también utilizar modelos para obtener recompensas contextuales, en donde construimos
+modelos para la recompensas de cada brazo según variables adicionales que tengamos (por ejemplo, tipo de usuario, hora del día, etc.). En los ejemplos que vimos arriba, nos interesaba simplemente
+calcular $E(R_i)$ para cada uno de los brazos. Sin embargo, podemos modelar también 
+en función de covariables, y estimar $E(R_i|X)$ con algún modelo (por ejemplo, regresión lineal).
+Ver por ejemplo [este paper](http://rob.schapire.net/papers/www10.pdf).
+
+
+
+
 
