@@ -1,4 +1,4 @@
-# Algoritmos de tragamonedas (bandits)
+# Expermientación y algoritmos de tragamonedas (bandits)
 
 En esta sección consideramos el problema de hacer cambios
 en un sitio web, por ejemplo, con el fin de mejorar métricas
@@ -428,7 +428,7 @@ arriba y gráficamos los resultados para cada brazo:
 simular <- crear_maquina_poisson(lambda = c(1, 8, 10))
 sim_recomp <- 
   data_frame(brazo = sample.int(3, 1000, replace = TRUE)) %>% 
-  mutate(recompensa = simular(brazo)) %>%
+  mutate(recompensa = map_dbl(brazo, simular)) %>%
   group_by(brazo) %>% mutate(media = mean(recompensa))
 ggplot(sim_recomp, aes(x=recompensa)) + facet_wrap(~brazo) +
   geom_histogram(binwidth = 1.2) +
@@ -485,7 +485,7 @@ Y ahora generamos 100 datos adicionales y guardamos los resultados:
 
 ```{r}
 e_miope <- crear_epsilon_miope(epsilon = 0.3, inicial = 1, sim_fun = simular)
-df_iteraciones <- lapply(1:300, function(i){
+df_iteraciones <- lapply(1:600, function(i){
   e_miope()
 }) %>% bind_rows %>% as_tibble()
 df_iteraciones 
@@ -523,9 +523,9 @@ Y podemos considerar intervalos para la estimación de la recompensa
 promedio de cada brazo (**Nota**: normalmente tendríamos que calcular
 la desviación estándar de los datos de recompensas observados para
 estimar el error estándar. Como en este caso estamos tratando con distribuciones
-Poisson, podemos estimar la varianza como $\hat{lambda} / n$):
+Poisson, podemos estimar la varianza como $\{\lambda} / n$):
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 df_iteraciones <- df_iteraciones %>% group_by(brazo) %>%
     mutate(promedio = sumas / conteos) %>%
   mutate(error_est = sqrt(promedio)/sqrt(conteos)) 
@@ -536,6 +536,10 @@ ggplot(df_iteraciones, aes(x=n, y=promedio,
   geom_line() + geom_ribbon(alpha = 0.1)
 ```
 
+
+Obsérvese que nuestro método no utiliza en ninguna forma la incertidumbre que
+tenemos en las estimaciones de la recompensa promedio. Veremos más adelante cómo
+mejorar esta deficiencia.
 
 ### Comparación con experimentación clásica
 
