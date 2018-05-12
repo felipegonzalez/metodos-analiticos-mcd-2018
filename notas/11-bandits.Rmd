@@ -278,6 +278,17 @@ En particular, los experimentos A/B (que pueden tener más de 2 opciones) tienen
 
 - Desde el punto de vista del negocio, preferiríamos una solución donde cuanto más mala parece ser una opción, la exploramos menos para incurrir en menos pérdidas grandes. Sin embargo, queremos mantener algún nivel de exploración para poder encontrar mejores opciones a la que tenemos actualmente, especialmente cuando tenemos incertidumbre alta acerca de una opción.
 
+- En particular, en la experimentación tradicional se selecciona el tamaño de muestra y el experimento
+primero. Se considera que hay que correr el experimento hasta el final, y muchas veces
+que está "mal" ver los datos antes de que el experimento termine, o terminar el experimento
+antes de que se completen las muestras diseñadas. Esto intuitivamente es una mala idea. 
+
+- Muchas veces, se considera que los más importante de controlar es el error tipo I (declarar
+un cambio como mejoría cuando realmente es más o menos equivalente a lo que teníamos antes) mediante
+el nivel de significancia (5\%). Pero en la práctica, lo que nos puede hacer perder nuestro
+trabajo son los errores de tipo II (no escoger un cambio que representa una mejoría, o no identificar
+un cambio que produce daños grandes).
+
 ## Algoritmos de tragamonedas
 
 Los algoritmos de tragamonedas (multi-armed bandit algorithms) buscan 
@@ -959,6 +970,11 @@ en función de covariables, y estimar $E(R_i|X)$ con algún modelo (por ejemplo,
 Ver por ejemplo [este paper](http://rob.schapire.net/papers/www10.pdf).
 
 
+### Tragamonedas bayesianos.
 
+Los
+*tragamonedas bayesianos* presentan una manera más unificada para construir algoritmos
+(basados en la distribución posterior de recompensa dada cada brazo). Ver por ejemplo
+[Experiments in the Internet age: A modern Bayesian look at the multi-armed bandit](http://web.mi.imati.cnr.it/conferences/BAYSM2016/scott-baysm-bandits.pdf).
 
 
