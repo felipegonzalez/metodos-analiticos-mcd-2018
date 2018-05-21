@@ -70,7 +70,7 @@ y los nodos del lado izquierda las búsquedas o los *usuarios*:
 library(tidyverse)
 library(ggraph)
 library(tidygraph)
-cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cbPalette <- c("#BBBBBB", "#009E73","#E69F00", "#56B4E9", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 df_ejemplo <- data_frame(from = c(1,1,2,3,3,4), 
   to = c("a", "c", "b", "b", "d", "a"))
 tipos <- data_frame(name=c(1:4,letters[1:4]), 
@@ -105,19 +105,22 @@ df_ejemplo <- data_frame(from = c(1,1,2,3,3,4),
 tipos <- data_frame(name=c(1:4,letters[1:4]), 
   type = c(rep(1,4), rep(0,4)))
 
-grafica_df <- as_tbl_graph(df_ejemplo) %>%
-  activate(nodes) %>% left_join(tipos)
 ```
 
 
 ```{r, out.width="400px", out.height="300px", fig.width=6, fig.height=4}
-
-ggraph(grafica_df, layout = 'manual', node.positions=positions) + 
-  geom_edge_link(aes(colour=factor(in_matching)), edge_width=1.5) +
-  geom_node_point() + coord_flip() + 
-  geom_node_label(aes(label=name)) +
-  theme_graph(fg_text_colour = 'white') +
-  scale_edge_colour_manual(values=cbPalette)
+plot_matching <- function(df_ejemplo, tipos){
+  grafica_df <- as_tbl_graph(df_ejemplo) %>%
+    activate(nodes) %>% left_join(tipos, by = "name")
+  g <- ggraph(grafica_df, layout = 'manual', node.positions=positions) + 
+    geom_edge_link(aes(colour=factor(in_matching)), edge_width=1.5) +
+    geom_node_point() + coord_flip() + 
+    geom_node_label(aes(label=name)) +
+    theme_graph(fg_text_colour = 'white') +
+    scale_edge_colour_manual(values=cbPalette)
+  g
+}
+plot_matching(df_ejemplo, tipos)
 ```
 
 Es un  matching perfecto, pues todos los nodos están pareados con algún otro.
@@ -134,19 +137,378 @@ df_ejemplo <- data_frame(from = c(1,1,2,3,3,4),
   to = c("a", "c", "b", "b", "d", "a"), in_matching = c(1,0,1,0,1,0))
 tipos <- data_frame(name=c(1:4,letters[1:4]), 
   type = c(rep(1,4), rep(0,4)))
-
-grafica_df <- as_tbl_graph(df_ejemplo) %>%
-  activate(nodes) %>% left_join(tipos)
 ```
 
 
 
 ```{r, out.width="400px", out.height="300px", fig.width=6, fig.height=4}
-
-ggraph(grafica_df, layout = 'manual', node.positions=positions) + 
-  geom_edge_link(aes(colour=factor(in_matching)), edge_width=1.5) +
-  geom_node_point() + coord_flip() + 
-  geom_node_label(aes(label=name)) +
-  theme_graph(fg_text_colour = 'white') +
-  scale_edge_colour_manual(values=cbPalette)
+plot_matching(df_ejemplo, tipos)
 ```
+
+
+## Matching miope (greedy matching)
+
+Aunque existen varios [algoritmos](https://en.wikipedia.org/wiki/Matching_(graph_theory)) para encontrar matchings maximales, aquí nos interesa algoritmos *en-línea*, en donde
+tenemos que tomar una decisión en cuanto observamos la llegada de un vértice 
+(cuando una búsqueda llega queremos asignarla a un anuncio).
+
+```{block2, type="resumen"}
+**Algoritmo miope**
+  Consideramos las aristas de una gráfica bipartita en el orden que aparecen. Cada
+vez que observamos una arista $(x,y)$, la agregamos a nuestro matching si ni $x$ ni $y$ 
+han sido pareados. Si alguno de los dos ya está pareado, continuamos a la siguiente arista.
+```
+
+Observación: podemos pensar que el orden está dado por los vértices de búsquedas: llega un búsqueda o consulta, y tenemos los vértices (ordenados lexicográficamente por ejemplo) que corresponden a anuncios candidatos que se pueden mostrar para esa búsqueda.
+
+#### Ejemplo {-}
+En nuestro ejemplo, consideramos el orden inducido por $a,c,b,d$. En primer lugar
+
+```{r, out.width = "1000px", fig.width = 10, fig.height=3}
+greedy_match <- function(df_ejemplo, vertices, plot = TRUE){
+  df_ejemplo$in_matching <- 0
+  miope <- lapply(vertices, function(v){
+    matched <- df_ejemplo %>% filter(in_matching==1) %>% pull(from)
+    candidatos <- filter(df_ejemplo, to == v, !(from %in% matched) )
+    if(nrow(candidatos) > 0){
+      df_ejemplo <<- df_ejemplo %>% 
+        mutate(in_matching = ifelse(from == candidatos$from[1] & 
+              to == candidatos$to[1], 1, in_matching))
+    }
+  plot_matching(df_ejemplo, tipos) +
+  theme(legend.position = "None",  plot.margin=unit(c(0.3,0.3,0.3,0.3), "cm")) 
+  })
+  if(plot == TRUE){
+    do.call(gridExtra::grid.arrange, c(miope, list(nrow = 1)))
+  }
+  df_ejemplo
+}
+match_1 <- greedy_match(df_ejemplo, vertices = c("a", "c", "b", "d"))
+match_1
+```
+
+## Índice de competitividad
+
+¿Qué tan bueno es un algoritmo miope de matching? 
+
+```{block2, type="resumen"}
+Consideremos un problema de matching, donde supongemos que 
+el matching óptimo (maximal con mayor número posible de matches) tiene $E^*$ aristas. 
+Si un algoritmo da un matching con $E$ aristas, decimos que su índice de competitividad
+es 
+$$c = \frac{E}{E^*}. Sobre una familia de problemas de matching, el índice
+de competitividad de un algoritmo es el mínimo de los índices de competitividad
+sobre todos los posibles casos (el peor escenario).
+```
+
+
+#### Ejemplo {-}
+Consideramos nuestro ejemplo anterior, para el cual sabemos que un óptimo da $E^*=4$
+aristas. El coeficiente de competitividad del algoritmo miope es en este caso:
+
+```{r, out.width = "1000px", fig.width = 10, fig.height=3}
+vertices <- c("a", "c", "b", "d")
+match_1 <- greedy_match(df_ejemplo, vertices = c("a", "c", "b", "d"), plot = FALSE)
+sum(match_1$in_matching)/4
+```
+
+Pero si consideramos otro ordenamiento podría ser peor:
+
+```{r, out.width = "1000px", fig.width = 10, fig.height=3}
+vertices <- c("a", "b", "c", "d")
+df_ejemplo_2 <- df_ejemplo[c(1,6,4,3,2,5),]
+df_ejemplo_2
+match_1 <- greedy_match(df_ejemplo_2, vertices = vertices, plot = TRUE)
+sum(match_1$in_matching)/4
+
+```
+
+
+Resulta ser que **el desempeño del algoritmo miope no puede ser menor a 1/2**, lo cual
+no es una cota tan mala. A continuación hacemos la demostración:
+
+Sea $M^*$ un matching maximal, y sea $M$ un matching producido por el algoritmo
+miope.
+
+- Sea $L$ el conjunto de nodos de la izquerda que están en $M^*$ pero no están en $M$
+- Sea $R$ el conjunto de nodos de la derecha que está conectado a algún nodo del $L$.
+
+En primer lugar, observemos que cada nodo de $R$ está pareado en $M$. Si existiera
+un nodo $r$ en $R$ que no está pareado en $M$, entonces en algún momento consideramos
+algún par $(l, r)$, donde $l$ pertenece a $L$. Pero esto es una contradicción, pues
+el algoritmo miope hubiera incluido tal arista en su solución. 
+
+Por los argumentos y definiciones anteriores, tenemos entonces:
+
+- $|M^*| \leq |M| + |L|$
+- $|L| \leq |R|$
+- $|R| \leq |M|$
+
+Juntando estas tres desigualdades, obtenemos que
+$$|M|\geq \frac{1}{2}|M^*|$$
+Lo que implica que el cociente de competitividad es al menos un 1/2.
+
+
+## El problema Adwords
+
+El esquema de Google para vender y mostrar anuncios introdujo las siguientes complejidades:
+
+1. Google solo muestra una cantidad limitada de anuncios por búsqueda (pues
+su producto principal son los resultados de nuestras consultas). Es importante
+decidir entonces, para cada búsqueda, qué anuncios mostrar.
+2. En Adwords, los anunciantes establecen 
+presupuestos (mensuales, por ejemplo), lo cual complica la asignación de anuncios, como
+vimos anteriormente
+
+Consideramos entonces el siguiente problema de adwords simplificado:
+
+Antes de que llegue una búsqueda:
+
+- Los anunciantes entran en una subasta ciega, y cada uno hace una oferta
+por click (por ejemplo, 2 centavos de dólar por click). Esto es lo que está dispuesto a pagar
+cada anunciante por un click en su anuncio.
+- Junto con estas ofertas, los anunciantes establecen un presupuesto mensual, que establece cuánto
+están dispuestos a pagar en total (por ejemplo, durante un mes).
+- Se estima el CTR (*click-through rate*) de cada combinación anuncio - búsqueda (supongamos que lo observamos en el pasado para simplificar).
+
+Cuando llega una búsqueda, debemos incluir anuncios bajo las siguientes reglas:
+
+- El número de anuncios mostrados será menor que un máximo preestablecido (3, 5, etc)
+- Cada uno de los anuncios mostrados fueron de anunciantes con ofertas para tal búsqueda y anuncio.
+- Ningún anuncio mostrado puede exceder el presupuesto de ningún anunciante en caso de
+que sean clickeados.
+
+Estaremos interesados en el **esperado de ingreso total**, que obtemos:
+
+- Para cada anuncio mostrado, multiplicamos el valor de la oferta por el CTR (ingreso esperado)
+- Sumamos sobre todos los anuncios mostrados.
+
+Queremos optimizar el **esperado de ingreso total durante un periodo de tiempo**, digamos 
+un mes. Compararemos la competitividad de un algoritmo viendo qué tan lejos está
+de la asignación óptima en cuanto a ingreso durante un mes.
+
+#### Ejemplo {-}
+
+Consideremos tres anunciantes que compiten por mostrar sus anuncios. Supongamos que
+llega una consulta, y sus ofertas y CTRs
+están dados por:
+
+```{r, echo=FALSE}
+ejemplo <- data_frame(anunciante= c("a","b","c", "d"),
+                      oferta_USD = c(0.5, 1, 2, 0.75), 
+                      CTR    = c(0.02,0.05,0.02, 0.01)) %>%
+  mutate(esperado_centavos = 100*oferta_USD*CTR)
+knitr::kable(ejemplo)
+
+```
+
+En este caso, el ganador de la subasta es el anunciante $b$. Si la subasta
+es de primer precio, entonces pagará por click 1 dólar.
+
+En el verdadero Adwords de Google, sin embargo, se utiliza una especie de subasta
+de segundo precio. En este caso, esta cantidad es 81 centavos, que es la mínima
+oferta que el ganador $b$ tuvo que hacer para ganar la subasta, y 
+se calcula como sigue:
+
+tomamos el segundo lugar de la subasta, que el anunciante $c$. Su esperado es de
+4 dólares (mínimo esperado para ganar la subasta), 
+que dividimos entre su CTR del ganador (0.05) para obtener 80 centavos. Agregamos
+un centavo para que esté por arriba de la segunda oferta y obtenemos 81 centavos.
+
+---
+
+
+
+**Observaciones**: algunas complejidades adicionales del proceso de adwords verdadero:
+
+- La estimación de CTR no es trivial (en Google se usan *quality scores*), por ejemplo para
+anuncios que no hemos visto, o anuncios que hemos visto que se aplican a consultas diferentes
+a las que hemos observado antes.
+
+- Los anunciantes ganadores en realidad pagan por click el mínimo valor más un centavo de
+la oferta que tuvieron que haber hecho para ganar la subasta (es una [subasta de segundo precio](https://en.wikipedia.org/wiki/Vickrey_auction)).
+
+- Actualmente hay muchos tipos de ofertas que se pueden hacer: por búsquedas exactas, pero también
+búsquedas con palabras similares, búsquedas que incluyen los términos de interés, filtros por
+región y por hora del día, etc. (ver https://adwords.google.com).
+
+## Algoritmo de balance
+
+Consideramos una versión simplificada del problema de adwords, y veremos
+que podemos superar el algoritmo utilizando un algoritmo que intenta balancear
+los presupuestos de los anunciantes.
+
+#### Ejemplo {-}
+Tenemos dos anunciantes $A$ y $B$, cada uno con un presupuesto de 2 pesos, y 
+las ofertas que hacen son de 0 o 1 peso. En cada búsqueda solo podemos mostrar un anuncio,
+y suponemos que el CTR de todos los anuncios tienen el mismo valor.
+
+Ahora imaginemos que $A$ hace oferta (1 peso) por las consultas $x$, y $B$
+hace ofertas de 1 peso por las consultas $x$ y $y$. 
+
+Si observamos la sucesión de búsquedas $xxyy$, pueden suceder dos cosas, depende
+del ordenamiento que hayamos seleccionado para los anunciantes: Le asignamos a 
+$A$ las primeras dos búsquedas ($x$ y $x$), y después le asignamos a $B$ las dos
+restantes $yy$. Esto da un matching perfecto y nuestro ingreso total es 4.
+
+Sin embargo, si le asignamos las primeras dos a $B$, entonces cuando llegan $yy$
+no tenemos con quien hacer match pues el presupuesto de $B$ se agotó, y $A$ no hizo
+ofertas para la consulta $y$. Nuestro ingreso total es 2.
+
+Esto implica que el matching miope en este caso tiene un índice de competitividad
+de no más de 1/2.
+
+
+---
+
+Sin embargo, opdemos hacer una mejora simple al algoritmo miope, intentando balancear
+los presupuestos.
+
+```{block2, type="resumen"}
+En el **algoritmo de balance**, hacemos match (consulta - anunciante) con el candidato
+que tenga presupuesto más alto. Deshacemos los empates de forma arbitraria (por ejemplo al azar).
+```
+
+#### Ejemplo {-}
+
+En la situación anterior podemos mejorar nuestro desempeño. Supongamos que el primer
+query $x$ se lo asignamos a $B$. El presupuesto de $B$ es ahora de 1 peso. Cuando llega
+el siguiente query $x$, notamos que $A$ tiene una oferta de 1 por $x$ y tiene mayor presupuesto (2). Le asignamos la consulta a $A$. Ahora $A$ y $B$ tienen el mismo presupuesto (1). Cuando
+llegan $yy$, solo podemos asignar una de ellas a $B$. En total, nuestro ingreso es 3
+y el índice de competitividad es 3/4.
+
+---
+
+
+## Cotas de competitividad para el algoritmo de balance
+
+Puedes consultar [An optimal determistic algorithm for online b-matching](https://pdfs.semanticscholar.org/01a5/9f858ce5d243baa93e4ba7011e8fc45afe97.pdf) y
+[AdWords and Generalized On-line Matching](https://web.stanford.edu/~saberi/adwords.pdf.
+]).
+
+Para encontrar las cotas de competitividad, tenemos que pensar cuál es la peor
+situación a la que nos podríamos enfrentar desde el punto de vista dl
+algoritmo de balance. Suponemos primero:
+
+- Tenemos $A_1,\ldots, A_N$ anunciantes. Supongamos
+que el presupuesto de cada uno es $B$ fijo
+- Todas las ofertas son de valor 1, y suponemos que el CTR es igual para todos los anunciantes.
+
+
+### Ejemplo: simulación
+
+Comenzaremos por hacer ejercicios de simulación para entender qué tan buen resultado
+puede dar el agoritmo de balance. El algoritmo miope se puede escribir como:
+
+```{r}
+
+greedy <- function(n_anunciantes, n_queries, lambda, presupuesto){
+  balance <- rep(presupuesto, n_anunciantes)
+  queries_oferta <- lapply(1:n_anunciantes, function(i) {
+        num_queries <- min(rpois(1, lambda = lambda) + 1, n_queries)
+        sample(1:n_queries, num_queries)})
+  queries_activos <- unique(unlist(queries_oferta))
+  ingreso <- 0
+  iteraciones <- 0
+  llega_query <- function(i){
+    query <- sample(queries_activos, 1)
+    # seleccionar los que tienen presupuesto
+    candidatos_ind_pres <- balance > 0
+    # seleccionar los que ofertaron por el query
+    candidatos_ind_query <- sapply(queries_oferta, function(x){  query %in% x  })
+    candidatos <- which(candidatos_ind_pres & candidatos_ind_query)
+    if(sum(presupuesto) > 0){
+      iteraciones <<- iteraciones + 1
+      if(length(candidatos) > 0){
+        ganador <-  first(candidatos)
+        balance[ganador] <<- balance[ganador]  - 1
+        ingreso <<- ingreso + 1
+      }
+    }
+    return(ingreso)
+  }
+  llega_query
+}
+  
+```
+
+Y el de balance podemos escribirlo como:
+
+```{r}  
+balance <- function(n_anunciantes, n_queries, lambda, presupuesto){
+  balance <- rep(presupuesto, n_anunciantes)
+  queries_oferta <- lapply(1:n_anunciantes, function(i) {
+        num_queries <- min(rpois(1, lambda = lambda) + 1, n_queries)
+        sample(1:n_queries, num_queries)})
+  queries_activos <- unique(unlist(queries_oferta))
+  ingreso <- 0
+  iteraciones <- 0
+  llega_query <- function(i){
+    query <- sample(queries_activos, 1)
+    # seleccionar los que tienen presupuesto
+    candidatos_ind_pres <- balance > 0
+    # seleccionar los que ofertaron por el query
+    candidatos_ind_query <- sapply(queries_oferta, function(x){  query %in% x  })
+    candidatos <- which(candidatos_ind_pres & candidatos_ind_query)
+    if(sum(presupuesto) > 0){
+      iteraciones <<- iteraciones + 1
+      if(length(candidatos) > 0){
+        ganador_idx <- which.max(balance[candidatos])
+        ganador <- candidatos[ganador_idx]
+        balance[ganador] <<- balance[ganador]  - 1
+        ingreso <<- ingreso + 1
+      }
+    }
+    return(ingreso)
+  }
+  llega_query
+}
+```
+
+
+Corremos dos simulaciones y comparamos resultados
+
+```{r}
+#set.seed(343434)
+adwords <- balance(n_anunciantes = 30, n_queries = 50, lambda = 1, presupuesto = 5)
+miope <- balance(n_anunciantes = 30, n_queries = 50, lambda = 1, presupuesto = 5)
+
+df_balance <- data_frame(n_iter = 1:150) %>% 
+  mutate(datosl = map(n_iter, function(i){ 
+           data_frame(
+            ingreso = adwords(),
+            balance = sum(environment(adwords)$balance))})) %>% unnest %>%
+  mutate(algo = "balance")
+
+df_greedy <- data_frame(n_iter = 1:150) %>% 
+  mutate(datosl = map(n_iter, function(i){ 
+           data_frame(
+            ingreso = miope(),
+            balance = sum(environment(miope)$balance))})) %>% unnest %>%
+  mutate(algo = "miope")
+df_algos <- bind_rows(df_balance, df_greedy)
+
+ggplot(filter(df_algos, balance > 0), aes(x = n_iter, 
+                y = ingreso, colour = algo, group=algo)) + geom_line() 
+
+```
+
+**Ejercicio**: 
+
+- Haz distintas corridas y compara resultados de los dos algoritmos. En la simulación mostrada
+aquí, ¿por qué miope sale más bajo?
+- Cambia los parámetros y observa el comportamiento del ingreso
+- Considera otro tipo de simulaciones. La que vimos aquí es relativamente simple
+para los dos algoritmos.
+
+
+## El algoritmo de balance generalizado
+
+Ahora generalizamos 
+
+
+
+
+
+
+
