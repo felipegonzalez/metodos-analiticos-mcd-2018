@@ -398,32 +398,41 @@ que el presupuesto de cada uno es $B$ fijo
 ### Ejemplo: simulación
 
 Comenzaremos por hacer ejercicios de simulación para entender qué tan buen resultado
-puede dar el agoritmo de balance. El algoritmo miope se puede escribir como:
+puede dar el agoritmo de balance. 
+
+En primer lugar, construimos una función para simular llegada de queries que sea
+interesante. 
+
+```{r}
+sim_queries <- function(n_queries, n = 150, ordenado = TRUE){
+  queries <- sample(1:n_queries, n, replace = TRUE)
+  if(ordenado){
+    queries <- sort(queries)
+  }
+  queries
+}
+```
+
+El algoritmo miope se puede escribir como:
 
 ```{r}
 
-greedy <- function(n_anunciantes, n_queries, lambda, presupuesto){
+crear_miope <- function(n_anunciantes, presupuesto, queries_anunciantes){
   balance <- rep(presupuesto, n_anunciantes)
-  queries_oferta <- lapply(1:n_anunciantes, function(i) {
-        num_queries <- min(rpois(1, lambda = lambda) + 1, n_queries)
-        sample(1:n_queries, num_queries)})
-  queries_activos <- unique(unlist(queries_oferta))
   ingreso <- 0
   iteraciones <- 0
-  llega_query <- function(i){
-    query <- sample(queries_activos, 1)
+  llega_query <- function(query){
     # seleccionar los que tienen presupuesto
     candidatos_ind_pres <- balance > 0
     # seleccionar los que ofertaron por el query
-    candidatos_ind_query <- sapply(queries_oferta, function(x){  query %in% x  })
+    candidatos_ind_query <- sapply(queries_anunciantes, function(x){  query %in% x  })
     candidatos <- which(candidatos_ind_pres & candidatos_ind_query)
-    if(sum(presupuesto) > 0){
-      iteraciones <<- iteraciones + 1
-      if(length(candidatos) > 0){
-        ganador <-  first(candidatos)
-        balance[ganador] <<- balance[ganador]  - 1
-        ingreso <<- ingreso + 1
-      }
+   iteraciones <<- iteraciones + 1
+     if(length(candidatos) > 0){
+          ganador <-  candidatos[1]
+          balance[ganador] <<- balance[ganador]  - 1
+          ingreso <<- ingreso + 1
+
     }
     return(ingreso)
   }
@@ -435,29 +444,22 @@ greedy <- function(n_anunciantes, n_queries, lambda, presupuesto){
 Y el de balance podemos escribirlo como:
 
 ```{r}  
-balance <- function(n_anunciantes, n_queries, lambda, presupuesto){
+crear_balanceado <- function(n_anunciantes, presupuesto, queries_anunciante){
   balance <- rep(presupuesto, n_anunciantes)
-  queries_oferta <- lapply(1:n_anunciantes, function(i) {
-        num_queries <- min(rpois(1, lambda = lambda) + 1, n_queries)
-        sample(1:n_queries, num_queries)})
-  queries_activos <- unique(unlist(queries_oferta))
   ingreso <- 0
   iteraciones <- 0
-  llega_query <- function(i){
-    query <- sample(queries_activos, 1)
+  llega_query <- function(query){
     # seleccionar los que tienen presupuesto
     candidatos_ind_pres <- balance > 0
     # seleccionar los que ofertaron por el query
-    candidatos_ind_query <- sapply(queries_oferta, function(x){  query %in% x  })
+    candidatos_ind_query <- sapply(queries_anunciante, function(x){  query %in% x  })
     candidatos <- which(candidatos_ind_pres & candidatos_ind_query)
-    if(sum(presupuesto) > 0){
-      iteraciones <<- iteraciones + 1
       if(length(candidatos) > 0){
+        iteraciones <<- iteraciones + 1
         ganador_idx <- which.max(balance[candidatos])
         ganador <- candidatos[ganador_idx]
         balance[ganador] <<- balance[ganador]  - 1
         ingreso <<- ingreso + 1
-      }
     }
     return(ingreso)
   }
@@ -469,27 +471,35 @@ balance <- function(n_anunciantes, n_queries, lambda, presupuesto){
 Corremos dos simulaciones y comparamos resultados
 
 ```{r}
-#set.seed(343434)
-adwords <- balance(n_anunciantes = 30, n_queries = 50, lambda = 1, presupuesto = 5)
-miope <- balance(n_anunciantes = 30, n_queries = 50, lambda = 1, presupuesto = 5)
+set.seed(3414)
+n_queries <- 10
+n_anunciantes <- 10
+queries_anun <- lapply(1:n_anunciantes, function(i){ sample(1:n_queries, 2)})
+#queries_anun <- list(c(1,5), c(1,2), c(1,2,3,4,5), c(1,4))
+balanceado <- crear_balanceado(n_anunciantes = n_anunciantes, presupuesto = 5, queries_anun)
+miope <- crear_miope(n_anunciantes = n_anunciantes,  presupuesto = 5, queries_anun)
 
-df_balance <- data_frame(n_iter = 1:150) %>% 
-  mutate(datosl = map(n_iter, function(i){ 
+iteraciones <- 100
+queries <- (sim_queries(n_queries, iteraciones, ordenado = FALSE))
+df_balance <- data_frame(n_iter = 1:iteraciones) %>% 
+  mutate(query = queries) %>%
+  mutate(datos = map(query, function(qq){ 
            data_frame(
-            ingreso = adwords(),
-            balance = sum(environment(adwords)$balance))})) %>% unnest %>%
+            ingreso = balanceado(qq),
+            balance = sum(environment(balanceado)$balance))})) %>% unnest %>%
   mutate(algo = "balance")
 
-df_greedy <- data_frame(n_iter = 1:150) %>% 
-  mutate(datosl = map(n_iter, function(i){ 
+df_greedy <- data_frame(n_iter = 1:iteraciones) %>% 
+  mutate(query = queries) %>%
+  mutate(datos = map(query, function(qq){ 
            data_frame(
-            ingreso = miope(),
+            ingreso = miope(qq),
             balance = sum(environment(miope)$balance))})) %>% unnest %>%
   mutate(algo = "miope")
 df_algos <- bind_rows(df_balance, df_greedy)
 
 ggplot(filter(df_algos, balance > 0), aes(x = n_iter, 
-                y = ingreso, colour = algo, group=algo)) + geom_line() 
+                y = ingreso, colour = algo, group=algo)) + geom_line()  
 
 ```
 
@@ -504,9 +514,26 @@ para los dos algoritmos.
 
 ## El algoritmo de balance generalizado
 
-Ahora generalizamos 
+En esta parte quitamos el supuesto de que las ofertas son 0 o 1. Ahora, denotamos
+por $x_i$ la oferta del anunciante $A_i$. Es necesario hacer una modificación, pues
+de otra manera el algoritmo podría asignar una consulta a un anunciante con
+alto presupuesto pero con una oferta chica, y consumir el inventario antes de 
+que otro anunciante con menos presupuesto, pero una oferta más grande pueda recibir
+clicks.
 
+Una heurística que podemos utilizar es:
 
+- Sea $\Psi_i = x_i(1-e^{-f_i})$, donde $x_i$ es la oferta de $A_i$ y $f_i$ es la
+fracción restante su presupuesto.
+- Cuando llega una consulta, asignamos la búsqueda al anunciante con mayor $\Psi_i$.
+
+Es posible demostrar que el índice competitivo de este algoritmo está cercano a
+$1-e^-1=0.63$. Nótese que este enfoque tiende a asignar consultas a
+anunciantes con presupuestos restantes grandes y ofertas altas. El factor
+$(1-e^{f_i})$ se puede ver como un factor de aversión al riesgo de no poder
+explotar el presupuesto de algún anunciante.
+
+**Ejercicio**: implementa el algoritmo de balance generalizado
 
 
 
